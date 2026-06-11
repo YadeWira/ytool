@@ -5,16 +5,18 @@ unit PrecompDStorage;
 interface
 
 uses
-  DStorage,
-  Utils,
-  PrecompUtils,
-  Windows,
-  SysUtils, Classes, Math;
+  PrecompUtils
+{$IFDEF MSWINDOWS}
+  , DStorage, Utils, Windows, SysUtils, Classes, Math
+{$ENDIF}
+  ;
 
 var
   Codec: TPrecompressor;
 
 implementation
+
+{$IFDEF MSWINDOWS}
 
 const
   DStorageCodecs: array of PChar = ['gdeflate'];
@@ -428,5 +430,62 @@ Codec.Process := @DStorageProcess;
 Codec.Restore := @DStorageRestore;
 SetLength(CodecAvailable, Length(Codec.Names));
 SetLength(CodecEnabled, Length(Codec.Names));
+
+{$ELSE}
+{ Linux: DirectStorage no disponible. Codec sin nombres (nunca se selecciona);
+  funciones no-op para que los punteros no queden nil. }
+function DStorageInit(Command: PChar; Count: Integer;
+  Funcs: PPrecompFuncs): Boolean;
+begin
+  Result := False;
+end;
+
+procedure DStorageFree(Funcs: PPrecompFuncs);
+begin
+end;
+
+function DStorageParse(Command: PChar; Option: PInteger;
+  Funcs: PPrecompFuncs): Boolean;
+begin
+  Result := False;
+end;
+
+procedure DStorageScan1(Instance, Depth: Integer; Input: PByte;
+  Size, SizeEx: NativeInt; Output: _PrecompOutput; Add: _PrecompAdd;
+  Funcs: PPrecompFuncs);
+begin
+end;
+
+function DStorageScan2(Instance, Depth: Integer; Input: Pointer; Size: NativeInt;
+  StreamInfo: PStrInfo2; Offset: PInteger; Output: _PrecompOutput;
+  Funcs: PPrecompFuncs): Boolean;
+begin
+  Result := False;
+end;
+
+function DStorageProcess(Instance, Depth: Integer; OldInput, NewInput: Pointer;
+  StreamInfo: PStrInfo2; Output: _PrecompOutput; Funcs: PPrecompFuncs): Boolean;
+begin
+  Result := False;
+end;
+
+function DStorageRestore(Instance, Depth: Integer; Input, InputExt: Pointer;
+  StreamInfo: _StrInfo3; Output: _PrecompOutput; Funcs: PPrecompFuncs): Boolean;
+begin
+  Result := False;
+end;
+
+initialization
+
+Codec.Names := [];
+Codec.Initialised := False;
+Codec.Init := @DStorageInit;
+Codec.Free := @DStorageFree;
+Codec.Parse := @DStorageParse;
+Codec.Scan1 := @DStorageScan1;
+Codec.Scan2 := @DStorageScan2;
+Codec.Process := @DStorageProcess;
+Codec.Restore := @DStorageRestore;
+{$ENDIF}
 
 end.

@@ -7,7 +7,9 @@ uses
   Utils, Threading,
   SynCommons, SynCrypto,
   PrecompUtils,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Classes, StrUtils,
   Types, Math, IOUtils, IniFiles;
 
@@ -41,12 +43,14 @@ implementation
 const
   E_WORKMEM = 65536;
 
+type
+  TCodecAllocFunc = function(Index: Integer; Size: Integer): Pointer cdecl;
+
 var
   WrkMem: array of array [0 .. E_WORKMEM - 1] of Byte;
   CodecSize: TArray<Integer>;
   CodecOutput: TArray<_PrecompOutput>;
-  CodecAllocator: array of function(
-    Index: Integer; Size: Integer): Pointer cdecl;
+  CodecAllocator: array of TCodecAllocFunc;
   CodecExe: TArray<TExeStruct>;
 
 type
@@ -58,11 +62,14 @@ type
     FExecutable, FCommandLine, FWorkDir: string;
     hstdinr, hstdinw: THandle;
     hstdoutr, hstdoutw: THandle;
+{$IFDEF MSWINDOWS}
     StartupInfo: TStartupInfo;
     ProcessInfo: TProcessInformation;
+{$ENDIF}
     FTask, MTask: TTask;
   end;
 
+{$IFDEF MSWINDOWS}
 procedure ExecReadTask(Instance, Handle, Stream: IntPtr);
 const
   BufferSize = 65536;
@@ -237,6 +244,41 @@ begin
     end;
   end;
 end;
+{$ELSE}
+{ Linux: codecs ejecutables externos diferidos (TODO: TProcess). Los stubs
+  permiten compilar; ExecStdioProcess falla en runtime si se usa un codec exe. }
+procedure ExecReadTask(Instance, Handle, Stream: IntPtr);
+begin
+end;
+
+procedure ExecMonTask(Process, Stdin, Stdout: IntPtr);
+begin
+end;
+
+function ExecStdioInit(Instance: Integer; Executable, CommandLine,
+  WorkDir: PChar; IsLib: Boolean): PExecCtx;
+begin
+  New(Result);
+  Result^.FInstance := Instance;
+  Result^.FLib := IsLib;
+  Result^.FExecutable := Executable;
+  Result^.FCommandLine := CommandLine;
+  Result^.FTask := nil;
+  Result^.MTask := nil;
+end;
+
+procedure ExecStdioFree(Ctx: PExecCtx);
+begin
+  if Assigned(Ctx) then
+    Dispose(Ctx);
+end;
+
+function ExecStdioProcess(Ctx: PExecCtx; InBuff: Pointer;
+  InSize, OutSize: Integer; Output: _ExecOutput): Boolean;
+begin
+  Result := False;
+end;
+{$ENDIF}
 
 procedure ExecOutput1(Instance: Integer; const Buffer: Pointer;
   Size: Integer)cdecl;

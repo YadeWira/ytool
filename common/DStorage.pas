@@ -4,6 +4,10 @@ unit DStorage;
 
 {$MINENUMSIZE 4}
 
+{ DirectStorage (descompresion GPU Windows/Xbox) es Windows-only. En otras
+  plataformas la unidad queda vacia. }
+{$IFDEF MSWINDOWS}
+
 interface
 
 uses
@@ -1143,5 +1147,11 @@ Init;
 finalization
 
 Deinit;
+
+{$ELSE}
+interface
+
+implementation
+{$ENDIF}
 
 end.

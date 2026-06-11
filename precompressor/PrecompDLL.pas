@@ -6,7 +6,9 @@ uses
   InitCode,
   Utils, LibImport,
   PrecompUtils,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Classes, StrUtils,
   Types, Math, IOUtils;
 
@@ -248,6 +250,7 @@ begin
       InputExt, SI, TPrecompOutput(Output), @PrecompFunctions);
 end;
 
+{$IFDEF MSWINDOWS}
 type
   PIMAGE_NT_HEADERS = ^IMAGE_NT_HEADERS;
   PIMAGE_EXPORT_DIRECTORY = ^IMAGE_EXPORT_DIRECTORY;
@@ -362,6 +365,21 @@ begin
     Inc(Names);
   end;
 end;
+{$ELSE}
+{ Linux: la enumeracion de exports por PE no aplica. Sin plugins .dll en Linux
+  (la init busca *.dll), estas devuelven lista vacia. TODO: soporte .so. }
+procedure ImageExportedFunctionNames(const ImageName: string;
+  NamesList: TStrings); overload;
+begin
+  NamesList.Clear;
+end;
+
+procedure ImageExportedFunctionNames(const ImageName: TCustomMemoryStream;
+  NamesList: TStrings); overload;
+begin
+  NamesList.Clear;
+end;
+{$ENDIF}
 
 var
   I, J, X: Integer;
