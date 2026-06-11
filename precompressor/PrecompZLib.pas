@@ -504,9 +504,9 @@ begin
       IsZlib := False;
       LastIn := 0;
       LastOut := 0;
-      ZStream^.next_in := (Input + Pos);
+      ZStream^.next_in := Pointer(Input + Pos);
       ZStream^.avail_in := ScanBytes;
-      ZStream^.next_out := Buffer;
+      ZStream^.next_out := Pointer(Buffer);
       ZStream^.avail_out := Z_WORKMEM;
       inflateReset(ZStream^);
       Res := inflate(ZStream^, Z_SYNC_FLUSH);
@@ -518,7 +518,7 @@ begin
         ZStream^.avail_in := (SizeEx - Pos) - ScanBytes;
         while Res <> Z_STREAM_END do
         begin
-          ZStream^.next_out := Buffer;
+          ZStream^.next_out := Pointer(Buffer);
           ZStream^.avail_out := Z_WORKMEM;
           Res := inflate(ZStream^, Z_BLOCK);
           if not(Res in [Z_OK, Z_STREAM_END]) then
@@ -688,16 +688,15 @@ begin
               -(GetBits(StreamInfo^.Option, 10, 3) + 8), M, Z_DEFAULT_STRATEGY);
           if not Result then
           begin
-            ZStream^.next_in := NewInput;
+            ZStream^.next_in := Pointer(NewInput);
             ZStream^.avail_in := StreamInfo^.NewSize;
             deflateReset(ZStream^);
             repeat
-              ZStream^.next_out := Buffer;
+              ZStream^.next_out := Pointer(Buffer);
               ZStream^.avail_out := Z_BLKSIZE;
               Res1 := deflate(ZStream^, Z_FINISH);
               if Res1 < 0 then
-                raise EZCompressionError.Create(string(_z_errmsg[2 - Res1]))
-                  at ReturnAddress;
+                raise EZCompressionError.Create(string(_z_errmsg[2 - Res1]));
               Res2 := Z_BLKSIZE - ZStream^.avail_out;
               Verified := CompareMem(PByte(OldInput) + ZStream^.total_out -
                 Res2, Buffer, Res2);
@@ -883,16 +882,15 @@ begin
         if not Assigned(ZStream^.zalloc) then
           deflateInit2(ZStream^, L, Z_DEFLATED,
             -(GetBits(StreamInfo.Option, 10, 3) + 8), M, Z_DEFAULT_STRATEGY);
-        ZStream^.next_in := Input;
+        ZStream^.next_in := Pointer(Input);
         ZStream^.avail_in := StreamInfo.NewSize;
         deflateReset(ZStream^);
         repeat
-          ZStream^.next_out := Buffer;
+          ZStream^.next_out := Pointer(Buffer);
           ZStream^.avail_out := Z_WORKMEM;
           Res1 := deflate(ZStream^, Z_FINISH);
           if Res1 < 0 then
-            raise EZCompressionError.Create(string(_z_errmsg[2 - Res1]))
-              at ReturnAddress;
+            raise EZCompressionError.Create(string(_z_errmsg[2 - Res1]));
           Res2 := Z_WORKMEM - ZStream^.avail_out;
           Output(Instance, Buffer, Res2);
         until (ZStream^.avail_in = 0) and (ZStream^.avail_out > 0);
