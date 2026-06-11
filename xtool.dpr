@@ -30,6 +30,9 @@ program xtool;
 {.$DEFINE UseFastMM}
 
 uses
+{$IFDEF UNIX}
+  cthreads, // driver de hilos pthread; debe ir primero (TThread/TTask)
+{$ENDIF}
 {$IFDEF UseFastMM}
   FastMM4 in 'contrib\FastMM4-AVX\FastMM4.pas',
   FastMM4Messages in 'contrib\FastMM4-AVX\FastMM4Messages.pas',
