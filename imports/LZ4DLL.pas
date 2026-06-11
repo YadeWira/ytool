@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Math;
+  Windows,
+  SysUtils, Math;
 
 const
   LZ4F_VERSION = 100;

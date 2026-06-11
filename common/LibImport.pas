@@ -4,8 +4,8 @@ interface
 
 uses
   MemoryModule,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.Character, System.RTLConsts;
+  Windows,
+  SysUtils, Classes, Character, RTLConsts;
 
 type
   TLibImport = class

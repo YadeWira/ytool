@@ -6,7 +6,7 @@ uses
   ZLibDLL, ReflateDLL, PreflateDLL,
   Utils,
   PrecompUtils,
-  System.SysUtils, System.StrUtils, System.Classes, System.Math;
+  SysUtils, StrUtils, Classes, Math;
 
 var
   Codec: TPrecompressor;

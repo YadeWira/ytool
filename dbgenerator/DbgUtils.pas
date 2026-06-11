@@ -3,8 +3,8 @@ unit DbgUtils;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.StrUtils, System.Types, System.Math,
-  System.Generics.Defaults, System.Generics.Collections;
+  SysUtils, Classes, StrUtils, Types, Math,
+  Generics.Defaults, Generics.Collections;
 
 resourcestring
   SPrecompSep1 = '+';

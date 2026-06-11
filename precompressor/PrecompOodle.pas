@@ -6,7 +6,7 @@ uses
   OodleDLL,
   Utils,
   PrecompUtils,
-  System.SysUtils, System.Classes, System.Types, System.Math;
+  SysUtils, Classes, Types, Math;
 
 var
   Codec: TPrecompressor;

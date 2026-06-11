@@ -3,37 +3,47 @@ unit Threading;
 interface
 
 uses
-  System.SysUtils, System.Classes;
+  SysUtils, Classes;
 
 type
   TThreadStatus = (tsReady, tsRunning, tsErrored, tsTerminated);
 
   EThreadException = class(Exception);
 
+  { Punteros a procedimiento simples. En FPC 3.2.2 no hay metodos anonimos /
+    function references (TProc), por lo que los trabajos se pasan como
+    procedimientos globales con nombre. El contexto que antes capturaban los
+    closures se obtiene de variables a nivel de unidad en cada llamador. }
+  TTaskProc0 = procedure;
+  TTaskProc1 = procedure(Arg1: IntPtr);
+  TTaskProc2 = procedure(Arg1, Arg2: IntPtr);
+  TTaskProc3 = procedure(Arg1, Arg2, Arg3: IntPtr);
+  TTaskProc4 = procedure(Arg1, Arg2, Arg3, Arg4: IntPtr);
+
   TTask = class(TThread)
   private
     FSync: Boolean;
     FErrorMsg: string;
     FStatus: TThreadStatus;
-    FProc0: TProc;
-    FProc1: TProc<IntPtr>;
-    FProc2: TProc<IntPtr, IntPtr>;
-    FProc3: TProc<IntPtr, IntPtr, IntPtr>;
-    FProc4: TProc<IntPtr, IntPtr, IntPtr, IntPtr>;
+    FProc0: TTaskProc0;
+    FProc1: TTaskProc1;
+    FProc2: TTaskProc2;
+    FProc3: TTaskProc3;
+    FProc4: TTaskProc4;
     FArgs: array [0 .. 3] of IntPtr;
     FStarted: Boolean;
+    procedure RunProc;
   public
     constructor Create(Arg1: IntPtr = 0; Arg2: IntPtr = 0; Arg3: IntPtr = 0;
       Arg4: IntPtr = 0);
     destructor Destroy; override;
     procedure Update(Arg1: IntPtr = 0; Arg2: IntPtr = 0; Arg3: IntPtr = 0;
       Arg4: IntPtr = 0);
-    procedure Perform(const Proc: TProc); overload;
-    procedure Perform(const Proc: TProc<IntPtr>); overload;
-    procedure Perform(const Proc: TProc<IntPtr, IntPtr>); overload;
-    procedure Perform(const Proc: TProc<IntPtr, IntPtr, IntPtr>); overload;
-    procedure Perform(const Proc: TProc<IntPtr, IntPtr, IntPtr,
-      IntPtr>); overload;
+    procedure Perform(const Proc: TTaskProc0); overload;
+    procedure Perform(const Proc: TTaskProc1); overload;
+    procedure Perform(const Proc: TTaskProc2); overload;
+    procedure Perform(const Proc: TTaskProc3); overload;
+    procedure Perform(const Proc: TTaskProc4); overload;
     procedure Execute; override;
     procedure Start;
     procedure Wait;
@@ -80,7 +90,7 @@ begin
   FArgs[3] := Arg4;
 end;
 
-procedure TTask.Perform(const Proc: TProc);
+procedure TTask.Perform(const Proc: TTaskProc0);
 begin
   FProc0 := Proc;
   FProc1 := nil;
@@ -89,7 +99,7 @@ begin
   FProc4 := nil;
 end;
 
-procedure TTask.Perform(const Proc: TProc<IntPtr>);
+procedure TTask.Perform(const Proc: TTaskProc1);
 begin
   FProc0 := nil;
   FProc1 := Proc;
@@ -98,7 +108,7 @@ begin
   FProc4 := nil;
 end;
 
-procedure TTask.Perform(const Proc: TProc<IntPtr, IntPtr>);
+procedure TTask.Perform(const Proc: TTaskProc2);
 begin
   FProc0 := nil;
   FProc1 := nil;
@@ -107,7 +117,7 @@ begin
   FProc4 := nil;
 end;
 
-procedure TTask.Perform(const Proc: TProc<IntPtr, IntPtr, IntPtr>);
+procedure TTask.Perform(const Proc: TTaskProc3);
 begin
   FProc0 := nil;
   FProc1 := nil;
@@ -116,13 +126,27 @@ begin
   FProc4 := nil;
 end;
 
-procedure TTask.Perform(const Proc: TProc<IntPtr, IntPtr, IntPtr, IntPtr>);
+procedure TTask.Perform(const Proc: TTaskProc4);
 begin
   FProc0 := nil;
   FProc1 := nil;
   FProc2 := nil;
   FProc3 := nil;
   FProc4 := Proc;
+end;
+
+procedure TTask.RunProc;
+begin
+  if Assigned(FProc0) then
+    FProc0
+  else if Assigned(FProc1) then
+    FProc1(FArgs[0])
+  else if Assigned(FProc2) then
+    FProc2(FArgs[0], FArgs[1])
+  else if Assigned(FProc3) then
+    FProc3(FArgs[0], FArgs[1], FArgs[2])
+  else if Assigned(FProc4) then
+    FProc4(FArgs[0], FArgs[1], FArgs[2], FArgs[3]);
 end;
 
 procedure TTask.Execute;
@@ -139,33 +163,9 @@ Restart:
         Assigned(FProc3) or Assigned(FProc4) then
       begin
         if FSync then
-          Self.Synchronize(
-            procedure
-            begin
-              if Assigned(FProc0) then
-                FProc0
-              else if Assigned(FProc1) then
-                FProc1(FArgs[0])
-              else if Assigned(FProc2) then
-                FProc2(FArgs[0], FArgs[1])
-              else if Assigned(FProc3) then
-                FProc3(FArgs[0], FArgs[1], FArgs[2])
-              else if Assigned(FProc4) then
-                FProc4(FArgs[0], FArgs[1], FArgs[2], FArgs[3]);
-            end)
+          Self.Synchronize(RunProc)
         else
-        begin
-          if Assigned(FProc0) then
-            FProc0
-          else if Assigned(FProc1) then
-            FProc1(FArgs[0])
-          else if Assigned(FProc2) then
-            FProc2(FArgs[0], FArgs[1])
-          else if Assigned(FProc3) then
-            FProc3(FArgs[0], FArgs[1], FArgs[2])
-          else if Assigned(FProc4) then
-            FProc4(FArgs[0], FArgs[1], FArgs[2], FArgs[3]);
-        end;
+          RunProc;
       end;
       FStatus := tsReady;
     end;

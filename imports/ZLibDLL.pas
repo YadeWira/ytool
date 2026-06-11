@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Types, System.IOUtils, System.ZLib;
+  Windows,
+  SysUtils, Types, IOUtils, ZLib;
 
 const
   Z_NO_FLUSH = 0;
@@ -48,7 +48,7 @@ type
 
   Pinternal_state = ^internal_state;
 
-  z_stream = System.ZLib.z_stream;
+  z_stream = ZLib.z_stream;
   z_streamp = ^z_stream;
 
   EZLibError = class(Exception);
@@ -127,23 +127,23 @@ end;
 
 function inflateInit2(var strm: z_stream; windowBits: integer): integer;
 begin
-  Result := System.ZLib.inflateInit2_(strm, windowBits,
-    System.ZLib.ZLIB_VERSION, SizeOf(z_stream));
+  Result := ZLib.inflateInit2_(strm, windowBits,
+    ZLib.ZLIB_VERSION, SizeOf(z_stream));
 end;
 
 function inflate(var strm: z_stream; flush: integer): integer;
 begin
-  Result := System.ZLib.inflate(strm, flush);
+  Result := ZLib.inflate(strm, flush);
 end;
 
 function inflateEnd(var strm: z_stream): integer;
 begin
-  Result := System.ZLib.inflateEnd(strm);
+  Result := ZLib.inflateEnd(strm);
 end;
 
 function inflateReset(var strm: z_stream): integer;
 begin
-  Result := System.ZLib.inflateReset(strm);
+  Result := ZLib.inflateReset(strm);
 end;
 
 var

@@ -3,9 +3,9 @@ unit IOUtils;
 interface
 
 uses
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.StrUtils, System.Types, System.Math,
-  System.Generics.Defaults, System.Generics.Collections;
+  Windows,
+  SysUtils, Classes, StrUtils, Types, Math,
+  Generics.Defaults, Generics.Collections;
 
 const
   XTOOL_IODEC = $314C5458;

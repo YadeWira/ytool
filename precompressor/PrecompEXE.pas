@@ -7,9 +7,9 @@ uses
   Utils, Threading,
   SynCommons, SynCrypto,
   PrecompUtils,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.StrUtils,
-  System.Types, System.Math, System.IOUtils, System.IniFiles;
+  Windows,
+  SysUtils, Classes, StrUtils,
+  Types, Math, IOUtils, IniFiles;
 
 const
   FILE_IN = 'data.in';

@@ -1,0 +1,4 @@
+.fpcout/
+*.o
+*.ppu
+*.compiled

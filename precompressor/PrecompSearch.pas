@@ -6,9 +6,9 @@ uses
   InitCode,
   Utils, SynCommons, SynCrypto,
   PrecompUtils,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.StrUtils,
-  System.Types, System.Math, System.IOUtils;
+  Windows,
+  SysUtils, Classes, StrUtils,
+  Types, Math, IOUtils;
 
 const
   XTOOL_DB = $31445458;
@@ -93,7 +93,7 @@ var
   I: Integer;
   W, X, Y, Z: Integer;
   S: String;
-  List: System.Types.TStringDynArray;
+  List: Types.TStringDynArray;
 begin
   Result := True;
   for X := Low(CodecAvailable) to High(CodecAvailable) do

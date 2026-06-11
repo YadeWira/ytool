@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Types, System.IOUtils;
+  Windows,
+  SysUtils, Types, IOUtils;
 
 const
   OODLELZ_SCRATCH_MEM_NO_BOUND = NativeUInt(-1);

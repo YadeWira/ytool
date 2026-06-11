@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes;
+  Windows,
+  SysUtils, Classes;
 
 const
   BRUNSLI_OK = 0;

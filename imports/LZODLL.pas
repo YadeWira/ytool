@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils;
+  Windows,
+  SysUtils;
 
 const
   Success = 0;

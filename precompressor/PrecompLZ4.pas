@@ -7,8 +7,8 @@ uses
   lz4,
   Utils,
   PrecompUtils,
-  WinAPI.Windows,
-  System.SysUtils, System.StrUtils, System.Classes, System.Math;
+  Windows,
+  SysUtils, StrUtils, Classes, Math;
 
 var
   Codec: TPrecompressor;

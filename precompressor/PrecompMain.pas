@@ -10,10 +10,10 @@ uses
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
   PrecompOodle, PrecompMedia, PrecompDStorage, PrecompINI, PrecompINIEx,
   PrecompSearch, PrecompDLL, PrecompEXE,
-  WinAPI.Windows, WinAPI.ShlObj,
-  System.SysUtils, System.Classes, System.SyncObjs, System.Math, System.Types,
-  System.StrUtils, System.RTLConsts, System.TimeSpan, System.Diagnostics,
-  System.Generics.Defaults, System.Generics.Collections, System.Character;
+  Windows, ShlObj,
+  SysUtils, Classes, SyncObjs, Math, Types,
+  StrUtils, RTLConsts, TimeSpan, Diagnostics,
+  Generics.Defaults, Generics.Collections, Character;
 
 const
   XTOOL_PRECOMP = $304C5458;

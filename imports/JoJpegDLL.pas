@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes;
+  Windows,
+  SysUtils, Classes;
 
 const
   jojpeg_Size = 51320000;

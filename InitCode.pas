@@ -4,7 +4,7 @@ interface
 
 uses
   Utils,
-  System.SysUtils, System.StrUtils;
+  SysUtils, StrUtils;
 
 const
   PluginsParam = '-bd';

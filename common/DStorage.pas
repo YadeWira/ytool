@@ -9,7 +9,7 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows, WinAPI.D3D12;
+  Windows, D3D12;
 
 const
   dstoragelib = 'dstorage.dll';

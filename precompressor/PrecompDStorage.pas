@@ -8,8 +8,8 @@ uses
   DStorage,
   Utils,
   PrecompUtils,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.Math;
+  Windows,
+  SysUtils, Classes, Math;
 
 var
   Codec: TPrecompressor;

@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes;
+  Windows,
+  SysUtils, Classes;
 
 var
   preflate_decode: function(const src: Pointer; srcSize: integer; dst1: Pointer;

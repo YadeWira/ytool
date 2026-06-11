@@ -6,7 +6,7 @@ uses
   LZODLL,
   Utils,
   PrecompUtils,
-  System.SysUtils, System.Classes, System.Math;
+  SysUtils, Classes, Math;
 
 var
   Codec: TPrecompressor;

@@ -5,9 +5,9 @@ interface
 uses
   InitCode,
   Utils, Threading, XXHASHLIB, ZSTDLib,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.StrUtils, System.Types, System.Math,
-  System.Generics.Defaults, System.Generics.Collections;
+  Windows,
+  SysUtils, Classes, StrUtils, Types, Math,
+  Generics.Defaults, Generics.Collections;
 
 resourcestring
   SPrecompError1 = 'Method ''%s'' not found';
@@ -479,7 +479,7 @@ end;
 
 function RegisterResources(Cmd: String): Integer;
 var
-  List0, List1, List2: System.Types.TStringDynArray;
+  List0, List1, List2: Types.TStringDynArray;
   I, J: Integer;
 begin
   Result := -1;
@@ -592,7 +592,7 @@ end;
 function PrecompGetCodec(Cmd: PChar; Index: Integer; WithParams: Boolean)
   : TPrecompStr;
 var
-  List0, List1, List2: System.Types.TStringDynArray;
+  List0, List1, List2: Types.TStringDynArray;
   I: Integer;
   S: String;
 begin
@@ -621,7 +621,7 @@ end;
 
 function PrecompGetParam(Cmd: PChar; Index: Integer; Param: PChar): TPrecompStr;
 var
-  List0, List1, List2: System.Types.TStringDynArray;
+  List0, List1, List2: Types.TStringDynArray;
   I: Integer;
   S: String;
 begin
@@ -664,7 +664,7 @@ end;
 
 function PrecompGetDepthCodec(Cmd: PChar): TPrecompStr cdecl;
 var
-  List: System.Types.TStringDynArray;
+  List: Types.TStringDynArray;
   I: Integer;
   S: String;
 begin

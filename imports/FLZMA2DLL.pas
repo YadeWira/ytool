@@ -5,8 +5,8 @@ interface
 uses
   InitCode,
   Utils, LibImport,
-  WinAPI.Windows,
-  System.SysUtils, System.Math, System.Classes, System.Types;
+  Windows,
+  SysUtils, Math, Classes, Types;
 
 const
   FL2_DICTLOG_MIN = 20;

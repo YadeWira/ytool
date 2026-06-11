@@ -7,10 +7,10 @@ interface
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
   IOUtils,
-  WinAPI.Windows, WinAPI.ShlObj,
-  System.SysUtils, System.Classes, System.SyncObjs, System.Math, System.Types,
-  System.StrUtils, System.RTLConsts, System.TimeSpan, System.Diagnostics,
-  System.IOUtils, System.Generics.Defaults, System.Generics.Collections;
+  Windows, ShlObj,
+  SysUtils, Classes, SyncObjs, Math, Types,
+  StrUtils, RTLConsts, TimeSpan, Diagnostics,
+  IOUtils, Generics.Defaults, Generics.Collections;
 
 type
   PDecodeOptions = ^TDecodeOptions;

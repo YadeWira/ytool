@@ -6,9 +6,9 @@ uses
   InitCode,
   Utils, LibImport,
   PrecompUtils,
-  WinAPI.Windows,
-  System.SysUtils, System.Classes, System.StrUtils,
-  System.Types, System.Math, System.IOUtils;
+  Windows,
+  SysUtils, Classes, StrUtils,
+  Types, Math, IOUtils;
 
 var
   Codec: TPrecompressor;

@@ -6,12 +6,12 @@ interface
 
 uses
   Threading, SynCommons, lz4lib, ZSTDLib,
-  WinAPI.Windows, WinAPI.PsAPI,
-  System.SysUtils, System.Classes, System.SyncObjs, System.Math, System.Types,
-  System.AnsiStrings, System.StrUtils, System.IniFiles, System.IOUtils,
-  System.RTLConsts, System.TypInfo, System.ZLib, System.Net.HttpClientComponent,
-  System.Net.HttpClient, System.Character, System.SysConst,
-  System.Generics.Defaults, System.Generics.Collections;
+  Windows, PsAPI,
+  SysUtils, Classes, SyncObjs, Math, Types,
+  AnsiStrings, StrUtils, IniFiles, IOUtils,
+  RTLConsts, TypInfo, ZLib, Net.HttpClientComponent,
+  Net.HttpClient, Character, SysConst,
+  Generics.Defaults, Generics.Collections;
 
 procedure ShowMessage(Msg: string; Caption: string = '');
 procedure WriteLine(S: String);
@@ -3267,7 +3267,7 @@ end;
 
 function CRC32(CRC: longword; buf: PByte; len: cardinal): longword;
 begin
-  Result := System.ZLib.CRC32(CRC, buf, len);
+  Result := ZLib.CRC32(CRC, buf, len);
 end;
 
 function Hash32(CRC: longword; buf: PByte; len: cardinal): longword;
