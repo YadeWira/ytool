@@ -6,11 +6,15 @@ interface
 
 uses
   Threading, SynCommons, lz4lib, ZSTDLib,
-  Windows, PsAPI,
+{$IFDEF MSWINDOWS}
+  Windows, PsAPI, Net.HttpClientComponent, Net.HttpClient,
+{$ENDIF}
+{$IFDEF UNIX}
+  BaseUnix, Unix, fphttpclient,
+{$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
-  AnsiStrings, StrUtils, IniFiles, IOUtils,
-  RTLConsts, TypInfo, ZLib, Net.HttpClientComponent,
-  Net.HttpClient, Character, SysConst,
+  StrUtils, IniFiles, IOUtils,
+  RTLConsts, TypInfo, ZLib, Character, SysConst,
   Generics.Defaults, Generics.Collections;
 
 procedure ShowMessage(Msg: string; Caption: string = '');
@@ -68,7 +72,7 @@ type
 
     TSOInfoComparer = class(TComparer<TSOInfo>)
     public
-      function Compare(const Left, Right: TSOInfo): Integer; override;
+      function Compare(constref Left, Right: TSOInfo): Integer; override;
     end;
   private
     FComparer: TSOInfoComparer;
@@ -162,7 +166,7 @@ type
 
   TMemoryStreamEx2 = class(TMemoryStream)
   protected
-    function Realloc(var NewCapacity: NativeInt): Pointer; override;
+    function Realloc(var NewCapacity: PtrInt): Pointer; override;
   end;
 
   TFileStreamEx = class(TStream)
@@ -490,7 +494,10 @@ type
   end;
 
   PExecOutput = ^TExecOutput;
-  TExecOutput = reference to procedure(const Buffer: Pointer; Size: Integer);
+  TExecOutput = procedure(const Buffer: Pointer; Size: Integer);
+  { FPC 3.2.2 no tiene function references (TFunc); el unico callback no-nil
+    usado es un metodo (TCacheReadStream.FCallback), de ahi "of object". }
+  TCopyCallback = function(ASize: Int64): Boolean of object;
 
 function CRC32(CRC: longword; buf: PByte; len: cardinal): longword;
 function Hash32(CRC: longword; buf: PByte; len: cardinal): longword;
@@ -503,9 +510,9 @@ function GenerateGUID: string;
 function CalculateEntropy(Buffer: Pointer; BufferSize: Integer): Single;
 
 function CopyStream(AStream1, AStream2: TStream; ASize: Int64 = Int64.MaxValue;
-  ACallback: TFunc<Int64, Boolean> = nil): Int64;
+  ACallback: TCopyCallback = nil): Int64;
 procedure CopyStreamEx(AStream1, AStream2: TStream; ASize: Int64;
-  ACallback: TFunc<Int64, Boolean> = nil);
+  ACallback: TCopyCallback = nil);
 
 function EndianSwap(A: Single): Single; overload;
 function EndianSwap(A: double): double; overload;
@@ -752,7 +759,7 @@ begin
   inherited Destroy;
 end;
 
-function TSOList.TSOInfoComparer.Compare(const Left, Right: TSOInfo): Integer;
+function TSOList.TSOInfoComparer.Compare(constref Left, Right: TSOInfo): Integer;
 begin
   Result := Right.Count - Left.Count;
 end;
@@ -1200,7 +1207,7 @@ begin
   AtomicDecrement(FAccessCount);
 end;
 
-function TMemoryStreamEx2.Realloc(var NewCapacity: NativeInt): Pointer;
+function TMemoryStreamEx2.Realloc(var NewCapacity: PtrInt): Pointer;
 const
   MemoryDelta = $2000;
 begin
@@ -3324,7 +3331,7 @@ begin
 end;
 
 function CopyStream(AStream1, AStream2: TStream; ASize: Int64;
-  ACallback: TFunc<Int64, Boolean>): Int64;
+  ACallback: TCopyCallback): Int64;
 const
   FBufferSize = 65536;
 var
@@ -3350,7 +3357,7 @@ begin
 end;
 
 procedure CopyStreamEx(AStream1, AStream2: TStream; ASize: Int64;
-  ACallback: TFunc<Int64, Boolean>);
+  ACallback: TCopyCallback);
 const
   FBufferSize = 65536;
 var
