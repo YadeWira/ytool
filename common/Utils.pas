@@ -10,7 +10,7 @@ uses
   Windows, PsAPI, Net.HttpClientComponent, Net.HttpClient,
 {$ENDIF}
 {$IFDEF UNIX}
-  BaseUnix, Unix, fphttpclient,
+  BaseUnix, Unix, Process, fphttpclient,
 {$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, IniFiles, IOUtils,
@@ -176,13 +176,20 @@ type
     FStream: TFileStream;
     FPosition, FSize, FMaxSize: Int64;
     FMapPos, FMapSize: Int64;
+{$IFDEF MSWINDOWS}
     FSysInfo: TSystemInfo;
+{$ENDIF}
+    FAllocGranularity: NativeInt;
     FMapHandle: THandle;
+    FMapLen: NativeInt;
     FMapBuffer: Pointer;
     function CalcPos(APos: Int64): Int64;
     function CalcSize(ASize: Int64): Int64;
     procedure IncSize(ANewSize: Int64);
     function DoMap(APosition: Int64): Boolean;
+    procedure UnmapView;
+    procedure CreateMapping;
+    function MapView(APos, ASize: Int64): Pointer;
   public
     constructor Create(const AFileName: String; AViewSize: Integer = $400000);
     destructor Destroy; override;
@@ -238,11 +245,15 @@ type
     FChunkSize = 1048576;
   private
     FUrl: string;
-    FNetHTTPClient: TNetHTTPClient;
     FMemoryStream: TMemoryStream;
     FSize, FPosition: Int64;
+{$IFDEF MSWINDOWS}
+    FNetHTTPClient: TNetHTTPClient;
     procedure NetHTTPClientReceiveData(const Sender: TObject;
       AContentLength, AReadCount: Int64; var Abort: Boolean);
+{$ELSE}
+    FHTTPClient: TFPHTTPClient;
+{$ENDIF}
   public
     constructor Create(Url: string);
     destructor Destroy; override;
@@ -273,10 +284,14 @@ type
   private
     FInput, FOutput, FError: TStream;
     FTask, FTask2: TTask;
+{$IFDEF MSWINDOWS}
     FProcessInfo: TProcessInformation;
     FStdinr, FStdinw: THandle;
     FStdoutr, FStdoutw: THandle;
     FStderrr, FStderrw: THandle;
+{$ELSE}
+    FProcess: TProcess;
+{$ENDIF}
     FExecutable, FCommandLine, FWorkDir: String;
     FInSize, FOutSize: Int64;
     procedure ExecReadTask;
@@ -1254,30 +1269,78 @@ begin
   FPosition := 0;
   FSize := FileSize(FStream.FileName);
   FMaxSize := FSize;
+{$IFDEF MSWINDOWS}
   GetSystemInfo(FSysInfo);
+  FAllocGranularity := FSysInfo.dwAllocationGranularity;
+{$ELSE}
+  FAllocGranularity := 4096;
+{$ENDIF}
   FMapHandle := 0;
-  if FMaxSize > 0 then
-    FMapHandle := CreateFileMapping(FStream.Handle, nil, PAGE_READWRITE,
-      Int64Rec(FMaxSize).Hi, Int64Rec(FMaxSize).Lo, '');
+  CreateMapping;
 end;
 
 destructor TFileStreamEx.Destroy;
 begin
-  if Assigned(FMapBuffer) then
-  begin
-    UnmapViewOfFile(FMapBuffer);
-    FMapBuffer := nil;
-  end;
+  UnmapView;
+{$IFDEF MSWINDOWS}
   CloseHandleEx(FMapHandle);
+{$ENDIF}
   FStream.Size := FSize;
   FStream.Free;
   inherited Destroy;
 end;
 
+procedure TFileStreamEx.UnmapView;
+begin
+  if Assigned(FMapBuffer) then
+  begin
+{$IFDEF MSWINDOWS}
+    UnmapViewOfFile(FMapBuffer);
+{$ELSE}
+    fpmunmap(FMapBuffer, FMapLen);
+{$ENDIF}
+    FMapBuffer := nil;
+  end;
+end;
+
+procedure TFileStreamEx.CreateMapping;
+begin
+{$IFDEF MSWINDOWS}
+  if FMaxSize > 0 then
+    FMapHandle := CreateFileMapping(FStream.Handle, nil, PAGE_READWRITE,
+      Int64Rec(FMaxSize).Hi, Int64Rec(FMaxSize).Lo, '')
+  else
+    FMapHandle := 0;
+{$ENDIF}
+  // En Linux el mapeo es por-vista (mmap del fd), no hay handle global.
+end;
+
+function TFileStreamEx.MapView(APos, ASize: Int64): Pointer;
+begin
+  FMapPos := CalcPos(APos);
+  FMapSize := Min(FMaxSize - FMapPos, ASize);
+  UnmapView;
+{$IFDEF MSWINDOWS}
+  if FMapHandle <> 0 then
+    FMapBuffer := MapViewOfFile(FMapHandle, FILE_MAP_ALL_ACCESS,
+      Int64Rec(FMapPos).Hi, Int64Rec(FMapPos).Lo, FMapSize);
+{$ELSE}
+  if FMaxSize > 0 then
+  begin
+    FMapBuffer := fpmmap(nil, FMapSize, PROT_READ or PROT_WRITE, MAP_SHARED,
+      FStream.Handle, FMapPos);
+    if FMapBuffer = MAP_FAILED then
+      FMapBuffer := nil
+    else
+      FMapLen := FMapSize;
+  end;
+{$ENDIF}
+  Result := FMapBuffer;
+end;
+
 function TFileStreamEx.CalcPos(APos: Int64): Int64;
 begin
-  Result := FSysInfo.dwAllocationGranularity *
-    (APos div FSysInfo.dwAllocationGranularity);
+  Result := FAllocGranularity * (APos div FAllocGranularity);
 end;
 
 function TFileStreamEx.CalcSize(ASize: Int64): Int64;
@@ -1287,35 +1350,19 @@ begin
 end;
 
 procedure TFileStreamEx.IncSize(ANewSize: Int64);
-var
-  LSize: Int64;
 begin
-  if Assigned(FMapBuffer) then
-  begin
-    UnmapViewOfFile(FMapBuffer);
-    FMapBuffer := nil;
-  end;
+  UnmapView;
+{$IFDEF MSWINDOWS}
   CloseHandleEx(FMapHandle);
+{$ENDIF}
   FMaxSize := CalcSize(ANewSize);
   FStream.Size := FMaxSize;
-  if FMaxSize > 0 then
-    FMapHandle := CreateFileMapping(FStream.Handle, nil, PAGE_READWRITE,
-      Int64Rec(FMaxSize).Hi, Int64Rec(FMaxSize).Lo, '');
+  CreateMapping;
 end;
 
 function TFileStreamEx.DoMap(APosition: Int64): Boolean;
 begin
-  FMapPos := CalcPos(APosition);
-  FMapSize := Min(FMaxSize - FMapPos, FViewSize);
-  if Assigned(FMapBuffer) then
-  begin
-    UnmapViewOfFile(FMapBuffer);
-    FMapBuffer := nil;
-  end;
-  if FMapHandle <> 0 then
-    FMapBuffer := MapViewOfFile(FMapHandle, FILE_MAP_ALL_ACCESS,
-      Int64Rec(FMapPos).Hi, Int64Rec(FMapPos).Lo, FMapSize);
-  Result := Assigned(FMapBuffer);
+  Result := Assigned(MapView(APosition, FViewSize));
 end;
 
 procedure TFileStreamEx.SetSize(NewSize: LongInt);
@@ -1395,18 +1442,7 @@ end;
 
 function TFileStreamEx.Map(APosition: Int64; ASize: NativeInt): Pointer;
 begin
-  Result := nil;
-  FMapPos := CalcPos(APosition);
-  FMapSize := Min(FMaxSize - FMapPos, ASize);
-  if Assigned(FMapBuffer) then
-  begin
-    UnmapViewOfFile(FMapBuffer);
-    FMapBuffer := nil;
-  end;
-  if FMapHandle <> 0 then
-    FMapBuffer := MapViewOfFile(FMapHandle, FILE_MAP_ALL_ACCESS,
-      Int64Rec(FMapPos).Hi, Int64Rec(FMapPos).Lo, FMapSize);
-  Result := FMapBuffer;
+  Result := MapView(APosition, ASize);
 end;
 
 function TFileStreamEx.CopyTo(Dest: TStream; Count: Int64): Int64;
@@ -1441,20 +1477,14 @@ begin
 end;
 
 procedure TFileStreamEx.Update;
-var
-  LSize: Int64;
 begin
-  if Assigned(FMapBuffer) then
-  begin
-    UnmapViewOfFile(FMapBuffer);
-    FMapBuffer := nil;
-  end;
+  UnmapView;
+{$IFDEF MSWINDOWS}
   CloseHandleEx(FMapHandle);
+{$ENDIF}
   FMaxSize := FSize;
   FStream.Size := FMaxSize;
-  if FMaxSize > 0 then
-    FMapHandle := CreateFileMapping(FStream.Handle, nil, PAGE_READWRITE,
-      Int64Rec(FMaxSize).Hi, Int64Rec(FMaxSize).Lo, '');
+  CreateMapping;
 end;
 
 procedure TFileStreamEx.Fill(Value: Byte; Count: Int64);
@@ -1686,6 +1716,7 @@ begin
     end;
 end;
 
+{$IFDEF MSWINDOWS}
 constructor TDownloadStream.Create(Url: string);
 begin
   inherited Create;
@@ -1739,6 +1770,56 @@ begin
   end;
   Result := 0;
 end;
+{$ELSE}
+constructor TDownloadStream.Create(Url: string);
+begin
+  inherited Create;
+  FUrl := Url;
+  FPosition := 0;
+  FSize := 0;
+  FHTTPClient := TFPHTTPClient.Create(nil);
+  FHTTPClient.AllowRedirect := True;
+  try
+    FHTTPClient.HTTPMethod('HEAD', FUrl, nil, [200]);
+    FSize := StrToInt64Def(TFPHTTPClient.GetHeader(FHTTPClient.ResponseHeaders,
+      'Content-Length'), 0);
+  except
+    FSize := 0;
+  end;
+  FMemoryStream := TMemoryStream.Create;
+  FMemoryStream.Size := FChunkSize;
+end;
+
+destructor TDownloadStream.Destroy;
+begin
+  FMemoryStream.Free;
+  FHTTPClient.Free;
+  inherited Destroy;
+end;
+
+function TDownloadStream.Read(var Buffer; Count: LongInt): LongInt;
+begin
+  Result := 0;
+  if (FPosition >= 0) and (Count >= 0) and (FSize - FPosition > 0) then
+  begin
+    if FSize > Count + FPosition then
+      Result := Count
+    else
+      Result := FSize - FPosition;
+    Result := Min(Result, FChunkSize);
+    FMemoryStream.Position := 0;
+    FMemoryStream.Size := 0;
+    FHTTPClient.RequestHeaders.Clear;
+    FHTTPClient.AddHeader('Range', 'bytes=' + IntToStr(FPosition) + '-' +
+      IntToStr(FPosition + Result - 1));
+    FHTTPClient.HTTPMethod('GET', FUrl, FMemoryStream, [200, 206]);
+    Result := FMemoryStream.Size;
+    if Result > 0 then
+      Move(FMemoryStream.Memory^, Buffer, Result);
+    Inc(FPosition, Result);
+  end;
+end;
+{$ENDIF}
 
 function TDownloadStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
@@ -1900,6 +1981,7 @@ begin
   FTask2 := TTask.Create;
 end;
 
+{$IFDEF MSWINDOWS}
 destructor TProcessStream.Destroy;
 begin
   CloseHandleEx(FStdinr);
@@ -2090,6 +2172,144 @@ function TProcessStream.Running: Boolean;
 begin
   Result := WaitForSingleObject(FProcessInfo.hProcess, 0) = WAIT_TIMEOUT;
 end;
+{$ELSE}
+destructor TProcessStream.Destroy;
+begin
+  FProcess.Free;
+  FTask.Free;
+  FTask2.Free;
+  inherited Destroy;
+end;
+
+function TProcessStream.Read(var Buffer; Count: LongInt): LongInt;
+begin
+  if Assigned(FOutput) then
+    raise EReadError.CreateRes(@SReadError);
+  Result := FProcess.Output.Read(Buffer, Count);
+  Inc(FOutSize, Result);
+end;
+
+function TProcessStream.Write(const Buffer; Count: LongInt): LongInt;
+begin
+  Result := 0;
+  if Assigned(FInput) then
+    raise EWriteError.CreateRes(@SWriteError);
+  if Count = 0 then
+    FProcess.CloseInput
+  else
+    Result := FProcess.Input.Write(Buffer, Count);
+  Inc(FInSize, Result);
+end;
+
+procedure TProcessStream.ExecReadTask;
+const
+  BufferSize = 65536;
+var
+  Buffer: array [0 .. BufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  repeat
+    BytesRead := FProcess.Output.Read(Buffer[0], BufferSize);
+    if BytesRead > 0 then
+    begin
+      Inc(FOutSize, BytesRead);
+      FOutput.WriteBuffer(Buffer[0], BytesRead);
+    end;
+  until BytesRead <= 0;
+end;
+
+procedure TProcessStream.ExecWriteTask;
+const
+  BufferSize = 65536;
+var
+  Buffer: array [0 .. BufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  BytesRead := FInput.Read(Buffer[0], BufferSize);
+  while BytesRead > 0 do
+  begin
+    FProcess.Input.WriteBuffer(Buffer[0], BytesRead);
+    Inc(FInSize, BytesRead);
+    BytesRead := FInput.Read(Buffer[0], BufferSize);
+  end;
+  FProcess.CloseInput;
+end;
+
+procedure TProcessStream.ExecErrorTask;
+const
+  BufferSize = 65536;
+var
+  Buffer: array [0 .. BufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  repeat
+    BytesRead := FProcess.Stderr.Read(Buffer[0], BufferSize);
+    if (BytesRead > 0) and Assigned(FError) then
+      FError.WriteBuffer(Buffer[0], BytesRead);
+  until BytesRead <= 0;
+end;
+
+function TProcessStream.Execute: Boolean;
+begin
+  Result := False;
+  FProcess := TProcess.Create(nil);
+  FProcess.Executable := '/bin/sh';
+  FProcess.Parameters.Add('-c');
+  FProcess.Parameters.Add('"' + FExecutable + '" ' + FCommandLine);
+  if FWorkDir <> '' then
+    FProcess.CurrentDirectory := FWorkDir
+  else
+    FProcess.CurrentDirectory := GetCurrentDir;
+  FProcess.Options := [poUsePipes];
+  FProcess.Execute;
+  FTask2.Perform(ExecErrorTask);
+  FTask2.Start;
+  if Assigned(FOutput) and not Assigned(FInput) then
+  begin
+    FTask.Perform(ExecReadTask);
+    FTask.Start;
+    Result := True;
+  end
+  else if Assigned(FInput) and not Assigned(FOutput) then
+  begin
+    FTask.Perform(ExecWriteTask);
+    FTask.Start;
+    Result := True;
+  end
+  else if Assigned(FInput) and Assigned(FOutput) then
+  begin
+    FTask.Perform(ExecReadTask);
+    FTask.Start;
+    ExecWriteTask;
+    FTask.Wait;
+    FProcess.WaitOnExit;
+    if FTask.Status <> TThreadStatus.tsErrored then
+      FTask.RaiseLastError;
+    Result := FProcess.ExitStatus = 0;
+  end;
+end;
+
+procedure TProcessStream.Wait;
+begin
+  FProcess.WaitOnExit;
+end;
+
+function TProcessStream.Done: Boolean;
+begin
+  FProcess.CloseInput;
+  FTask.Wait;
+  FTask2.Wait;
+  FProcess.WaitOnExit;
+  if FTask.Status <> TThreadStatus.tsErrored then
+    FTask.RaiseLastError;
+  Result := FProcess.ExitStatus = 0;
+end;
+
+function TProcessStream.Running: Boolean;
+begin
+  Result := FProcess.Running;
+end;
+{$ENDIF}
 
 constructor TStoreStream.Create(ASize: NativeInt);
 begin
