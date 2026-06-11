@@ -1,9 +1,8 @@
-unit IOUtils;
+unit IOCommon;
 
 interface
 
 uses
-  Windows,
   SysUtils, Classes, StrUtils, Types, Math,
   Generics.Defaults, Generics.Collections;
 
@@ -25,7 +24,7 @@ type
 
   TEntryStructComparer = class(TComparer<TEntryStruct1>)
   public
-    function Compare(const Left, Right: TEntryStruct1): Integer; override;
+    function Compare(constref Left, Right: TEntryStruct1): Integer; override;
   end;
 
   TPatchOp = (opNone, opDelete, opMissing, opDifferent);
@@ -43,7 +42,7 @@ var
 
 implementation
 
-function TEntryStructComparer.Compare(const Left, Right: TEntryStruct1)
+function TEntryStructComparer.Compare(constref Left, Right: TEntryStruct1)
   : Integer;
 begin
   Result := Integer(CompareValue(Left.Position, Right.Position));

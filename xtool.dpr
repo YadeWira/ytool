@@ -96,7 +96,7 @@ uses
   IOReplace in 'io\IOReplace.pas',
   IOExecute in 'io\IOExecute.pas',
   IODecode in 'io\IODecode.pas',
-  IOUtils in 'io\IOUtils.pas';
+  IOCommon in 'io\IOCommon.pas';
 
 {$SETPEFLAGS IMAGE_FILE_LARGE_ADDRESS_AWARE or IMAGE_FILE_RELOCS_STRIPPED or IMAGE_FILE_DEBUG_STRIPPED}
 
