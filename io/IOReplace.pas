@@ -42,6 +42,10 @@ type
 var
   SearchInfo: TArray<TArray<TArray<TScanInfo>>>;
   SearchCount: TArray<TArray<Integer>>;
+  { Estado compartido con el trabajador ReplaceThread (antes capturado por un
+    closure; FPC 3.2.2 no tiene metodos anonimos). }
+  DataStore: TDataStore1;
+  InfoStore: TArray<TListEx<TEntryStruct1>>;
 
 procedure PrintHelp;
 var
@@ -88,6 +92,52 @@ begin
   end;
 end;
 
+procedure ReplaceThread(X: IntPtr);
+var
+  Ptr: PByte;
+  Y: Integer;
+  C: Word;
+  D: Byte;
+  Pos, Size, SizeEx: NativeInt;
+  CRC: Cardinal;
+  E: TEntryStruct1;
+  F: Boolean;
+begin
+  Ptr := DataStore.Slot(X).Memory;
+  Pos := 0;
+  Size := DataStore.Size(X) - MinSize1;
+  SizeEx := DataStore.ActualSize(X);
+  while Pos < Size do
+  begin
+    C := PWord(Ptr + Pos)^;
+    D := (Ptr + Pos + MinSize1 - 1)^;
+    if (SearchCount[C, D] > 0) then
+    begin
+      F := False;
+      CRC := Utils.Hash32(0, Ptr + Pos, MinSize1);
+      for Y := 0 to SearchCount[C, D] - 1 do
+      begin
+        if (SearchInfo[C, D, Y].CRCSize <= (SizeEx - Pos)) then
+          if (CRC = SearchInfo[C, D, Y].CRC1) and
+            (Utils.Hash32(CRC, Ptr + Pos + MinSize1, SearchInfo[C, D,
+            Y].CRCSize - MinSize1) = SearchInfo[C, D, Y].CRC2) then
+          begin
+            E.Filename := SearchInfo[C, D, Y].Filename;
+            E.Position := DataStore.Position(X) + Pos;
+            E.Size := SearchInfo[C, D, Y].CRCSize;
+            InfoStore[X].Add(E);
+            Inc(Pos, E.Size);
+            F := True;
+            break;
+          end;
+      end;
+      if F then
+        continue;
+    end;
+    Inc(Pos);
+  end;
+end;
+
 procedure Encode(Input1, Input2, Input3, Output: String;
   Options: TEncodeOptions);
 const
@@ -110,9 +160,7 @@ var
   FStream: TFileStream;
   SStream1, SStream2: TFileStreamEx;
   OStream, MStream: TMemoryStream;
-  DataStore: TDataStore1;
   Tasks: TArray<TTask>;
-  InfoStore: TArray<TListEx<TEntryStruct1>>;
 begin
   SetLength(SearchInfo, $10000);
   SetLength(SearchCount, $10000);
@@ -188,52 +236,7 @@ begin
     begin
       InfoStore[I] := TListEx<TEntryStruct1>.Create(EntryStructCmp);
       Tasks[I] := TTask.Create(I);
-      Tasks[I].Perform(
-        procedure(X: IntPtr)
-        var
-          Ptr: PByte;
-          Y: Integer;
-          C: Word;
-          D: Byte;
-          Pos, Size, SizeEx: NativeInt;
-          CRC: Cardinal;
-          E: TEntryStruct1;
-          F: Boolean;
-        begin
-          Ptr := DataStore.Slot(X).Memory;
-          Pos := 0;
-          Size := DataStore.Size(X) - MinSize1;
-          SizeEx := DataStore.ActualSize(X);
-          while Pos < Size do
-          begin
-            C := PWord(Ptr + Pos)^;
-            D := (Ptr + Pos + MinSize1 - 1)^;
-            if (SearchCount[C, D] > 0) then
-            begin
-              F := False;
-              CRC := Utils.Hash32(0, Ptr + Pos, MinSize1);
-              for Y := 0 to SearchCount[C, D] - 1 do
-              begin
-                if (SearchInfo[C, D, Y].CRCSize <= (SizeEx - Pos)) then
-                  if (CRC = SearchInfo[C, D, Y].CRC1) and
-                    (Utils.Hash32(CRC, Ptr + Pos + MinSize1, SearchInfo[C, D,
-                    Y].CRCSize - MinSize1) = SearchInfo[C, D, Y].CRC2) then
-                  begin
-                    E.Filename := SearchInfo[C, D, Y].Filename;
-                    E.Position := DataStore.Position(X) + Pos;
-                    E.Size := SearchInfo[C, D, Y].CRCSize;
-                    InfoStore[X].Add(E);
-                    Inc(Pos, E.Size);
-                    F := True;
-                    break;
-                  end;
-              end;
-              if F then
-                continue;
-            end;
-            Inc(Pos);
-          end;
-        end);
+      Tasks[I].Perform(ReplaceThread);
     end;
     if FileExists(Input2) then
       BaseDir1 := ExtractFilePath(TPath.GetFullPath(Input2))
