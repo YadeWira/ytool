@@ -29,7 +29,7 @@ type
 
   TEntryStructComparer = class(TComparer<TEntryStruct>)
   public
-    function Compare(const Left, Right: TEntryStruct): Integer; override;
+    function Compare(constref Left, Right: TEntryStruct): Integer; override;
   end;
 
 var
@@ -37,7 +37,7 @@ var
 
 implementation
 
-function TEntryStructComparer.Compare(const Left, Right: TEntryStruct): Integer;
+function TEntryStructComparer.Compare(constref Left, Right: TEntryStruct): Integer;
 begin
   Result := Integer(CompareValue(Left.Position, Right.Position));
 end;

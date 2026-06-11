@@ -6,8 +6,10 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
-  IOUtils,
+  IOCommon,
+{$IFDEF MSWINDOWS}
   Windows, ShlObj,
+{$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, RTLConsts, TimeSpan, Diagnostics,
   IOUtils, Generics.Defaults, Generics.Collections;
@@ -183,8 +185,8 @@ begin
       with FStream do
         try
           ReadBuffer(Buffer[0], MinSize1);
-          WordRec(A).Bytes[0] := Buffer[0];
-          WordRec(A).Bytes[1] := Buffer[1];
+          PByte(@A)[0] := Buffer[0];
+          PByte(@A)[1] := Buffer[1];
           B := Buffer[MinSize1 - 1];
           J := MinSize1;
           New(LSInfo);

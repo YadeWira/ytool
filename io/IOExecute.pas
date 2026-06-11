@@ -5,8 +5,10 @@ interface
 uses
   InitCode,
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
-  IOUtils,
+  IOCommon,
+{$IFDEF MSWINDOWS}
   Windows, ShlObj,
+{$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, RTLConsts, TimeSpan, Diagnostics,
   IOUtils, Generics.Defaults, Generics.Collections;
