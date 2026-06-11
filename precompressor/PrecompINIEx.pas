@@ -6,7 +6,9 @@ uses
   InitCode,
   Utils, ParseExpr,
   PrecompUtils,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Classes, StrUtils,
   Types, Math, IOUtils, IniFiles;
 

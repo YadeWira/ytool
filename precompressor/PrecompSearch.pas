@@ -135,7 +135,7 @@ begin
         SearchCount[X, Z] := 0;
         for Y := Low(CodecSearch[X]) to High(CodecSearch[X]) do
         begin
-          LongRec(I).Words[0] := LongRec(CodecSearch[X, Y].SearchInt1).Words[0];
+          LongRec(I).Lo := LongRec(CodecSearch[X, Y].SearchInt1).Lo;
           if Z = I then
           begin
             Inc(SearchCount[X, Z]);

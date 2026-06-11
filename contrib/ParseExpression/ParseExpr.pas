@@ -156,7 +156,7 @@ type
     destructor Destroy; override;
     procedure AddReplaceExprWord(AExprWord: TExprWord);
     procedure DefineVariable(AVarName: string; AValue: PDouble);
-    procedure DefineStringVariable(AVarName: string; AValue: PString);
+    procedure DefineStringVariable(AVarName: string; AValue: PAnsiString);
     procedure DefineFunction(AFunctName, ADescription: string;
       AFuncAddress: TDoubleFunc; NArguments: Integer);
     procedure DefineStringFunction(AFunctName, ADescription: string;
@@ -1396,7 +1396,7 @@ begin
 end;
 
 procedure TCustomExpressionParser.DefineStringVariable(AVarName: string;
-  AValue: PString);
+  AValue: PAnsiString);
 begin
   AddReplaceExprWord(TStringVariable.Create(AVarName, AValue));
 end;

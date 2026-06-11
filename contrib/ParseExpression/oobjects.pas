@@ -50,7 +50,7 @@ type
 
 implementation
 
-uses SysUtils, AnsiStrings;
+uses SysUtils, strings;
 
 constructor TOCollection.Create(ACapacity: Integer);
 begin
@@ -192,12 +192,12 @@ end;
 
 function TStrCollection.Compare(Key1, Key2: Pointer): Integer;
 begin
-  Compare := AnsiStrings.StrComp(PAnsiChar(Key1), PAnsiChar(Key2));
+  Compare := strings.StrComp(PAnsiChar(Key1), PAnsiChar(Key2));
 end;
 
 procedure TStrCollection.FreeItem(Item: Pointer);
 begin
-  AnsiStrings.StrDispose(PAnsiChar(Item));
+  strings.StrDispose(PAnsiChar(Item));
 end;
 
 end.

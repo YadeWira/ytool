@@ -42,7 +42,12 @@ unit lz4;
 
 interface
 
+{$IFDEF MSWINDOWS}
 uses Windows;
+{$ENDIF}
+
+type
+  size_t = NativeUInt;
 
 const
   MINMATCH = 4;
