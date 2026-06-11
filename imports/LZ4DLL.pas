@@ -5,13 +5,16 @@ interface
 uses
   InitCode,
   Utils, LibImport,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Math;
 
 const
   LZ4F_VERSION = 100;
 
 type
+  size_t = NativeUInt;
   PLZ4_streamDecode_t = Pointer;
   PLZ4_stream_t = Pointer;
   PLZ4_streamHC_t = Pointer;

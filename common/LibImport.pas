@@ -3,9 +3,11 @@ unit LibImport;
 interface
 
 uses
-  MemoryModule,
-  Windows,
-  SysUtils, Classes, Character, RTLConsts;
+  dynlibs,
+{$IFDEF MSWINDOWS}
+  Windows, Character,
+{$ENDIF}
+  SysUtils, Classes;
 
 type
   TLibImport = class
@@ -13,16 +15,18 @@ type
     FIsMemoryLib: Boolean;
     FDLLLoaded: Boolean;
     FImageFileName: String;
-    FDLLStream: TCustomMemoryStream;
-    FDLLHandle: NativeUInt;
+    FTempFile: String;
+    FDLLStream: TMemoryStream;
+    FDLLHandle: TLibHandle;
     FImagePtr: Pointer;
     FImageSize: NativeInt;
+    procedure LoadFromTemp;
   public
     constructor Create;
     destructor Destroy; override;
-    procedure LoadLib(ALibrary: String)overload;
-    procedure LoadLib(AMemory: Pointer; ASize: NativeInt)overload;
-    procedure LoadLib(AStream: TStream; ASize: NativeInt)overload;
+    procedure LoadLib(ALibrary: String); overload;
+    procedure LoadLib(AMemory: Pointer; ASize: NativeInt); overload;
+    procedure LoadLib(AStream: TStream; ASize: NativeInt); overload;
     procedure UnloadLib;
     function GetProcAddr(AProcName: PAnsiChar): Pointer;
     property Loaded: Boolean read FDLLLoaded;
@@ -36,11 +40,96 @@ procedure InjectLib(Source, Dest: String);
 
 implementation
 
-function ResourceExists(ResName: String): Boolean;
+constructor TLibImport.Create;
 begin
-  Result := FindResourceEx(HInstance, RT_RCDATA, PWideChar(ResName), 0) <> 0;
+  inherited Create;
+  FIsMemoryLib := False;
+  FDLLLoaded := False;
+  FDLLHandle := NilHandle;
+  FDLLStream := nil;
+  FImageFileName := '';
+  FTempFile := '';
+  FImagePtr := nil;
+  FImageSize := 0;
 end;
 
+destructor TLibImport.Destroy;
+begin
+  UnloadLib;
+  inherited Destroy;
+end;
+
+{ Carga una libreria nativa desde disco. dynlibs resuelve .dll en Windows y
+  .so en Linux/Unix de forma transparente. }
+procedure TLibImport.LoadLib(ALibrary: String);
+begin
+  UnloadLib;
+  FIsMemoryLib := False;
+  FDLLHandle := LoadLibrary(ALibrary);
+  FDLLLoaded := FDLLHandle <> NilHandle;
+  FImageFileName := ALibrary;
+  FImagePtr := nil;
+  FImageSize := 0;
+end;
+
+{ Carga desde memoria: escribe la imagen a un archivo temporal y la carga desde
+  ahi (multiplataforma, en lugar del antiguo MemoryModule de Windows). }
+procedure TLibImport.LoadFromTemp;
+begin
+  FTempFile := GetTempFileName('', 'ytl');
+  FDLLStream.SaveToFile(FTempFile);
+  FDLLHandle := LoadLibrary(FTempFile);
+  FDLLLoaded := FDLLHandle <> NilHandle;
+  FImagePtr := FDLLStream.Memory;
+  FImageSize := FDLLStream.Size;
+end;
+
+procedure TLibImport.LoadLib(AMemory: Pointer; ASize: NativeInt);
+begin
+  UnloadLib;
+  FIsMemoryLib := True;
+  FDLLStream := TMemoryStream.Create;
+  FDLLStream.WriteBuffer(AMemory^, ASize);
+  FImageFileName := '';
+  LoadFromTemp;
+end;
+
+procedure TLibImport.LoadLib(AStream: TStream; ASize: NativeInt);
+begin
+  UnloadLib;
+  FIsMemoryLib := True;
+  FDLLStream := TMemoryStream.Create;
+  FDLLStream.CopyFrom(AStream, ASize);
+  FImageFileName := '';
+  LoadFromTemp;
+end;
+
+procedure TLibImport.UnloadLib;
+begin
+  if FDLLLoaded then
+    UnloadLibrary(FDLLHandle);
+  FDLLLoaded := False;
+  FDLLHandle := NilHandle;
+  if Assigned(FDLLStream) then
+    FreeAndNil(FDLLStream);
+  if FTempFile <> '' then
+  begin
+    DeleteFile(FTempFile);
+    FTempFile := '';
+  end;
+  FImagePtr := nil;
+  FImageSize := 0;
+end;
+
+function TLibImport.GetProcAddr(AProcName: PAnsiChar): Pointer;
+begin
+  if not FDLLLoaded then
+    Result := nil
+  else
+    Result := GetProcedureAddress(FDLLHandle, String(AProcName));
+end;
+
+{$IFDEF MSWINDOWS}
 function FileToResourceName(FileName: String): String;
 var
   I: Integer;
@@ -88,111 +177,20 @@ begin
   end;
 end;
 
-constructor TLibImport.Create;
-begin
-  inherited Create;
-  FDLLLoaded := False;
-  FImageFileName := '';
-  FImagePtr := nil;
-  FImageSize := 0;
-end;
-
-destructor TLibImport.Destroy;
-begin
-  UnloadLib;
-  inherited Destroy;
-end;
-
-procedure TLibImport.LoadLib(ALibrary: String);
-var
-  LResName: String;
-  szFileName: array [0 .. MAX_PATH] of char;
-begin
-  UnloadLib;
-  LResName := FileToResourceName(ALibrary);
-  FIsMemoryLib := ResourceExists(LResName);
-  if FIsMemoryLib then
-  begin
-    FDLLStream := TResourceStream.Create(HInstance, LResName, RT_RCDATA);
-    WriteLn(ErrOutput, FDLLStream.Size.ToString);
-    FDLLHandle := NativeUInt(MemoryLoadLibary(FDLLStream.Memory));
-    FDLLLoaded := Assigned(Pointer(FDLLHandle));
-  end
-  else
-  begin
-    FDLLStream := TMemoryStream.Create;
-    FDLLHandle := LoadLibrary(PWideChar(ALibrary));
-    FDLLLoaded := FDLLHandle >= 32;
-    if FDLLLoaded then
-    begin
-      FillChar(szFileName, sizeof(szFileName), #0);
-      GetModuleFileName(FDLLHandle, szFileName, MAX_PATH);
-    end;
-  end;
-  FImageFileName := ALibrary;
-  FImagePtr := FDLLStream.Memory;
-  FImageSize := FDLLStream.Size;
-end;
-
-procedure TLibImport.LoadLib(AMemory: Pointer; ASize: NativeInt);
-begin
-  UnloadLib;
-  FIsMemoryLib := True;
-  FDLLStream := TMemoryStream.Create;
-  FDLLStream.WriteBuffer(AMemory, ASize);
-  FDLLHandle := NativeUInt(MemoryLoadLibary(FDLLStream.Memory));
-  FDLLLoaded := Assigned(Pointer(FDLLHandle));
-  FImageFileName := '';
-  FImagePtr := FDLLStream.Memory;
-  FImageSize := FDLLStream.Size;
-end;
-
-procedure TLibImport.LoadLib(AStream: TStream; ASize: NativeInt);
-begin
-  UnloadLib;
-  FIsMemoryLib := True;
-  FDLLStream := TMemoryStream.Create;
-  FDLLStream.CopyFrom(AStream, ASize);
-  FDLLHandle := NativeUInt(MemoryLoadLibary(FDLLStream.Memory));
-  FDLLLoaded := Assigned(Pointer(FDLLHandle));
-  FImageFileName := '';
-  FImagePtr := FDLLStream.Memory;
-  FImageSize := FDLLStream.Size;
-end;
-
-procedure TLibImport.UnloadLib;
-begin
-  if FIsMemoryLib then
-  begin
-    MemoryFreeLibrary(Pointer(FDLLHandle));
-  end
-  else if FDLLLoaded then
-    FreeLibrary(FDLLHandle);
-  if FDLLLoaded then
-    FDLLStream.Free;
-  FDLLLoaded := False;
-  FImagePtr := nil;
-  FImageSize := 0;
-end;
-
-function TLibImport.GetProcAddr(AProcName: PAnsiChar): Pointer;
-begin
-  if not FDLLLoaded then
-    Result := nil
-  else if FIsMemoryLib then
-    Result := MemoryGetProcAddress(Pointer(FDLLHandle), AProcName)
-  else
-    Result := GetProcAddress(FDLLHandle, AProcName);
-end;
-
 procedure InjectLib(Source, Dest: String);
 var
   LResName: String;
 begin
   if not FileExists(Source) then
-    raise Exception.CreateRes(@SSpecifiedFileNotFound);
+    raise Exception.Create('Specified file not found');
   LResName := FileToResourceName(Source);
   UpdateFileResource(Source, Dest, LResName);
 end;
+{$ELSE}
+procedure InjectLib(Source, Dest: String);
+begin
+  raise Exception.Create('InjectLib: resource embedding not supported on this platform');
+end;
+{$ENDIF}
 
 end.

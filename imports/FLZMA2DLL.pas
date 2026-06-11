@@ -5,7 +5,9 @@ interface
 uses
   InitCode,
   Utils, LibImport,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Math, Classes, Types;
 
 const
@@ -28,6 +30,7 @@ const
 {$ENDIF}
 
 type
+  size_t = NativeUInt;
   PFL2_inBuffer = ^FL2_inBuffer;
 
   FL2_inBuffer = record

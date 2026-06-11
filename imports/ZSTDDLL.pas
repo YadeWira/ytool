@@ -5,10 +5,14 @@ interface
 uses
   InitCode,
   Utils, LibImport,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils;
 
 type
+  size_t = NativeUInt;
+  SSIZE_T = NativeInt;
   ZSTD_strategy = (ZSTD_fast = 1, ZSTD_dfast = 2, ZSTD_greedy = 3,
     ZSTD_lazy = 4, ZSTD_lazy2 = 5, ZSTD_btlazy2 = 6, ZSTD_btopt = 7,
     ZSTD_btultra = 8, ZSTD_btultra2 = 9, ZSTD_strategy_Force32 = $40000000);

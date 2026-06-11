@@ -5,7 +5,9 @@ interface
 uses
   InitCode,
   Utils, Threading, XXHASHLIB, ZSTDLib,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, Classes, StrUtils, Types, Math,
   Generics.Defaults, Generics.Collections;
 
@@ -115,7 +117,7 @@ type
 
   PExecOutput = ^_ExecOutput;
 
-  _ExecOutput = reference to procedure(Instance: Integer; const Buffer: Pointer;
+  _ExecOutput = procedure(Instance: Integer; const Buffer: Pointer;
     Size: Integer)cdecl;
 
   PPrecompFuncs = ^_PrecompFuncs;
@@ -240,12 +242,12 @@ type
 
   TEncodeSIComparer = class(TComparer<TEncodeSI>)
   public
-    function Compare(const Left, Right: TEncodeSI): Integer; override;
+    function Compare(constref Left, Right: TEncodeSI): Integer; override;
   end;
 
   TFutureSIComparer = class(TComparer<TFutureSI>)
   public
-    function Compare(const Left, Right: TFutureSI): Integer; override;
+    function Compare(constref Left, Right: TFutureSI): Integer; override;
   end;
 
   PDatabase = ^TDatabase;
@@ -442,12 +444,12 @@ begin
   end;
 end;
 
-function TEncodeSIComparer.Compare(const Left, Right: TEncodeSI): Integer;
+function TEncodeSIComparer.Compare(constref Left, Right: TEncodeSI): Integer;
 begin
   Result := Integer(CompareValue(Left.ActualPosition, Right.ActualPosition));
 end;
 
-function TFutureSIComparer.Compare(const Left, Right: TFutureSI): Integer;
+function TFutureSIComparer.Compare(constref Left, Right: TFutureSI): Integer;
 begin
   Result := Integer(CompareValue(Left.Position, Right.Position));
 end;
@@ -1275,9 +1277,9 @@ function PrecompFileSize(Handle: THandle): Int64;
 var
   LPos: Int64;
 begin
-  LPos := FileSeek(Handle, 0, FILE_CURRENT);
-  Result := FileSeek(Handle, 0, FILE_END);
-  FileSeek(Handle, LPos, FILE_BEGIN);
+  LPos := FileSeek(Handle, Int64(0), 1 { soCurrent } );
+  Result := FileSeek(Handle, Int64(0), 2 { soEnd } );
+  FileSeek(Handle, LPos, 0 { soBeginning } );
 end;
 
 function PrecompFileRead(Handle: THandle; Buffer: Pointer;
@@ -1305,6 +1307,7 @@ begin
   SetIniString(Section, Key, Value, FileName);
 end;
 
+{$IFDEF MSWINDOWS}
 function PrecompExec(Executable, CommandLine, WorkDir: PChar): Boolean;
 begin
   Result := Exec(Executable, CommandLine, WorkDir);
@@ -1518,6 +1521,43 @@ begin
     RaiseLastOSError;
   end;
 end;
+{$ELSE}
+{ TODO Linux: reimplementar PrecompExec* sobre TProcess/TProcessStream (codecs
+  ejecutables externos). Por ahora lanzan excepcion; los codecs internos no las usan. }
+function PrecompExec(Executable, CommandLine, WorkDir: PChar): Boolean;
+begin
+  Result := Exec(Executable, CommandLine, WorkDir);
+end;
+
+function PrecompExecStdin(Executable, CommandLine, WorkDir: PChar;
+  InBuff: Pointer; InSize: Integer): Boolean;
+begin
+  Result := ExecStdin(Executable, CommandLine, WorkDir, InBuff, InSize);
+end;
+
+function PrecompExecStdout(Instance: Integer;
+  Executable, CommandLine, WorkDir: PChar; Output: _ExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('PrecompExecStdout: not yet implemented on Linux');
+end;
+
+function PrecompExecStdio(Instance: Integer;
+  Executable, CommandLine, WorkDir: PChar; InBuff: Pointer; InSize: Integer;
+  Output: _ExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('PrecompExecStdio: not yet implemented on Linux');
+end;
+
+function PrecompExecStdioSync(Instance: Integer;
+  Executable, CommandLine, WorkDir: PChar; InBuff: Pointer; InSize: Integer;
+  Output: _ExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('PrecompExecStdioSync: not yet implemented on Linux');
+end;
+{$ENDIF}
 
 function PrecompAcceptPatch(OldSize, NewSize, PatchSize: Integer): Boolean;
 begin

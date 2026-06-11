@@ -5,7 +5,9 @@ interface
 uses
   InitCode,
   Utils, LibImport,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils;
 
 const
