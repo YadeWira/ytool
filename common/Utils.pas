@@ -4026,6 +4026,7 @@ begin
   Result := True;
 end;
 
+{$IFDEF MSWINDOWS}
 function GetUsedProcessMemory(hProcess: THandle): Int64;
 var
   memCounters: TProcessMemoryCounters;
@@ -4071,6 +4072,59 @@ begin
   if GlobalMemoryStatusEx(MemoryStatus) then
     Result := MemoryStatus.ullTotalPhys;
 end;
+{$ELSE}
+function ReadProcValueKB(const AFileName, AKey: string): Int64;
+var
+  F: TextFile;
+  Line, S: string;
+  P: Integer;
+begin
+  Result := 0;
+  AssignFile(F, AFileName);
+{$I-}
+  Reset(F);
+{$I+}
+  if IOResult <> 0 then
+    exit;
+  try
+    while not Eof(F) do
+    begin
+      ReadLn(F, Line);
+      if Pos(AKey, Line) = 1 then
+      begin
+        S := Trim(Copy(Line, Length(AKey) + 1, MaxInt));
+        P := Pos(' ', S);
+        if P > 0 then
+          S := Copy(S, 1, P - 1);
+        Result := StrToInt64Def(Trim(S), 0) * 1024;
+        break;
+      end;
+    end;
+  finally
+    CloseFile(F);
+  end;
+end;
+
+function GetUsedProcessMemory(hProcess: THandle): Int64;
+begin
+  Result := ReadProcValueKB('/proc/self/status', 'VmRSS:');
+end;
+
+function GetFreeSystemMemory: Int64;
+begin
+  Result := ReadProcValueKB('/proc/meminfo', 'MemAvailable:');
+end;
+
+function GetUsedSystemMemory: Int64;
+begin
+  Result := GetTotalSystemMemory - GetFreeSystemMemory;
+end;
+
+function GetTotalSystemMemory: Int64;
+begin
+  Result := ReadProcValueKB('/proc/meminfo', 'MemTotal:');
+end;
+{$ENDIF}
 
 function FileSize(const AFileName: string): Int64;
 var
