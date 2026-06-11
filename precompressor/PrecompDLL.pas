@@ -396,9 +396,6 @@ begin
       @CodecDLL[X].Scan2 := CodecDLL[X].Lib.GetProcAddr('PrecompScan2');
       @CodecDLL[X].Process := CodecDLL[X].Lib.GetProcAddr('PrecompProcess');
       @CodecDLL[X].Restore := CodecDLL[X].Lib.GetProcAddr('PrecompRestore');
-      if InitCode.UIDLLLoaded then
-        XTLAddplugin(ChangeFileExt(ExtractFileName(DLLList[I]), ''),
-          PLUGIN_LIBRARY);
       J := 0;
       while Assigned(CodecDLL[X].Codec(J)) do
       begin
@@ -408,10 +405,6 @@ begin
           FORCEDMETHOD := True;
         Insert(S, CodecDLL[X].Names, Length(CodecDLL[X].Names));
         Insert(S, Codec.Names, Length(Codec.Names));
-        if not SameText(ChangeFileExt(ExtractFileName(S), ''),
-          ChangeFileExt(ExtractFileName(Utils.GetModuleName), '')) then
-          if InitCode.UIDLLLoaded then
-            XTLAddCodec(S);
         Inc(J);
       end;
       if J = 0 then
@@ -420,8 +413,6 @@ begin
           CodecDLL[X].Names, Length(CodecDLL[X].Names));
         Insert(ChangeFileExt(ExtractFileName(DLLList[I]), ''), Codec.Names,
           Length(Codec.Names));
-        if InitCode.UIDLLLoaded then
-          XTLAddCodec(ChangeFileExt(ExtractFileName(DLLList[I]), ''));
       end;
     end
     else

@@ -74,7 +74,6 @@ uses
   ZLibDLL in 'imports\ZLibDLL.pas',
   ZSTDDLL in 'imports\ZSTDDLL.pas',
   lz4 in 'sources\lz4.pas',
-  UIMain in 'ui\UIMain.pas',
   PrecompMain in 'precompressor\PrecompMain.pas',
   PrecompUtils in 'precompressor\PrecompUtils.pas',
   PrecompCrypto in 'precompressor\PrecompCrypto.pas',
@@ -187,43 +186,11 @@ begin
   end;
 end;
 
-function Exec_(Executable, CommandLine, WorkDir: string): boolean;
-var
-  StartupInfo: TStartupInfo;
-  ProcessInfo: TProcessInformation;
-  dwExitCode: DWORD;
-  LWorkDir: PChar;
-begin
-  Result := False;
-  FillChar(StartupInfo, sizeof(StartupInfo), #0);
-  StartupInfo.cb := sizeof(StartupInfo);
-  if WorkDir <> '' then
-    LWorkDir := Pointer(WorkDir)
-  else
-    LWorkDir := Pointer(GetCurrentDir);
-  if CreateProcess(nil, PChar('"' + Executable + '" ' + CommandLine), nil, nil,
-    False, 0, nil, LWorkDir, StartupInfo, ProcessInfo) then
-  begin
-    CloseHandleEx(ProcessInfo.hThread);
-    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-    GetExitCodeProcess(ProcessInfo.hProcess, dwExitCode);
-    CloseHandleEx(ProcessInfo.hProcess);
-    Result := dwExitCode = 0;
-  end
-  else
-    RaiseLastOSError;
-end;
-
 const
   BufferSize = 4194034;
 
 var
   I, J: Integer;
-  S: String;
-  LibType: Integer;
-  LibPath: String;
-  LibList: System.Types.TStringDynArray;
-  ParamStr_: TArray<String>;
   ParamArg: array [0 .. 1] of TArray<String>;
   StrArray: TArray<String>;
   IsParam: boolean;
@@ -424,51 +391,7 @@ begin
     ShowMessage('');
     exit; }
   FormatSettings := TFormatSettings.Invariant;
-  if not CheckInstance('XToolUI_Check') then
-    ProgramInfo;
-  if InitCode.UIDLLLoaded and (ParamCount = 0) then
-  begin
-    XTLUI1;
-    while XTLUI2(@UIFuncs, ParamStr_, LibType, LibPath) do
-    begin
-      S := '';
-      for I := 1 to High(ParamStr_) do
-        S := S + IfThen(ParamStr_[I].Contains(' '), '"' + ParamStr_[I] + '"',
-          ParamStr_[I]) + ' ';
-      if LibType = 0 then
-        Exec_(ParamStr(0), S, '')
-      else
-      begin
-        LibList := TDirectory.GetFiles(LibPath, '*.dll',
-          TSearchOption.soAllDirectories);
-        for J := Low(LibList) to High(LibList) do
-        begin
-          S := '';
-          for I := 1 to High(ParamStr_) do
-          begin
-            S := S + IfThen(ParamStr_[I].Contains(' '),
-              '"' + ParamStr_[I] + '"', ParamStr_[I]) + ' ';
-            if I = 1 then
-              case LibType of
-                1:
-                  S := S + '"' + '-lz4' + LibList[J] + '"' + ' ';
-                2:
-                  S := S + '"' + '-zstd' + LibList[J] + '"' + ' ';
-                3:
-                  S := S + '"' + '-oodle' + LibList[J] + '"' + ' ';
-              end;
-          end;
-          WriteLine('Library loaded: ' + ReplaceText(LibList[J],
-            IncludeTrailingPathDelimiter(LibPath), ''));
-          WriteLine('');
-          Exec_(ParamStr(0), S, '');
-        end;
-      end;
-      WriteLine('Done!!!');
-      WriteLine('');
-    end;
-    exit;
-  end;
+  ProgramInfo;
   try
     if ParamCount = 0 then
     begin

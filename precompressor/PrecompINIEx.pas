@@ -538,10 +538,6 @@ begin
           FORCEDMETHOD := True;
         S1 := ChangeFileExt(ExtractFileName(CfgList[I]), '');
         Insert(S1, Codec.Names, Length(Codec.Names));
-        if not SameText(ChangeFileExt(ExtractFileName(CfgList[I]), ''),
-          ChangeFileExt(ExtractFileName(Utils.GetModuleName), '')) then
-          if InitCode.UIDLLLoaded then
-            XTLAddplugin(S1, PLUGIN_CONFIG);
         SetLength(CodecCfg[0], Succ(Length(CodecCfg[0])));
         CfgRecArray := @CodecCfg[0, Pred(Length(CodecCfg[0]))];
         X := 1;
@@ -552,12 +548,6 @@ begin
           CfgRec := @CodecCfg[0, Pred(Length(CodecCfg[0])), J];
           CfgRec^.Parser := TExpressionParser.Create;
           CfgRec^.Name := ReadString('StreamList' + X.ToString, 'Name', '');
-          if InitCode.UIDLLLoaded then
-          begin
-            SList := DecodeStr(CfgRec^.Name, ',');
-            for Y := Low(SList) to High(SList) do
-              XTLAddCodec(SList[Y]);
-          end;
           CfgRec^.Codec := ReadString('StreamList' + X.ToString, 'Codec', '');
           CfgRec^.BigEndian := ReadBool('StreamList' + X.ToString,
             'BigEndian', False);

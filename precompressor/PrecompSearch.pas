@@ -284,10 +284,6 @@ begin
           SetLength(CodecSearch, Succ(J));
           S := ChangeFileExt(ExtractFileName(SearchList[I]), '');
           Insert(S, Codec.Names, Length(Codec.Names));
-          if not SameText(ChangeFileExt(ExtractFileName(SearchList[I]), ''),
-            ChangeFileExt(ExtractFileName(Utils.GetModuleName), '')) then
-            if InitCode.UIDLLLoaded then
-              XTLAddplugin(S, PLUGIN_DATABASE);
         end;
         while FStream.Position < FStream.Size do
         begin
