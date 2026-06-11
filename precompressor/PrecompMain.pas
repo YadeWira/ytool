@@ -10,7 +10,9 @@ uses
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
   PrecompOodle, PrecompMedia, PrecompDStorage, PrecompINI, PrecompINIEx,
   PrecompSearch, PrecompDLL, PrecompEXE,
+{$IFDEF MSWINDOWS}
   Windows, ShlObj,
+{$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, RTLConsts, TimeSpan, Diagnostics,
   Generics.Defaults, Generics.Collections, Character;
@@ -294,7 +296,7 @@ begin
             end;
           end;
       else
-        if S[1].IsDigit then
+        if (S[1] in ['0' .. '9']) then
           Options.Depth := EnsureRange(Succ(S.ToInteger), 1, 10);
       end;
       Inc(I);
@@ -311,7 +313,7 @@ begin
           Options.LowMem := True;
       else
         if S <> '' then
-          if S[1].IsDigit and FLZMA2DLL.DLLLoaded then
+          if (S[1] in ['0' .. '9']) and FLZMA2DLL.DLLLoaded then
           begin
             S := ReplaceText(S, SPrecompSep3, SPrecompSep2);
             if (S <> '') then
@@ -1722,6 +1724,7 @@ begin
       Tasks[I] := TTask.Create;
       Tasks[I].Priority := ThrPty;
     end;
+{$IFDEF MSWINDOWS}
     SetPriorityClass(GetCurrentProcess, CaseInt(Integer(ThrPty),
       [IDLE_PRIORITY_CLASS, IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS,
       NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
@@ -1731,6 +1734,8 @@ begin
       THREAD_PRIORITY_BELOW_NORMAL, THREAD_PRIORITY_NORMAL,
       THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_HIGHEST,
       THREAD_PRIORITY_TIME_CRITICAL]));
+{$ENDIF}
+
     WorkStream[I] := TMemoryStreamEx2.Create;
     WorkLastSize[I] := 0;
   end;
@@ -2565,11 +2570,11 @@ end;
 function CalcDupSysMem: Int64;
 begin
   if DupSysMem <= 0 then
-    Result := Max(0, Abs(DupSysMem) - GetUsedProcessMemory(GetCurrentProcess))
+    Result := Max(0, Abs(DupSysMem) - GetUsedProcessMemory({$IFDEF MSWINDOWS}GetCurrentProcess{$ELSE}0{$ENDIF}))
   else
     Result := Max(0, DupSysMem - GetUsedSystemMemory);
   Result := Min(Result,
-    Max(0, Min(XTOOL_MEMLIMIT - GetUsedProcessMemory(GetCurrentProcess),
+    Max(0, Min(XTOOL_MEMLIMIT - GetUsedProcessMemory({$IFDEF MSWINDOWS}GetCurrentProcess{$ELSE}0{$ENDIF}),
     GetFreeSystemMemory - XTOOL_FREEMEM)));
 end;
 
@@ -2784,6 +2789,7 @@ begin
       Tasks[I] := TTask.Create;
       Tasks[I].Priority := ThrPty;
     end;
+{$IFDEF MSWINDOWS}
     SetPriorityClass(GetCurrentProcess, CaseInt(Integer(ThrPty),
       [IDLE_PRIORITY_CLASS, IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS,
       NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
@@ -2793,6 +2799,8 @@ begin
       THREAD_PRIORITY_BELOW_NORMAL, THREAD_PRIORITY_NORMAL,
       THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_HIGHEST,
       THREAD_PRIORITY_TIME_CRITICAL]));
+{$ENDIF}
+
     WorkStream[I] := TMemoryStreamEx2.Create;
     WorkLastSize[I] := 0;
   end;
@@ -3105,30 +3113,39 @@ end;
 procedure EncodeStats;
 var
   FHandle: THandle;
+{$IFDEF MSWINDOWS}
   SBInfo: TConsoleScreenBufferInfo;
-  CLine: Integer;
-  SL: TStringList;
   Coords: TCoord;
   ulLength: Cardinal;
+{$ENDIF}
+  CLine: Integer;
+  SL: TStringList;
 
   procedure Update;
   var
     I: Integer;
     TS: TTimeSpan;
+{$IFDEF MSWINDOWS}
     CreationTime, ExitTime, KernelTime, UserTime: TFileTime;
     TT: TSystemTime;
+{$ENDIF}
     I64: Int64;
   begin
+{$IFDEF MSWINDOWS}
     GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
       UserTime);
     FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
+{$ENDIF}
     SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
       EncInfo.Count.ToString;
     TS := Stopwatch.Elapsed;
     SL[1] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds]) + ' (CPU ' +
-      Format('%0:.2d:%1:.2d:%2:.2d', [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute,
-      TT.wSecond]) + ')';
+      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
+{$IFDEF MSWINDOWS}
+      + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
+      [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute, TT.wSecond]) + ')'
+{$ENDIF}
+      ;
     I64 := EncInfo.DecMem0 + EncInfo.DecMem1;
     I64 := I64 div 1024;
     if StoreDD > -2 then
@@ -3154,15 +3171,27 @@ var
       IfThen(StoreDD > 0, ' >> ' + ConvertKB2TB((EncInfo.SrepSize) div 1024),
       '') + IfThen(COMPRESS > 0, ' >> ' + ConvertKB2TB((EncInfo.CompSize)
       div 1024), '') + '      ';
+{$IFDEF MSWINDOWS}
     SetConsoleCursorPosition(FHandle, Coords);
     WriteConsole(FHandle, PChar(SL.Text), Length(SL.Text), ulLength, nil);
+{$ELSE}
+    if CLine > 0 then
+      Write(ErrOutput, #27'[', CLine, 'A');
+    CLine := SL.Count;
+    Write(ErrOutput, SL.Text);
+    Flush(ErrOutput);
+{$ENDIF}
   end;
 
 begin
+  FHandle := 0;
+{$IFDEF MSWINDOWS}
   FHandle := GetStdHandle(STD_ERROR_HANDLE);
   GetConsoleScreenBufferInfo(FHandle, SBInfo);
   Coords.X := 0;
   Coords.Y := SBInfo.dwCursorPosition.Y;
+{$ENDIF}
+  CLine := 0;
   SL := TStringList.Create;
   SL.Add('Streams: 0 / 0');
   SL.Add('Time: 00:00:00');
@@ -3187,35 +3216,56 @@ end;
 procedure DecodeStats;
 var
   FHandle: THandle;
+{$IFDEF MSWINDOWS}
   SBInfo: TConsoleScreenBufferInfo;
-  CLine: Integer;
-  SL: TStringList;
   Coords: TCoord;
   ulLength: Cardinal;
+{$ENDIF}
+  CLine: Integer;
+  SL: TStringList;
 
   procedure Update;
   var
     TS: TTimeSpan;
+{$IFDEF MSWINDOWS}
     CreationTime, ExitTime, KernelTime, UserTime: TFileTime;
     TT: TSystemTime;
+{$ENDIF}
   begin
+{$IFDEF MSWINDOWS}
     GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
       UserTime);
     FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
+{$ENDIF}
     TS := Stopwatch.Elapsed;
     SL[0] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds]) + ' (CPU ' +
-      Format('%0:.2d:%1:.2d:%2:.2d', [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute,
-      TT.wSecond]) + ')';
+      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
+{$IFDEF MSWINDOWS}
+      + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
+      [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute, TT.wSecond]) + ')'
+{$ENDIF}
+      ;
+{$IFDEF MSWINDOWS}
     SetConsoleCursorPosition(FHandle, Coords);
     WriteConsole(FHandle, PChar(SL.Text), Length(SL.Text), ulLength, nil);
+{$ELSE}
+    if CLine > 0 then
+      Write(ErrOutput, #27'[', CLine, 'A');
+    CLine := SL.Count;
+    Write(ErrOutput, SL.Text);
+    Flush(ErrOutput);
+{$ENDIF}
   end;
 
 begin
+  FHandle := 0;
+{$IFDEF MSWINDOWS}
   FHandle := GetStdHandle(STD_ERROR_HANDLE);
   GetConsoleScreenBufferInfo(FHandle, SBInfo);
   Coords.X := 0;
   Coords.Y := SBInfo.dwCursorPosition.Y;
+{$ENDIF}
+  CLine := 0;
   SL := TStringList.Create;
   SL.Add('Time: 00:00:00');
   SL.Add('');
