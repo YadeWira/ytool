@@ -514,6 +514,19 @@ type
     usado es un metodo (TCacheReadStream.FCallback), de ahi "of object". }
   TCopyCallback = function(ASize: Int64): Boolean of object;
 
+{ Compat de los intrinsecos atomicos de Delphi sobre InterLocked* de FPC.
+  AtomicIncrement/Decrement devuelven el valor NUEVO; AtomicExchange el ANTERIOR. }
+function AtomicIncrement(var Target: longint): longint; overload;
+function AtomicIncrement(var Target: Int64): Int64; overload;
+function AtomicIncrement(var Target: longint; const Value: longint): longint; overload;
+function AtomicIncrement(var Target: Int64; const Value: Int64): Int64; overload;
+function AtomicDecrement(var Target: longint): longint; overload;
+function AtomicDecrement(var Target: Int64): Int64; overload;
+function AtomicDecrement(var Target: longint; const Value: longint): longint; overload;
+function AtomicDecrement(var Target: Int64; const Value: Int64): Int64; overload;
+function AtomicExchange(var Target: longint; const Value: longint): longint; overload;
+function AtomicExchange(var Target: Int64; const Value: Int64): Int64; overload;
+
 function CRC32(CRC: longword; buf: PByte; len: cardinal): longword;
 function Hash32(CRC: longword; buf: PByte; len: cardinal): longword;
 
@@ -696,20 +709,84 @@ begin
     (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
 end;
 
+function AtomicIncrement(var Target: longint): longint;
+begin
+  Result := InterLockedIncrement(Target);
+end;
+
+function AtomicIncrement(var Target: Int64): Int64;
+begin
+  Result := InterLockedIncrement64(Target);
+end;
+
+function AtomicIncrement(var Target: longint; const Value: longint): longint;
+begin
+  Result := InterLockedExchangeAdd(Target, Value) + Value;
+end;
+
+function AtomicIncrement(var Target: Int64; const Value: Int64): Int64;
+begin
+  Result := InterLockedExchangeAdd64(Target, Value) + Value;
+end;
+
+function AtomicDecrement(var Target: longint): longint;
+begin
+  Result := InterLockedDecrement(Target);
+end;
+
+function AtomicDecrement(var Target: Int64): Int64;
+begin
+  Result := InterLockedDecrement64(Target);
+end;
+
+function AtomicDecrement(var Target: longint; const Value: longint): longint;
+begin
+  Result := InterLockedExchangeAdd(Target, -Value) - Value;
+end;
+
+function AtomicDecrement(var Target: Int64; const Value: Int64): Int64;
+begin
+  Result := InterLockedExchangeAdd64(Target, -Value) - Value;
+end;
+
+function AtomicExchange(var Target: longint; const Value: longint): longint;
+begin
+  Result := InterLockedExchange(Target, Value);
+end;
+
+function AtomicExchange(var Target: Int64; const Value: Int64): Int64;
+begin
+  Result := InterLockedExchange64(Target, Value);
+end;
+
 procedure ShowMessage(Msg: string; Caption: string = '');
 begin
+{$IFDEF MSWINDOWS}
   MessageBox(0, PChar(Msg), PChar(Caption), MB_OK or MB_TASKMODAL);
+{$ELSE}
+  if Caption <> '' then
+    WriteLn(ErrOutput, Caption, ': ', Msg)
+  else
+    WriteLn(ErrOutput, Msg);
+{$ENDIF}
 end;
 
 procedure WriteLine(S: String);
+{$IFDEF MSWINDOWS}
 var
   ulLength: cardinal;
+{$ENDIF}
 begin
+{$IFDEF MSWINDOWS}
   WriteConsole(GetStdHandle(STD_ERROR_HANDLE), PChar(S + #13#10),
     Length(S + #13#10), ulLength, nil);
+{$ELSE}
+  WriteLn(ErrOutput, S);
+{$ENDIF}
 end;
 
 function GetModuleName: string;
+{$IFDEF MSWINDOWS}
 var
   szFileName: array [0 .. MAX_PATH] of char;
 begin
@@ -717,6 +794,11 @@ begin
   GetModuleFileName(hInstance, szFileName, MAX_PATH);
   Result := szFileName;
 end;
+{$ELSE}
+begin
+  Result := ParamStr(0);
+end;
+{$ENDIF}
 
 constructor TListEx<T>.Create(const AComparer: IComparer<T>);
 begin
@@ -1526,7 +1608,7 @@ begin
   FList := GetFileList([FPath], True);
   FCount := Length(FList);
   if FCount = 0 then
-    raise EFOpenError.CreateRes(@SEmptyPath);
+    raise EFOpenError.Create('No file name specified');
   FIndex := -1;
   FStream := nil;
 end;
@@ -1561,7 +1643,7 @@ begin
     if FPosition < FLength.Size then
     begin
       LCount := Min(FLength.Size - FPosition, Count);
-      Move(WordRec(FLength).Bytes[FPosition], Buffer, LCount);
+      Move(PByte(@FLength)[FPosition], Buffer, LCount);
       Inc(FPosition, LCount);
       if FPosition = FLength.Size then
       begin
@@ -1651,7 +1733,7 @@ begin
     if FPosition < FLength.Size then
     begin
       LCount := Min(FLength.Size - FPosition, Count);
-      Move(Buffer, WordRec(FLength).Bytes[FPosition], LCount);
+      Move(Buffer, PByte(@FLength)[FPosition], LCount);
       Inc(FPosition, LCount);
       if FPosition = FLength.Size then
       begin
@@ -3220,7 +3302,7 @@ begin
       exit;
     end;
   end;
-  raise Exception.CreateRes(@SGenericItemNotFound);
+  raise Exception.Create('Item not found');
 end;
 
 procedure TDataManager.CopyData(ID: Integer; Stream: TStream);
@@ -3237,7 +3319,7 @@ begin
       exit;
     end;
   end;
-  raise Exception.CreateRes(@SGenericItemNotFound);
+  raise Exception.Create('Item not found');
 end;
 
 function TDataManager.CopyData(ID: Integer; Data: Pointer): Integer;
@@ -3258,7 +3340,7 @@ begin
       exit;
     end;
   end;
-  raise Exception.CreateRes(@SGenericItemNotFound);
+  raise Exception.Create('Item not found');
 end;
 
 procedure TDataManager.Update(ID: Integer; Count: Integer);
@@ -3273,7 +3355,7 @@ begin
       exit;
     end;
   end;
-  raise Exception.CreateRes(@SGenericItemNotFound);
+  raise Exception.Create('Item not found');
 end;
 
 procedure TDataManager.Reset(ID: Integer);
@@ -3288,7 +3370,7 @@ begin
       exit;
     end;
   end;
-  raise Exception.CreateRes(@SGenericItemNotFound);
+  raise Exception.Create('Item not found');
 end;
 
 constructor TArgParser.Create(Arguments: TStringDynArray);
@@ -3494,7 +3576,7 @@ end;
 
 function CRC32(CRC: longword; buf: PByte; len: cardinal): longword;
 begin
-  Result := ZLib.CRC32(CRC, buf, len);
+  Result := ZLib.CRC32(CRC, pBytef(buf), len);
 end;
 
 function Hash32(CRC: longword; buf: PByte; len: cardinal): longword;
@@ -4346,6 +4428,7 @@ begin
 end;
 {$ENDIF}
 
+{$IFDEF MSWINDOWS}
 function FileSize(const AFileName: string): Int64;
 var
   AttributeData: TWin32FileAttributeData;
@@ -4359,6 +4442,17 @@ begin
   else
     Result := 0;
 end;
+{$ELSE}
+function FileSize(const AFileName: string): Int64;
+var
+  Info: stat;
+begin
+  if FpStat(AFileName, Info) = 0 then
+    Result := Info.st_size
+  else
+    Result := 0;
+end;
+{$ENDIF}
 
 function GetFileList(const APath: TArray<string>; SubDir: Boolean)
   : TArray<string>;
@@ -4427,6 +4521,7 @@ begin
 end;
 
 procedure CloseHandleEx(var Handle: THandle);
+{$IFDEF MSWINDOWS}
 var
   lpdwFlags: DWORD;
 begin
@@ -4439,6 +4534,14 @@ begin
       Handle := 0;
     end;
 end;
+{$ELSE}
+begin
+  if Handle = 0 then
+    exit;
+  FileClose(Handle);
+  Handle := 0;
+end;
+{$ENDIF}
 
 function ExpandPath(const AFileName: string; AFullPath: Boolean): String;
 begin
@@ -4452,6 +4555,7 @@ begin
     Result := TPath.GetFullPath(Result);
 end;
 
+{$IFDEF MSWINDOWS}
 function Exec(Executable, CommandLine, WorkDir: string): Boolean;
 var
   StartupInfo: TStartupInfo;
@@ -4818,6 +4922,51 @@ begin
     RaiseLastOSError;
   end;
 end;
+{$ELSE}
+{ TODO Linux: reimplementar la familia Exec* sobre TProcess/TProcessStream
+  (soporte de codecs/plugins ejecutables externos). Por ahora lanzan excepcion;
+  la precompresion con codecs internos no las usa. }
+function Exec(Executable, CommandLine, WorkDir: string): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('Exec: external process support not yet implemented on Linux');
+end;
+
+function ExecStdin(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
+  InSize: Integer): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('ExecStdin: not yet implemented on Linux');
+end;
+
+function ExecStdin(Executable, CommandLine, WorkDir: string;
+  InStream: TStream): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('ExecStdin: not yet implemented on Linux');
+end;
+
+function ExecStdout(Executable, CommandLine, WorkDir: string;
+  Output: TExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('ExecStdout: not yet implemented on Linux');
+end;
+
+function ExecStdio(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
+  InSize: Integer; Output: TExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('ExecStdio: not yet implemented on Linux');
+end;
+
+function ExecStdio(Executable, CommandLine, WorkDir: string; InStream: TStream;
+  Output: TExecOutput): Boolean;
+begin
+  Result := False;
+  raise Exception.Create('ExecStdio: not yet implemented on Linux');
+end;
+{$ENDIF}
 
 function GetCmdStr(CommandLine: String; Index: Integer;
   KeepQuotes: Boolean): string;

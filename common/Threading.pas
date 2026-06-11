@@ -10,15 +10,20 @@ type
 
   EThreadException = class(Exception);
 
-  { Punteros a procedimiento simples. En FPC 3.2.2 no hay metodos anonimos /
-    function references (TProc), por lo que los trabajos se pasan como
-    procedimientos globales con nombre. El contexto que antes capturaban los
-    closures se obtiene de variables a nivel de unidad en cada llamador. }
+  { Punteros a procedimiento. En FPC 3.2.2 no hay metodos anonimos / function
+    references (TProc); los trabajos se pasan como procedimientos globales con
+    nombre (TTaskProcN) o como metodos (TTaskMethodN). El contexto que antes
+    capturaban los closures se obtiene de variables a nivel de unidad. }
   TTaskProc0 = procedure;
   TTaskProc1 = procedure(Arg1: IntPtr);
   TTaskProc2 = procedure(Arg1, Arg2: IntPtr);
   TTaskProc3 = procedure(Arg1, Arg2, Arg3: IntPtr);
   TTaskProc4 = procedure(Arg1, Arg2, Arg3, Arg4: IntPtr);
+  TTaskMethod0 = procedure of object;
+  TTaskMethod1 = procedure(Arg1: IntPtr) of object;
+  TTaskMethod2 = procedure(Arg1, Arg2: IntPtr) of object;
+  TTaskMethod3 = procedure(Arg1, Arg2, Arg3: IntPtr) of object;
+  TTaskMethod4 = procedure(Arg1, Arg2, Arg3, Arg4: IntPtr) of object;
 
   TTask = class(TThread)
   private
@@ -30,8 +35,15 @@ type
     FProc2: TTaskProc2;
     FProc3: TTaskProc3;
     FProc4: TTaskProc4;
+    FMth0: TTaskMethod0;
+    FMth1: TTaskMethod1;
+    FMth2: TTaskMethod2;
+    FMth3: TTaskMethod3;
+    FMth4: TTaskMethod4;
     FArgs: array [0 .. 3] of IntPtr;
     FStarted: Boolean;
+    procedure ClearProcs;
+    function HasProc: Boolean;
     procedure RunProc;
   public
     constructor Create(Arg1: IntPtr = 0; Arg2: IntPtr = 0; Arg3: IntPtr = 0;
@@ -44,6 +56,11 @@ type
     procedure Perform(const Proc: TTaskProc2); overload;
     procedure Perform(const Proc: TTaskProc3); overload;
     procedure Perform(const Proc: TTaskProc4); overload;
+    procedure Perform(const Proc: TTaskMethod0); overload;
+    procedure Perform(const Proc: TTaskMethod1); overload;
+    procedure Perform(const Proc: TTaskMethod2); overload;
+    procedure Perform(const Proc: TTaskMethod3); overload;
+    procedure Perform(const Proc: TTaskMethod4); overload;
     procedure Execute; override;
     procedure Start;
     procedure Wait;
@@ -64,11 +81,7 @@ begin
   FSync := False;
   FErrorMsg := '';
   FStatus := tsReady;
-  FProc0 := nil;
-  FProc1 := nil;
-  FProc2 := nil;
-  FProc3 := nil;
-  FProc4 := nil;
+  ClearProcs;
   FArgs[0] := Arg1;
   FArgs[1] := Arg2;
   FArgs[2] := Arg3;
@@ -90,49 +103,85 @@ begin
   FArgs[3] := Arg4;
 end;
 
-procedure TTask.Perform(const Proc: TTaskProc0);
+procedure TTask.ClearProcs;
 begin
-  FProc0 := Proc;
+  FProc0 := nil;
   FProc1 := nil;
   FProc2 := nil;
   FProc3 := nil;
   FProc4 := nil;
+  FMth0 := nil;
+  FMth1 := nil;
+  FMth2 := nil;
+  FMth3 := nil;
+  FMth4 := nil;
+end;
+
+procedure TTask.Perform(const Proc: TTaskProc0);
+begin
+  ClearProcs;
+  FProc0 := Proc;
 end;
 
 procedure TTask.Perform(const Proc: TTaskProc1);
 begin
-  FProc0 := nil;
+  ClearProcs;
   FProc1 := Proc;
-  FProc2 := nil;
-  FProc3 := nil;
-  FProc4 := nil;
 end;
 
 procedure TTask.Perform(const Proc: TTaskProc2);
 begin
-  FProc0 := nil;
-  FProc1 := nil;
+  ClearProcs;
   FProc2 := Proc;
-  FProc3 := nil;
-  FProc4 := nil;
 end;
 
 procedure TTask.Perform(const Proc: TTaskProc3);
 begin
-  FProc0 := nil;
-  FProc1 := nil;
-  FProc2 := nil;
+  ClearProcs;
   FProc3 := Proc;
-  FProc4 := nil;
 end;
 
 procedure TTask.Perform(const Proc: TTaskProc4);
 begin
-  FProc0 := nil;
-  FProc1 := nil;
-  FProc2 := nil;
-  FProc3 := nil;
+  ClearProcs;
   FProc4 := Proc;
+end;
+
+procedure TTask.Perform(const Proc: TTaskMethod0);
+begin
+  ClearProcs;
+  FMth0 := Proc;
+end;
+
+procedure TTask.Perform(const Proc: TTaskMethod1);
+begin
+  ClearProcs;
+  FMth1 := Proc;
+end;
+
+procedure TTask.Perform(const Proc: TTaskMethod2);
+begin
+  ClearProcs;
+  FMth2 := Proc;
+end;
+
+procedure TTask.Perform(const Proc: TTaskMethod3);
+begin
+  ClearProcs;
+  FMth3 := Proc;
+end;
+
+procedure TTask.Perform(const Proc: TTaskMethod4);
+begin
+  ClearProcs;
+  FMth4 := Proc;
+end;
+
+function TTask.HasProc: Boolean;
+begin
+  Result := Assigned(FProc0) or Assigned(FProc1) or Assigned(FProc2) or
+    Assigned(FProc3) or Assigned(FProc4) or Assigned(FMth0) or Assigned(FMth1)
+    or Assigned(FMth2) or Assigned(FMth3) or Assigned(FMth4);
 end;
 
 procedure TTask.RunProc;
@@ -146,7 +195,17 @@ begin
   else if Assigned(FProc3) then
     FProc3(FArgs[0], FArgs[1], FArgs[2])
   else if Assigned(FProc4) then
-    FProc4(FArgs[0], FArgs[1], FArgs[2], FArgs[3]);
+    FProc4(FArgs[0], FArgs[1], FArgs[2], FArgs[3])
+  else if Assigned(FMth0) then
+    FMth0
+  else if Assigned(FMth1) then
+    FMth1(FArgs[0])
+  else if Assigned(FMth2) then
+    FMth2(FArgs[0], FArgs[1])
+  else if Assigned(FMth3) then
+    FMth3(FArgs[0], FArgs[1], FArgs[2])
+  else if Assigned(FMth4) then
+    FMth4(FArgs[0], FArgs[1], FArgs[2], FArgs[3]);
 end;
 
 procedure TTask.Execute;
@@ -159,8 +218,7 @@ Restart:
   try
     if FStatus = tsRunning then
     begin
-      if Assigned(FProc0) or Assigned(FProc1) or Assigned(FProc2) or
-        Assigned(FProc3) or Assigned(FProc4) then
+      if HasProc then
       begin
         if FSync then
           Self.Synchronize(RunProc)
