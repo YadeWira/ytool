@@ -149,9 +149,9 @@ uses
         {$define AES_PASCAL} // Delphi XE2/XE3 do not have the AES-NI opcodes :(
       {$endif}
       {$define AESPASCAL_OR_CPU64}
-      {$ifndef BSD}
-        {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
-        {$define SHA512_X64} // external sha512_sse4 for win64/lin64
+      {$ifdef MSWINDOWS} // ytool: asm externo solo Windows; Linux usa fallback Pascal
+        {$define CRC32C_X64} // external crc32_iscsi_01 for win64
+        {$define SHA512_X64} // external sha512_sse4 for win64
       {$endif}
     {$else}
       {$ifdef MSWINDOWS}

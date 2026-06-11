@@ -369,4 +369,11 @@ begin
   XXH3_state.seed := 0;
 end;
 
+{$IFDEF LINUX}
+{$IFDEF CPUX86_64}
+{$linklib c}
+{$L xxhash4delphi.linux.x64.o}
+{$ENDIF}
+{$ENDIF}
+
 end.

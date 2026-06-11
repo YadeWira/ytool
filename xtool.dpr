@@ -27,14 +27,16 @@ program xtool;
 {$WEAKLINKRTTI ON}
 {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
 {$POINTERMATH ON}
-{$DEFINE UseFastMM}
+{.$DEFINE UseFastMM}
 
 uses
 {$IFDEF UseFastMM}
   FastMM4 in 'contrib\FastMM4-AVX\FastMM4.pas',
   FastMM4Messages in 'contrib\FastMM4-AVX\FastMM4Messages.pas',
 {$ENDIF }
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils,
   StrUtils,
   Classes,
@@ -46,11 +48,7 @@ uses
   LibImport in 'common\LibImport.pas',
   Threading in 'common\Threading.pas',
   Utils in 'common\Utils.pas',
-  libc in 'contrib\LIBC\libc.pas',
   lz4lib in 'contrib\LZ4Delphi\lz4lib.pas',
-  FuncHook in 'contrib\Delphi_MemoryModule\FuncHook.pas',
-  MemoryModule in 'contrib\Delphi_MemoryModule\MemoryModule.pas',
-  MemoryModuleHook in 'contrib\Delphi_MemoryModule\MemoryModuleHook.pas',
   SynCommons in 'contrib\mORMot\SynCommons.pas',
   SynCrypto in 'contrib\mORMot\SynCrypto.pas',
   SynLZ in 'contrib\mORMot\SynLZ.pas',
@@ -98,7 +96,9 @@ uses
   IODecode in 'io\IODecode.pas',
   IOCommon in 'io\IOCommon.pas';
 
+{$IFDEF MSWINDOWS}
 {$SETPEFLAGS IMAGE_FILE_LARGE_ADDRESS_AWARE or IMAGE_FILE_RELOCS_STRIPPED or IMAGE_FILE_DEBUG_STRIPPED}
+{$ENDIF}
 
 const
   CommandPrecomp = 'precomp';
@@ -152,7 +152,7 @@ end;
 function GetInStream(Input: string): TStream;
 begin
   if (Input = '-') or (Input = '') then
-    Result := THandleStream.Create(GetStdHandle(STD_INPUT_HANDLE))
+    Result := THandleStream.Create({$IFDEF MSWINDOWS}GetStdHandle(STD_INPUT_HANDLE){$ELSE}StdInputHandle{$ENDIF})
   else if Pos('://', Input) > 0 then
     Result := TDownloadStream.Create(Input)
   else if FileExists(Input) then
@@ -168,11 +168,12 @@ begin
   else if DirectoryExists(Output) then
     Result := TDirOutputStream.Create(Output)
   else if (Output = '-') then
-    Result := THandleStream.Create(GetStdHandle(STD_OUTPUT_HANDLE))
+    Result := THandleStream.Create({$IFDEF MSWINDOWS}GetStdHandle(STD_OUTPUT_HANDLE){$ELSE}StdOutputHandle{$ENDIF})
   else
     Result := TFileStream.Create(Output, fmCreate);
 end;
 
+{$IFDEF MSWINDOWS}
 function CheckInstance(const InstanceName: string): boolean;
 var
   Sem: THandle;
@@ -185,6 +186,7 @@ begin
     exit(True);
   end;
 end;
+{$ENDIF}
 
 const
   BufferSize = 4194034;
@@ -390,7 +392,9 @@ begin
     end;
     ShowMessage('');
     exit; }
-  FormatSettings := TFormatSettings.Invariant;
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  FormatSettings.ThousandSeparator := ',';
   ProgramInfo;
   try
     if ParamCount = 0 then
