@@ -55,7 +55,7 @@ uses
   SynCrypto in 'contrib\mORMot\SynCrypto.pas',
   SynLZ in 'contrib\mORMot\SynLZ.pas',
   SynTable in 'contrib\mORMot\SynTable.pas',
-  oObjects in 'contrib\ParseExpression\oObjects.pas',
+  oobjects in 'contrib\ParseExpression\oobjects.pas',
   ParseClass in 'contrib\ParseExpression\ParseClass.pas',
   ParseExpr in 'contrib\ParseExpression\ParseExpr.pas',
   xxhashlib in 'contrib\XXHASH4Delphi\xxhashlib.pas',
