@@ -102,8 +102,8 @@ type
     ZSTD_dictMatchState = 2,
     ZSTD_dedicatedDictSearch = 3
   );
-  ZSTD_allocFunction = function(opaque : Pointer; size : NativeInt):Pointer{$IFDEF WIN32};cdecl{$ENDIF};
-  ZSTD_freeFunction = procedure(opaque,address : Pointer){$IFDEF WIN32};cdecl{$ENDIF};
+  ZSTD_allocFunction = function(opaque : Pointer; size : NativeInt):Pointer{$IFNDEF WIN64};cdecl{$ENDIF};
+  ZSTD_freeFunction = procedure(opaque,address : Pointer){$IFNDEF WIN64};cdecl{$ENDIF};
   ZSTD_customMem = record
     customAlloc : ZSTD_allocFunction;
     customFree :  ZSTD_freeFunction;
@@ -116,7 +116,7 @@ type
         void const* src, size_t srcSize);
   }
   ZSTD_blockCompressor =  function(bs,seqStore:Pointer; rep:BlockCompressorRepArr;
-    src : Pointer; srcSize : NativeInt):NativeInt{$IFDEF WIN32};cdecl{$ENDIF};
+    src : Pointer; srcSize : NativeInt):NativeInt{$IFNDEF WIN64};cdecl{$ENDIF};
   ZSTD_CCtx=Pointer;
   ZSTD_DCtx=Pointer;
   ZSTD_cParameter=(
@@ -330,7 +330,7 @@ type
   ZSTD_CDict = Pointer;
   ZSTD_DDict = Pointer;
 
-{$IFDEF WIN32}
+{$IF DEFINED(WIN32)}
 function ERR_getErrorString(code : ZSTD_ErrorCode):PAnsiChar; inline;
 procedure ZSTD_customFree(ptr : Pointer; customMem : ZSTD_customMem); inline;
 function ZSTD_customMalloc(size : NativeInt; customMem : ZSTD_customMem): Pointer;
@@ -740,143 +740,140 @@ function ZSTD_buildBlockEntropyStats(seqStorePtr:Pointer; const prevEntropy:
   Pointer; nextEntropy:Pointer;const cctxParams:Pointer; entropyMetadata,
   workspace:Pointer;wkspSize:NativeInt):NativeInt; external;
 {$ELSE}
-function ERR_getErrorString(code : ZSTD_ErrorCode):PAnsiChar; external 'libzstd.a';
-procedure ZSTD_customFree(ptr : Pointer; customMem : ZSTD_customMem); external
-  'libzstd.a';
+function ERR_getErrorString(code : ZSTD_ErrorCode):PAnsiChar; cdecl; external;
+procedure ZSTD_customFree(ptr : Pointer; customMem : ZSTD_customMem); cdecl; external;
 function ZSTD_customMalloc(size : NativeInt; customMem : ZSTD_customMem): Pointer;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_customCalloc(size : NativeInt; customMem : ZSTD_customMem): Pointer;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_selectBlockCompressor(strat:ZSTD_strategy; dictMode: ZSTD_dictMode_e)
-  : ZSTD_blockCompressor; external 'libzstd.a';
-procedure ZSTD_resetSeqStore(ssPtr : Pointer); external 'libzstd.a';
+  : ZSTD_blockCompressor; cdecl; external;
+procedure ZSTD_resetSeqStore(ssPtr : Pointer); cdecl; external;
 function ZSTD_fseBitCost(const ctable,count : Pointer; const max : Cardinal):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_crossEntropyCost(const norm :Pointer; accuracyLog :Cardinal; const
-  count : Pointer; const max : Cardinal):NativeInt; external 'libzstd.a';
-procedure ZSTD_seqToCodes(const seqStorePtr : Pointer); external 'libzstd.a';
+  count : Pointer; const max : Cardinal):NativeInt; cdecl; external;
+procedure ZSTD_seqToCodes(const seqStorePtr : Pointer); cdecl; external;
 function HIST_count_wksp(count,maxSymbolValuePtr,src: Pointer; srcsize:NativeInt;
-  workSpace : Pointer; workSpaceSize:NativeInt):NativeInt; external 'libzstd.a';
+  workSpace : Pointer; workSpaceSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_noCompressLiterals(dst:Pointer; dstCapacity:NativeInt; const src :
-  Pointer; srcsize : NativeInt):NativeInt; external 'libzstd.a';
+  Pointer; srcsize : NativeInt):NativeInt; cdecl; external;
 function ZSTD_compressRleLiteralsBlock(dst:Pointer; dstCapacity:NativeInt; const src :
-  Pointer; srcsize : NativeInt):NativeInt; external 'libzstd.a';
+  Pointer; srcsize : NativeInt):NativeInt; cdecl; external;
 function FSE_readNCount_bmi2(normalizedCounter,maxSymbolValuePtr,tableLogPtr :
   Pointer; const rBuffer:Pointer; rBuffSize:NativeInt; bmi2:integer):NativeInt;
-  external 'libzstd.a';
-function ZSTD_getErrorCode(functionResult : NativeInt):ZSTD_ErrorCode; external
-  'libzstd.a';
+  cdecl; external;
+function ZSTD_getErrorCode(functionResult : NativeInt):ZSTD_ErrorCode; cdecl; external;
 function ZSTD_loadDEntropy(entropy : Pointer; const dict : Pointer; const
-  dictSize : NativeInt):NativeInt; external 'libzstd.a';
+  dictSize : NativeInt):NativeInt; cdecl; external;
 function HUF_readStats_wksp(huffWeight:Pointer; hwSize:NativeInt; rankStats,
   nbSymbolsPtr, tableLogPtr:Pointer; const src:Pointer; srcSize:NativeInt;
-  workspace:Pointer; wkspSize:NativeInt; bmi2:integer):NativeInt; external
-  'libzstd.a';
-function ZSTD_versionNumber:Cardinal; external 'libzstd.a';
-function ZSTD_versionString:PAnsiChar; external 'libzstd.a';
+  workspace:Pointer; wkspSize:NativeInt; bmi2:integer):NativeInt; cdecl; external;
+function ZSTD_versionNumber:Cardinal; cdecl; external;
+function ZSTD_versionString:PAnsiChar; cdecl; external;
 function ZSTD_compress(dst:Pointer; dstCapacity : NativeInt; src:Pointer;
-  srcSize : NativeInt; compressionLevel : integer):NativeInt; external 'libzstd.a';
+  srcSize : NativeInt; compressionLevel : integer):NativeInt; cdecl; external;
 function ZSTD_decompress(dst:Pointer; dstCapacity:NativeInt; src:Pointer;
-  compressedSize:NativeInt):NativeInt; external 'libzstd.a';
+  compressedSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_getFrameContentSize(const src:Pointer; srcsize:NativeInt):UInt64;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_getDecompressedSize(const src:Pointer; srcSize:NativeInt):UInt64;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_findFrameCompressedSize(const src:Pointer; srcSize:NativeInt):
-  NativeInt; external 'libzstd.a';
-function ZSTD_compressBound(srcSize:NativeInt):NativeInt; external 'libzstd.a';
-function ZSTD_isError(code : NativeInt):Cardinal; external 'libzstd.a';
-function ZSTD_getErrorName(code : NativeInt):PAnsiChar; external 'libzstd.a';
-function ZSTD_minCLevel:integer; external 'libzstd.a';
-function ZSTD_maxCLevel:integer; external 'libzstd.a';
-function ZSTD_createCCtx:ZSTD_CCtx; external 'libzstd.a';
-function ZSTD_freeCCtx(cctx: ZSTD_CCtx):NativeInt; external 'libzstd.a';
+  NativeInt; cdecl; external;
+function ZSTD_compressBound(srcSize:NativeInt):NativeInt; cdecl; external;
+function ZSTD_isError(code : NativeInt):Cardinal; cdecl; external;
+function ZSTD_getErrorName(code : NativeInt):PAnsiChar; cdecl; external;
+function ZSTD_minCLevel:integer; cdecl; external;
+function ZSTD_maxCLevel:integer; cdecl; external;
+function ZSTD_createCCtx:ZSTD_CCtx; cdecl; external;
+function ZSTD_freeCCtx(cctx: ZSTD_CCtx):NativeInt; cdecl; external;
 function ZSTD_compressCCtx(cctx:ZSTD_CCtx; dst:Pointer; dstCapacity:NativeInt;
-  src:Pointer; srcSize:NativeInt; compressionLevel:integer):NativeInt; external 'libzstd.a';
-function ZSTD_createDCtx:ZSTD_DCtx; external 'libzstd.a';
-function ZSTD_freeDCtx(dctx: ZSTD_DCtx):NativeInt; external 'libzstd.a';
+  src:Pointer; srcSize:NativeInt; compressionLevel:integer):NativeInt; cdecl; external;
+function ZSTD_createDCtx:ZSTD_DCtx; cdecl; external;
+function ZSTD_freeDCtx(dctx: ZSTD_DCtx):NativeInt; cdecl; external;
 function ZSTD_decompressDCtx(dctx:ZSTD_CCtx; dst:Pointer; dstCapacity:NativeInt;
-  src:Pointer; srcSize:NativeInt):NativeInt; external 'libzstd.a';
-function ZSTD_cParam_getBounds(cParam : ZSTD_cParameter): ZSTD_bounds; external 'libzstd.a';
+  src:Pointer; srcSize:NativeInt):NativeInt; cdecl; external;
+function ZSTD_cParam_getBounds(cParam : ZSTD_cParameter): ZSTD_bounds; cdecl; external;
 function ZSTD_CCtx_setParameter(cctx : ZSTD_CCtx; param:ZSTD_cParameter;
-  value : integer):NativeInt; external 'libzstd.a';
+  value : integer):NativeInt; cdecl; external;
 function ZSTD_CCtx_setPledgedSrcSize(cctx : ZSTD_CCtx; pledgedScrSize:Uint64)
-  :NativeInt; external 'libzstd.a';
+  :NativeInt; cdecl; external;
 function ZSTD_CCtx_reset(cctx:ZSTD_CCtx; reset: ZSTD_ResetDirective):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_compress2(cctx:ZSTD_CCtx; dst:Pointer; dstCapacity:NativeInt;
-  src:Pointer; srcSize:NativeInt):NativeInt; external 'libzstd.a';
-function ZSTD_dParam_getBounds(dParam : ZSTD_dParameter):ZSTD_bounds; external 'libzstd.a';
+  src:Pointer; srcSize:NativeInt):NativeInt; cdecl; external;
+function ZSTD_dParam_getBounds(dParam : ZSTD_dParameter):ZSTD_bounds; cdecl; external;
 function ZSTD_DCtx_setParameter(dctx:ZSTD_DCTx; param: ZSTD_dParameter;
-  value : integer):NativeInt; external 'libzstd.a';
+  value : integer):NativeInt; cdecl; external;
 function ZSTD_DCtx_reset(dctx:ZSTD_DCtx; reset:ZSTD_ResetDirective):NativeInt;
-  external 'libzstd.a';
-function ZSTD_createCStream: ZSTD_CStream; external 'libzstd.a';
-function ZSTD_freeCStream(zsc : ZSTD_CStream):NativeInt; external 'libzstd.a';
+  cdecl; external;
+function ZSTD_createCStream: ZSTD_CStream; cdecl; external;
+function ZSTD_freeCStream(zsc : ZSTD_CStream):NativeInt; cdecl; external;
 function ZSTD_compressStream2(cctx:ZSTD_CCtx; var output:ZSTD_outBuffer;
-  var input:ZSTD_inBuffer; endOp:ZSTD_EndDirective):NativeInt; external 'libzstd.a';
-function ZSTD_CStreamInSize:NativeInt; external 'libzstd.a';
-function ZSTD_CStreamOutSize:NativeInt; external 'libzstd.a';
+  var input:ZSTD_inBuffer; endOp:ZSTD_EndDirective):NativeInt; cdecl; external;
+function ZSTD_CStreamInSize:NativeInt; cdecl; external;
+function ZSTD_CStreamOutSize:NativeInt; cdecl; external;
 function ZSTD_initCStream(zcs:ZSTD_CStream; compressionLevel:integer):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_compressStream(zcs:ZSTD_CStream; var output:ZSTD_outBuffer;
-  var input:ZSTD_inBuffer):NativeInt; external 'libzstd.a';
+  var input:ZSTD_inBuffer):NativeInt; cdecl; external;
 function ZSTD_flushStream(zcs:ZSTD_CStream; var output:ZSTD_outBuffer):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_endStream(zcs:ZSTD_CStream; var output:ZSTD_outBuffer):NativeInt;
-  external 'libzstd.a';
-function ZSTD_createDStream: ZSTD_DStream; external 'libzstd.a';
-function ZSTD_freeDStream(zds : ZSTD_DStream):NativeInt; external 'libzstd.a';
-function ZSTD_initDStream(zds : ZSTD_DStream):NativeInt; external 'libzstd.a';
+  cdecl; external;
+function ZSTD_createDStream: ZSTD_DStream; cdecl; external;
+function ZSTD_freeDStream(zds : ZSTD_DStream):NativeInt; cdecl; external;
+function ZSTD_initDStream(zds : ZSTD_DStream):NativeInt; cdecl; external;
 function ZSTD_decompressStream(zds:ZSTD_DStream; var output:ZSTD_outBuffer;
-  var input:ZSTD_inBuffer):NativeInt; external 'libzstd.a';
-function ZSTD_DStreamInSize:NativeInt; external 'libzstd.a';
-function ZSTD_DStreamOutSize:NativeInt; external 'libzstd.a';
+  var input:ZSTD_inBuffer):NativeInt; cdecl; external;
+function ZSTD_DStreamInSize:NativeInt; cdecl; external;
+function ZSTD_DStreamOutSize:NativeInt; cdecl; external;
 function ZSTD_compress_usingDict(ctx:ZSTD_CCtx; dst:Pointer;
   dstCapacity:NativeInt; src:Pointer; srcSize:NativeInt; dict:Pointer;
-  dictSize:NativeInt; compressionLevel:integer):NativeInt; external 'libzstd.a';
+  dictSize:NativeInt; compressionLevel:integer):NativeInt; cdecl; external;
 function ZSTD_decompress_usingDict(dctx:ZSTD_DCtx; dst:Pointer;
   dstCapacity:NativeInt; src:Pointer; srcSize:NativeInt; dict:Pointer;
-  dictSize:NativeInt):NativeInt; external 'libzstd.a';
+  dictSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_createCDict(const dictBuffer:Pointer; dictSize:NativeInt;
-  compressionLevel:integer):ZSTD_CDict; external 'libzstd.a';
-function ZSTD_freeCDict(CDict:ZSTD_CDict):NativeInt; external 'libzstd.a';
+  compressionLevel:integer):ZSTD_CDict; cdecl; external;
+function ZSTD_freeCDict(CDict:ZSTD_CDict):NativeInt; cdecl; external;
 function ZSTD_compress_usingCDict(cctx:ZSTD_CCtx; dst:Pointer;
   dstCapacity:NativeInt; src:Pointer; srcSize:NativeInt; cdict:ZSTD_CDict):
-  NativeInt; external 'libzstd.a';
+  NativeInt; cdecl; external;
 function ZSTD_createDDict(const dictBuffer:Pointer; dictSize:NativeInt):
-  ZSTD_DDict; external 'libzstd.a';
-function ZSTD_freeDDict(CDict:ZSTD_DDict):NativeInt; external 'libzstd.a';
+  ZSTD_DDict; cdecl; external;
+function ZSTD_freeDDict(CDict:ZSTD_DDict):NativeInt; cdecl; external;
 function ZSTD_decompress_usingDDict(dctx:ZSTD_DCtx; dst:Pointer;
   dstCapacity:NativeInt; src:Pointer; srcSize:NativeInt; ddict:ZSTD_DDict):
-  NativeInt; external 'libzstd.a';
+  NativeInt; cdecl; external;
 function ZSTD_getDictID_fromDict(const dict:Pointer; dictSize:NativeInt):
-  Cardinal; external 'libzstd.a';
+  Cardinal; cdecl; external;
 function ZSTD_getDictID_fromDDict(const dict:ZSTD_DDict; dictSize:NativeInt):
-  Cardinal; external 'libzstd.a';
+  Cardinal; cdecl; external;
 function ZSTD_getDictID_fromFrame(const src:Pointer; srcSize:NativeInt):Cardinal;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_CCtx_loadDictionary(cctx:ZSTD_CCtx; const dict:Pointer;
-  dictSize:NativeInt):NativeInt; external 'libzstd.a';
+  dictSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_CCtx_refCDict(cctx:ZSTD_CCtx; const cdict:ZSTD_CDict):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_CCtx_refPrefix(cctx:ZSTD_CCtx; const prefix:Pointer;
-  prefixSize:NativeInt):NativeInt; external 'libzstd.a';
+  prefixSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_DCtx_loadDictionary(dctx:ZSTD_DCtx; const dict:Pointer;
-  dictSize:NativeInt):NativeInt; external 'libzstd.a';
+  dictSize:NativeInt):NativeInt; cdecl; external;
 function ZSTD_DCtx_refDDict(dctx:ZSTD_DCtx; const ddict:ZSTD_DDict):NativeInt;
-  external 'libzstd.a';
+  cdecl; external;
 function ZSTD_DCtx_refPrefix(dctx:ZSTD_DCtx; const prefix:Pointer;
-  prefixSize:NativeInt):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_CCtx(const cctx:ZSTD_CCtx):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_DCtx(const dctx:ZSTD_DCtx):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_CStream(const zcs:ZSTD_CStream):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_DStream(const zds:ZSTD_DStream):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_CDict(const cdict:ZSTD_CDict):NativeInt; external 'libzstd.a';
-function ZSTD_sizeof_DDict(const ddict:ZSTD_DDict):NativeInt; external 'libzstd.a';
+  prefixSize:NativeInt):NativeInt; cdecl; external;
+function ZSTD_sizeof_CCtx(const cctx:ZSTD_CCtx):NativeInt; cdecl; external;
+function ZSTD_sizeof_DCtx(const dctx:ZSTD_DCtx):NativeInt; cdecl; external;
+function ZSTD_sizeof_CStream(const zcs:ZSTD_CStream):NativeInt; cdecl; external;
+function ZSTD_sizeof_DStream(const zds:ZSTD_DStream):NativeInt; cdecl; external;
+function ZSTD_sizeof_CDict(const cdict:ZSTD_CDict):NativeInt; cdecl; external;
+function ZSTD_sizeof_DDict(const ddict:ZSTD_DDict):NativeInt; cdecl; external;
 function ZSTD_buildBlockEntropyStats(seqStorePtr:Pointer;const prevEntropy:
   Pointer; nextEntropy:Pointer;const cctxParams:Pointer;entropyMetadata,
-  workspace:Pointer;wkspSize:NativeInt):NativeInt; external 'libzstd.a';
+  workspace:Pointer;wkspSize:NativeInt):NativeInt; cdecl; external;
 {$ENDIF}
 implementation
 uses xxhashlib
@@ -1121,6 +1118,12 @@ begin Result:=ZSTD_buildBlockEntropyStats(cctxParams,prevEntropy,nextEntropy,
 {$L zstd4delphi.avx2.x64.o}
 {$ELSE}
 {$L zstd4delphi.sse2.x64.o}
+{$ENDIF}
+{$ENDIF}
+{$IFDEF LINUX}
+{$IFDEF CPUX86_64}
+{$linklib c}
+{$L zstd4delphi.linux.x64.o}
 {$ENDIF}
 {$ENDIF}
 end.

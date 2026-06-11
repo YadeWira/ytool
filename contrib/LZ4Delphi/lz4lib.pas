@@ -1290,6 +1290,12 @@ implementation
   begin
     Result := 65536+14+mbs;
   end;
+{$IFDEF LINUX}
+{$IFDEF CPUX86_64}
+{$linklib c}
+{$L lz4delphi.linux.x64.o}
+{$ENDIF}
+{$ENDIF}
   end.
 
 

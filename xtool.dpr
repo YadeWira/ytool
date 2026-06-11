@@ -58,7 +58,7 @@ uses
   oObjects in 'contrib\ParseExpression\oObjects.pas',
   ParseClass in 'contrib\ParseExpression\ParseClass.pas',
   ParseExpr in 'contrib\ParseExpression\ParseExpr.pas',
-  XXHASHLIB in 'contrib\XXHASH4Delphi\XXHASHLIB.pas',
+  xxhashlib in 'contrib\XXHASH4Delphi\xxhashlib.pas',
   ZSTDLib in 'contrib\ZSTD4Delphi\ZSTDLib.pas',
   InitCode in 'InitCode.pas',
   BrunsliDLL in 'imports\BrunsliDLL.pas',
