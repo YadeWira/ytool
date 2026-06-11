@@ -77,9 +77,13 @@ function LZ4_decompress_generic(const source: pointer; const dest: pointer;
 
 implementation
 
+{ En el original WIN64 se usa como sinonimo de "64-bit". En Linux x64 WIN64 no
+  esta definido, asi que definimos LZ4_CPU64 para las rutas de 64 bits. }
+{$IFDEF CPUX86_64}{$DEFINE LZ4_CPU64}{$ENDIF}
+
 function LZ4_read_ARCH(const p: pointer): size_t; inline;
 begin
-{$IFDEF WIN64}
+{$IFDEF LZ4_CPU64}
   result := size_t(pUint64(p)^)
 {$ELSE}
   result := size_t(pCardinal(p)^);
@@ -91,13 +95,19 @@ begin
   result := pCardinal(memPtr)^;
 end;
 
+{$IFDEF LZ4_CPU64}
 {$IFDEF WIN64}
-
 function LZ4_NbCommonBytesx64(value: size_t): cardinal;
 asm
   bsf rax, rcx // value comes in rcx register
   shr eax, 3
 end;
+{$ELSE}
+function LZ4_NbCommonBytesx64(value: size_t): cardinal;
+begin
+  Result := BsfQWord(value) shr 3;
+end;
+{$ENDIF}
 {$ENDIF}
 
 function LZ4_count(pIn: pByte; pMatch: pByte; const pInLimit: pByte): cardinal;

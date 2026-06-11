@@ -7,7 +7,9 @@ uses
   lz4,
   Utils,
   PrecompUtils,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils, StrUtils, Classes, Math;
 
 var

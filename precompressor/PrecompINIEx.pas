@@ -593,8 +593,7 @@ begin
                   while S1.Length < (CfgStruct^.Size * 2) do
                     S1.Insert(0, '0');
                   SetLength(Bytes, CfgStruct^.Size);
-                  SetLength(Bytes, HexToBin(BytesOf(S1), 0, Bytes, 0,
-                    Length(Bytes)));
+                  SetLength(Bytes, HexToBin(PAnsiChar(S1), PAnsiChar(@Bytes[0]), Length(Bytes)));
                   ReverseBytes(@Bytes[0], CfgStruct^.Data, CfgStruct^.Size);
                 end
                 else
