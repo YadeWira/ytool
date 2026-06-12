@@ -401,6 +401,12 @@ procedure Init;
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(PluginsPath + 'fast-lzma2.dll', True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libfast-lzma2.so', True));
+  if not Lib.Loaded then
+    Lib.LoadLib('libfast-lzma2.so.1');
+{$ENDIF}
   if Lib.Loaded then
   begin
     @FL2_compress := Lib.GetProcAddr('FL2_compress');

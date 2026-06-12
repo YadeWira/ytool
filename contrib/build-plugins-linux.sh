@@ -47,4 +47,11 @@ if [ -d "$CSRC/preflate" ]; then
   ) && echo "   OK -> libpreflate.so" || echo "   (preflate fallo)"
 fi
 
+# ── fast-lzma2 (compresion LZMA2 final interna, -l#) ─────────────────────────
+echo "==> fast-lzma2 (libfast-lzma2.so)"
+[ -d "$CSRC/fast-lzma2" ] || git clone --depth 1 https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2"
+( cd "$CSRC/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
+  "$CC" -shared -fPIC -O2 *.c -lpthread -o "$ROOT/libfast-lzma2.so" ) \
+  && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
+
 echo "Hecho. Plugins .so/srep64 en la raiz del repo (gitignored)."
