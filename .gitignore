@@ -9,3 +9,4 @@ link*.res
 /xtool.exe
 srep64
 libpackjpg.so
+libpreflate.so

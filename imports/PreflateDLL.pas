@@ -29,6 +29,10 @@ procedure Init;
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(PluginsPath + 'preflate_dll.dll', True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libpreflate.so', True));
+{$ENDIF}
   if Lib.Loaded then
   begin
     @preflate_decode := Lib.GetProcAddr('decode');
