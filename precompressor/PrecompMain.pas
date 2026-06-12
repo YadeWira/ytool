@@ -129,6 +129,7 @@ var
   StoreDD: Integer = -2;
   VERBOSE: Boolean = False;
   EXTRACT: Boolean = False;
+  EXTRACT_UNPROCESSED: Boolean = False;
   NOVERIFY: Boolean = False;
   REPROCESS: String = '';
   REASSIGN: String = '';
@@ -388,6 +389,16 @@ begin
     Options.ExtractDir := ArgParse.AsString('-x');
     if Options.ExtractDir <> '' then
       EXTRACT := DirectoryExists(Options.ExtractDir);
+    // 0.8.5: -X<dir> extrae SOLO los streams que no se pudieron procesar.
+    if not EXTRACT then
+    begin
+      Options.ExtractDir := ArgParse.AsString('-X');
+      if Options.ExtractDir <> '' then
+      begin
+        EXTRACT := DirectoryExists(Options.ExtractDir);
+        EXTRACT_UNPROCESSED := EXTRACT;
+      end;
+    end;
     EXTCOMP := ArgParse.AsString('-e');
     if FileExists(ExpandPath(PluginsPath + ExtractExec(EXTCOMP), True)) then
       COMPRESS := 2;
@@ -671,7 +682,9 @@ begin
     WriteLine(Format(S2, [CurDepth[0], Codec, LogInt64.ToHexString, Size1,
       Size2, Size3]));
   end;
-  if EXTRACT and (CurDepth[0] = 0) then
+  // -X (EXTRACT_UNPROCESSED): solo extraer si el stream NO se pudo procesar.
+  if EXTRACT and (CurDepth[0] = 0) and
+    ((not EXTRACT_UNPROCESSED) or (not Status)) then
   begin
     S1 := '%s_%s.raw';
     with TFileStream.Create(ExtDir + Format(S1, [LogInt64.ToHexString, Codec]),
@@ -760,9 +773,11 @@ begin
     WriteLine(Format(S2, [CurDepth[0], LogInt64.ToHexString, Size1,
       Size2, Size3]));
   end;
-  if EXTRACT and (CurDepth[0] = 0) then
+  // -X (EXTRACT_UNPROCESSED): solo extraer si el reprocess NO tuvo exito.
+  if EXTRACT and (CurDepth[0] = 0) and
+    ((not EXTRACT_UNPROCESSED) or (not Status)) then
   begin
-    S1 := '%s_%s.raw';
+    S1 := '%s.raw';
     with TFileStream.Create(ExtDir + Format(S1, [LogInt64.ToHexString]),
       fmCreate) do
       try
