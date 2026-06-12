@@ -35,6 +35,7 @@ type
     ChunkSize, Threads: Integer;
     Depth: Integer;
     LowMem: Boolean;
+    LowMemLevel: Integer;
     DBaseFile, ExtractDir: String;
     CThreads, CLevel: Integer;
     CDict, COverlap: Integer;
@@ -312,7 +313,14 @@ begin
         break;
       case S[1] of
         'm':
-          Options.LowMem := True;
+          begin
+            Options.LowMem := True;
+            // 0.9.2: -lm[1..3] niveles de memoria baja (default 1).
+            if (Length(S) > 1) and (S[2] in ['1' .. '3']) then
+              Options.LowMemLevel := Ord(S[2]) - Ord('0')
+            else
+              Options.LowMemLevel := 1;
+          end;
       else
         if S <> '' then
           if (S[1] in ['0' .. '9']) and FLZMA2DLL.DLLLoaded then
@@ -383,6 +391,20 @@ begin
 {$ELSE}
     CACHE := 0;
 {$ENDIF}
+    // 0.9.2: niveles de memoria baja (RAM vs velocidad). N1 ya reduce las
+    // estructuras de escaneo a 1 hilo (en EncInit). N2 recorta el cache de I/O;
+    // N3 lo elimina y fuerza el ChunkSize minimo. Todas son configuraciones
+    // validas -> no afecta la reversibilidad.
+    if Options.LowMem then
+    begin
+      if Options.LowMemLevel >= 2 then
+        CACHE := CACHE div 4;
+      if Options.LowMemLevel >= 3 then
+      begin
+        CACHE := 0;
+        Options.ChunkSize := 4 * 1024 * 1024;
+      end;
+    end;
     VERBOSE := ArgParse.AsBoolean('-v') and (IsLibrary = False);
     OPTIMISE_DEC := ArgParse.AsBoolean('-o');
     FULLSCAN := ArgParse.AsBoolean('-f');
