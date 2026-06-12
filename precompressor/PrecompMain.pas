@@ -109,6 +109,7 @@ type
     DupSize0, DupSize1, DupSize2: Int64;
     DupCount: Integer;
     InSize, InflSize, SrepSize, CompSize: Int64;
+    CovSize: Int64;
     SrepMem: Integer;
   end;
 
@@ -2299,6 +2300,10 @@ begin
             if Depth = 0 then
               Inc(EncInfo.InflSize, UI32 + UI32.Size);
             LastPos := StreamInfo.ActualPosition + StreamInfo.OldSize;
+            // cobertura de streams (0.9.6): suma del tamano original (en el
+            // archivo) de cada stream confirmado, para el % vs datos crudos.
+            if Depth = 0 then
+              Inc(EncInfo.CovSize, StreamInfo.OldSize);
             if Succ(J - LastIndex) = StreamCount1 then
               break;
             J := InfoStore1[I].Get(StreamInfo);
@@ -3130,14 +3135,22 @@ var
     TT: TSystemTime;
 {$ENDIF}
     I64: Int64;
+    CovStr: string;
   begin
 {$IFDEF MSWINDOWS}
     GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
       UserTime);
     FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
 {$ENDIF}
+    // cobertura de streams (0.9.6): % del archivo que eran streams vs datos crudos.
+    // Guard explicito: IfThen NO es perezoso y evaluaria la division con InSize=0.
+    if EncInfo.InSize > 0 then
+      CovStr := Format(' (coverage %.2f%%)',
+        [EncInfo.CovSize / EncInfo.InSize * 100])
+    else
+      CovStr := '';
     SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
-      EncInfo.Count.ToString;
+      EncInfo.Count.ToString + CovStr;
     TS := Stopwatch.Elapsed;
     SL[1] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
       [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
