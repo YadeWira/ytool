@@ -154,6 +154,8 @@ type
     constructor Create(AOwnMemory: Boolean = True; const AMemory: Pointer = nil;
       AMaxSize: NativeInt = 0); overload;
     destructor Destroy; override;
+    function GetSize: Int64; override;
+    function GetPosition: Int64; override;
     procedure SetSize(const NewSize: Int64); override;
     procedure SetSize(NewSize: LongInt); override;
     function Read(var Buffer; Count: LongInt): LongInt; override;
@@ -1185,6 +1187,16 @@ begin
   if FOwnMemory then
     FreeMemory(FMemory);
   inherited Destroy;
+end;
+
+function TMemoryStreamEx.GetSize: Int64;
+begin
+  Result := FSize;
+end;
+
+function TMemoryStreamEx.GetPosition: Int64;
+begin
+  Result := FPosition;
 end;
 
 procedure TMemoryStreamEx.SetSize(NewSize: LongInt);
