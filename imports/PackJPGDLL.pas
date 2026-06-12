@@ -24,6 +24,10 @@ var
     in_size: Integer; out_dest: Pointer; out_type: Integer)cdecl;
   pjglib_version_info: function: PAnsiChar cdecl;
   pjglib_short_name: function: PAnsiChar cdecl;
+  // v4.0e (fork): control de hilos intra-archivo. xtool ya paraleliza por stream,
+  // asi que forzamos packjpg a 1 hilo (n=1) para evitar que su spawn de std::thread
+  // choque con el runtime de hilos de xtool. Opcional (puede no existir en DLLs viejas).
+  pjglib_set_intra_file_threads: procedure(n: Integer)cdecl;
 
   DLLLoaded: Boolean = False;
 
@@ -50,7 +54,12 @@ begin
     @pjglib_version_info := Lib.GetProcAddr('pjglib_version_info');
     @pjglib_short_name := Lib.GetProcAddr('pjglib_short_name');
     DLLLoaded := Assigned(pjglib_init_streams) and
-      Assigned(pjglib_convert_stream2stream);
+      Assigned(pjglib_convert_stream2stream) and
+      Assigned(pjglib_convert_stream2mem);
+    @pjglib_set_intra_file_threads :=
+      Lib.GetProcAddr('pjglib_set_intra_file_threads');
+    if Assigned(pjglib_set_intra_file_threads) then
+      pjglib_set_intra_file_threads(1);
   end;
 end;
 
