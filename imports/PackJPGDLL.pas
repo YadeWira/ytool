@@ -8,7 +8,7 @@ uses
 {$IFDEF MSWINDOWS}
   Windows,
 {$ENDIF}
-  SysUtils, Classes;
+  Math, SysUtils, Classes;
 
 const
   pjglib_file = 0;
@@ -60,6 +60,12 @@ begin
       Lib.GetProcAddr('pjglib_set_intra_file_threads');
     if Assigned(pjglib_set_intra_file_threads) then
       pjglib_set_intra_file_threads(1);
+    // FPC desenmascara las excepciones de FPU por defecto; packjpg hace mucho
+    // punto flotante (DCT) asumiendo el modo IEEE enmascarado de C -> sin esto,
+    // una operacion FP normal dispara SIGFPE dentro de la lib y aborta la conversion.
+    if DLLLoaded then
+      SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
+        exUnderflow, exPrecision]);
   end;
 end;
 
