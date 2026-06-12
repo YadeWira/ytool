@@ -132,6 +132,14 @@ procedure Init;
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(PluginsPath + 'libFLAC_dynamic.dll', True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib('libFLAC.so.14');
+  if not Lib.Loaded then
+    Lib.LoadLib('libFLAC.so.12');
+  if not Lib.Loaded then
+    Lib.LoadLib('libFLAC.so.8');
+{$ENDIF}
   if Lib.Loaded then
   begin
     @FLAC__stream_encoder_new := Lib.GetProcAddr('FLAC__stream_encoder_new');

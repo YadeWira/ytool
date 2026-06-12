@@ -618,7 +618,9 @@ begin
       else
         S := DecodeStr(List1[Index], SPrecompSep2, 1)[0];
   end;
-  StringToWideChar(S, @Result, Length(Result));
+  FillChar(Result, SizeOf(Result), 0);
+  if Length(S) > 0 then
+    Move(S[1], Result[0], Min(Length(S), High(Result)));
 end;
 
 function PrecompGetParam(Cmd: PChar; Index: Integer; Param: PChar): TPrecompStr;
@@ -661,7 +663,9 @@ begin
       end;
     end;
   end;
-  StringToWideChar(S, @Result, Length(Result));
+  FillChar(Result, SizeOf(Result), 0);
+  if Length(S) > 0 then
+    Move(S[1], Result[0], Min(Length(S), High(Result)));
 end;
 
 function PrecompGetDepthCodec(Cmd: PChar): TPrecompStr cdecl;
@@ -680,7 +684,9 @@ begin
     if Length(S) > 0 then
       S := S.Remove(Pred(Length(S)));
   end;
-  StringToWideChar(S, @Result, Length(Result));
+  FillChar(Result, SizeOf(Result), 0);
+  if Length(S) > 0 then
+    Move(S[1], Result[0], Min(Length(S), High(Result)));
 end;
 
 function PrecompCompress(Codec: PChar; InBuff: Pointer; InSize: Integer;
@@ -1299,7 +1305,9 @@ var
   S: String;
 begin
   S := GetIniString(Section, Key, Default, FileName);
-  StringToWideChar(S, @Result, Length(Result));
+  FillChar(Result, SizeOf(Result), 0);
+  if Length(S) > 0 then
+    Move(S[1], Result[0], Min(Length(S), High(Result)));
 end;
 
 procedure PrecompIniWrite(Section, Key, Value, FileName: PChar);

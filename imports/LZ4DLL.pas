@@ -164,6 +164,10 @@ procedure Init(Filename: String);
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(Filename, True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib('liblz4.so.1');
+{$ENDIF}
   if Lib.Loaded then
   begin
     @LZ4_decompress_safe := Lib.GetProcAddr('LZ4_decompress_safe');

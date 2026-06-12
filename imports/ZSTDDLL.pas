@@ -164,6 +164,10 @@ procedure Init(Filename: String);
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(Filename, True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib('libzstd.so.1');
+{$ENDIF}
   if Lib.Loaded then
   begin
     @ZSTD_compress := Lib.GetProcAddr('ZSTD_compress');

@@ -76,6 +76,10 @@ procedure Init(Filename: String);
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(Filename, True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib('liblzo2.so.2');
+{$ENDIF}
   if Lib.Loaded then
   begin
     @lzo1x_1_compress := Lib.GetProcAddr('lzo1x_1_compress');

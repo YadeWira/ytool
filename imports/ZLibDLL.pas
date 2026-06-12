@@ -157,6 +157,10 @@ begin
   Lib.LoadLib(ExpandPath(Filename, True));
   if not(Lib.Loaded and Assigned(Lib.GetProcAddr('zlibVersion'))) then
     Lib.LoadLib(ExpandPath(PluginsPath + 'zlib1.dll', True));
+{$IFDEF UNIX}
+  if not(Lib.Loaded and Assigned(Lib.GetProcAddr('zlibVersion'))) then
+    Lib.LoadLib('libz.so.1');
+{$ENDIF}
   if Lib.Loaded and Assigned(Lib.GetProcAddr('zlibVersion')) then
   begin
     DLLLoaded := True;
