@@ -96,13 +96,14 @@ begin
 end;
 
 {$IFDEF LZ4_CPU64}
-{$IFDEF WIN64}
+{$IF DEFINED(WIN64) AND NOT DEFINED(FPC)}
 function LZ4_NbCommonBytesx64(value: size_t): cardinal;
 asm
   bsf rax, rcx // value comes in rcx register
   shr eax, 3
 end;
 {$ELSE}
+// FPC: usa el intrinseco BsfQWord (evita asm Intel estilo Delphi).
 function LZ4_NbCommonBytesx64(value: size_t): cardinal;
 begin
   Result := BsfQWord(value) shr 3;

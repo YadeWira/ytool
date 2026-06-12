@@ -646,7 +646,7 @@ function ZSTD_getDecompressedSize(const src:Pointer; srcSize:NativeInt):UInt64;
   external;
 function ZSTD_findFrameCompressedSize(const src:Pointer; srcSize:NativeInt):
   NativeInt; external;
-function ZSTD_COMPRESSBOUND(srcSize:NativeInt):NativeInt; external;
+function ZSTD_COMPRESSBOUND(srcSize:NativeInt):NativeInt; external name 'ZSTD_compressBound';
 function ZSTD_isError(code : NativeInt):Cardinal; external;
 function ZSTD_getErrorName(code : NativeInt):PAnsiChar; external;
 function ZSTD_minCLevel:integer; external;
@@ -877,9 +877,7 @@ function ZSTD_buildBlockEntropyStats(seqStorePtr:Pointer;const prevEntropy:
 {$ENDIF}
 implementation
 uses xxhashlib
-{$IFDEF MSWINDOWS}
-,libc
-{$ENDIF}
+// FPC: el C runtime de los objetos Windows lo resuelve linklib msvcrt (en xxhashlib).
 ;
 {$IFDEF WIN32}
 function ERR_getErrorString(code : ZSTD_ErrorCode):PAnsiChar; inline;

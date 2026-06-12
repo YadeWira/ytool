@@ -5,12 +5,12 @@ unit Utils;
 interface
 
 uses
-  Threading, SynCommons, lz4lib, ZSTDLib,
+  Threading, SynCommons, lz4lib, ZSTDLib, fphttpclient,
 {$IFDEF MSWINDOWS}
-  Windows, PsAPI, Net.HttpClientComponent, Net.HttpClient,
+  Windows,
 {$ENDIF}
 {$IFDEF UNIX}
-  BaseUnix, Unix, Process, fphttpclient,
+  BaseUnix, Unix, Process,
 {$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, IniFiles, IOUtils,
@@ -249,13 +249,7 @@ type
     FUrl: string;
     FMemoryStream: TMemoryStream;
     FSize, FPosition: Int64;
-{$IFDEF MSWINDOWS}
-    FNetHTTPClient: TNetHTTPClient;
-    procedure NetHTTPClientReceiveData(const Sender: TObject;
-      AContentLength, AReadCount: Int64; var Abort: Boolean);
-{$ELSE}
     FHTTPClient: TFPHTTPClient;
-{$ENDIF}
   public
     constructor Create(Url: string);
     destructor Destroy; override;
@@ -1810,61 +1804,6 @@ begin
     end;
 end;
 
-{$IFDEF MSWINDOWS}
-constructor TDownloadStream.Create(Url: string);
-begin
-  inherited Create;
-  FUrl := Url;
-  FPosition := 0;
-  FSize := 0;
-  FNetHTTPClient := TNetHTTPClient.Create(nil);
-  FNetHTTPClient.Asynchronous := False;
-  FNetHTTPClient.OnReceiveData := NetHTTPClientReceiveData;
-  FNetHTTPClient.Get(FUrl);
-  FNetHTTPClient.OnReceiveData := nil;
-  FMemoryStream := TMemoryStream.Create;
-  FMemoryStream.Size := FChunkSize;
-end;
-
-destructor TDownloadStream.Destroy;
-begin
-  FMemoryStream.Free;
-  FNetHTTPClient.Free;
-  inherited Destroy;
-end;
-
-procedure TDownloadStream.NetHTTPClientReceiveData(const Sender: TObject;
-  AContentLength, AReadCount: Int64; var Abort: Boolean);
-begin
-  FSize := AContentLength;
-  Abort := True;
-end;
-
-function TDownloadStream.Read(var Buffer; Count: LongInt): LongInt;
-var
-  Res: IHTTPResponse;
-begin
-  if (FPosition >= 0) and (Count >= 0) then
-  begin
-    if FSize - FPosition > 0 then
-    begin
-      if FSize > Count + FPosition then
-        Result := Count
-      else
-        Result := FSize - FPosition;
-      Result := Min(Result, FChunkSize);
-      FMemoryStream.Position := 0;
-      Res := FNetHTTPClient.GetRange(FUrl, FPosition, FPosition + Result - 1,
-        FMemoryStream);
-      Result := Res.ContentLength;
-      Move(FMemoryStream.Memory^, Buffer, Result);
-      Inc(FPosition, Result);
-      exit;
-    end;
-  end;
-  Result := 0;
-end;
-{$ELSE}
 constructor TDownloadStream.Create(Url: string);
 begin
   inherited Create;
@@ -1913,7 +1852,6 @@ begin
     Inc(FPosition, Result);
   end;
 end;
-{$ENDIF}
 
 function TDownloadStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
@@ -4341,6 +4279,41 @@ begin
 end;
 
 {$IFDEF MSWINDOWS}
+type
+  // FPC no trae la unidad PsAPI de Delphi; declaramos lo mínimo desde psapi.dll.
+  TProcessMemoryCounters = record
+    cb: DWORD;
+    PageFaultCount: DWORD;
+    PeakWorkingSetSize: SIZE_T;
+    WorkingSetSize: SIZE_T;
+    QuotaPeakPagedPoolUsage: SIZE_T;
+    QuotaPagedPoolUsage: SIZE_T;
+    QuotaPeakNonPagedPoolUsage: SIZE_T;
+    QuotaNonPagedPoolUsage: SIZE_T;
+    PagefileUsage: SIZE_T;
+    PeakPagefileUsage: SIZE_T;
+  end;
+
+function GetProcessMemoryInfo(Process: THandle; ppsmemCounters: Pointer;
+  cb: DWORD): BOOL; stdcall; external 'psapi.dll' name 'GetProcessMemoryInfo';
+
+type
+  // MEMORYSTATUSEX: tampoco está en la unidad Windows de FPC 3.2.2.
+  TMemoryStatusEx = record
+    dwLength: DWORD;
+    dwMemoryLoad: DWORD;
+    ullTotalPhys: UInt64;
+    ullAvailPhys: UInt64;
+    ullTotalPageFile: UInt64;
+    ullAvailPageFile: UInt64;
+    ullTotalVirtual: UInt64;
+    ullAvailVirtual: UInt64;
+    ullAvailExtendedVirtual: UInt64;
+  end;
+
+function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL; stdcall;
+  external 'kernel32.dll' name 'GlobalMemoryStatusEx';
+
 function GetUsedProcessMemory(hProcess: THandle): Int64;
 var
   memCounters: TProcessMemoryCounters;

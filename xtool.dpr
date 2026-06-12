@@ -100,7 +100,9 @@ uses
   IOCommon in 'io\IOCommon.pas';
 
 {$IFDEF MSWINDOWS}
-{$SETPEFLAGS IMAGE_FILE_LARGE_ADDRESS_AWARE or IMAGE_FILE_RELOCS_STRIPPED or IMAGE_FILE_DEBUG_STRIPPED}
+// FPC: el evaluador de {$SETPEFLAGS} no resuelve constantes de unidad; usamos el
+// valor numerico = LARGE_ADDRESS_AWARE($20) or RELOCS_STRIPPED($01) or DEBUG_STRIPPED($200).
+{$SETPEFLAGS $221}
 {$ENDIF}
 
 const

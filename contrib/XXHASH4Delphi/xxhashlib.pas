@@ -308,10 +308,63 @@ procedure XXH3_INITSTATE(var XXH3_state : XXH3_state_t); inline;
 
 implementation
 {$IFDEF MSWINDOWS}
-uses system.Win.Crtl;
+{ FPC: en vez de la unidad Delphi system.Win.Crtl o de importar msvcrt (que exige
+  import-lib .a), implementamos el C runtime en Pascal sobre el heap de FPC y lo
+  exportamos con 'public name' para que el enlazador resuelva las referencias C de
+  los objetos zstd/lz4/xxhash (malloc/calloc/realloc/free/memcpy/memmove/memset). }
+function _crt_malloc(size: NativeUInt): Pointer; cdecl; public name 'malloc';
+begin
+  Result := nil;
+  if size > 0 then GetMem(Result, size);
+end;
+
+function _crt_calloc(num, size: NativeUInt): Pointer; cdecl; public name 'calloc';
+var
+  n: NativeUInt;
+begin
+  Result := nil;
+  n := num * size;
+  if n > 0 then
+  begin
+    GetMem(Result, n);
+    FillChar(Result^, n, 0);
+  end;
+end;
+
+function _crt_realloc(p: Pointer; size: NativeUInt): Pointer; cdecl; public name 'realloc';
+begin
+  Result := p;
+  ReallocMem(Result, size);
+end;
+
+procedure _crt_free(p: Pointer); cdecl; public name 'free';
+begin
+  if p <> nil then FreeMem(p);
+end;
+
+function _crt_memcpy(dest, src: Pointer; n: NativeUInt): Pointer; cdecl; public name 'memcpy';
+begin
+  if n > 0 then Move(src^, dest^, n);
+  Result := dest;
+end;
+
+function _crt_memmove(dest, src: Pointer; n: NativeUInt): Pointer; cdecl; public name 'memmove';
+begin
+  if n > 0 then Move(src^, dest^, n);
+  Result := dest;
+end;
+
+function _crt_memset(s: Pointer; c: Integer; n: NativeUInt): Pointer; cdecl; public name 'memset';
+begin
+  if n > 0 then FillChar(s^, n, Byte(c));
+  Result := s;
+end;
 {$ENDIF}
 
 {$IFDEF WIN64}
+{ ___chkstk_ms (sonda de pila que emite gcc/mingw en los objetos) lo aporta este
+  objeto de contrib/LIBC; el resto del C runtime viene de msvcrt. }
+{$L ../LIBC/chkstk_ms.x64.o}
 {$IFDEF AVX2}
 {$L XXHASH4DELPHI.AVX2.X64.O}
 {$ELSE}

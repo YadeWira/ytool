@@ -65,7 +65,7 @@ procedure TLibImport.LoadLib(ALibrary: String);
 begin
   UnloadLib;
   FIsMemoryLib := False;
-  FDLLHandle := LoadLibrary(ALibrary);
+  FDLLHandle := dynlibs.LoadLibrary(ALibrary);
   FDLLLoaded := FDLLHandle <> NilHandle;
   FImageFileName := ALibrary;
   FImagePtr := nil;
@@ -78,7 +78,7 @@ procedure TLibImport.LoadFromTemp;
 begin
   FTempFile := GetTempFileName('', 'ytl');
   FDLLStream.SaveToFile(FTempFile);
-  FDLLHandle := LoadLibrary(FTempFile);
+  FDLLHandle := dynlibs.LoadLibrary(FTempFile);
   FDLLLoaded := FDLLHandle <> NilHandle;
   FImagePtr := FDLLStream.Memory;
   FImageSize := FDLLStream.Size;
@@ -134,9 +134,9 @@ function FileToResourceName(FileName: String): String;
 var
   I: Integer;
 begin
-  Result := ExtractFileName(FileName).ToUpper;
-  for I := 1 to Result.Length do
-    if not Result[I].IsLetterOrDigit then
+  Result := UpperCase(ExtractFileName(FileName));
+  for I := 1 to Length(Result) do
+    if not (Result[I] in ['A' .. 'Z', '0' .. '9']) then
       Result[I] := '_';
 end;
 
@@ -158,7 +158,7 @@ begin
         Stream.ReadBuffer(lpData^, cbData);
         hDestRes := BeginUpdateResource(PChar(Dest), False);
         if hDestRes <> 0 then
-          if UpdateResource(hDestRes, RT_RCDATA, PWideChar(ResName), 0, lpData,
+          if UpdateResource(hDestRes, RT_RCDATA, PChar(ResName), 0, lpData,
             cbData) then
           begin
             if not EndUpdateResource(hDestRes, False) then

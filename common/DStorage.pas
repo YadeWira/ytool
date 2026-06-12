@@ -4,9 +4,10 @@ unit DStorage;
 
 {$MINENUMSIZE 4}
 
-{ DirectStorage (descompresion GPU Windows/Xbox) es Windows-only. En otras
-  plataformas la unidad queda vacia. }
-{$IFDEF MSWINDOWS}
+{ DirectStorage (descompresion GPU Windows/Xbox) es Windows-only y depende de las
+  unidades D3D12/Windows de Delphi. FPC no trae bindings de D3D12, asi que la
+  unidad queda vacia en FPC (ambas plataformas) y en cualquier no-Windows. }
+{$IF DEFINED(MSWINDOWS) AND NOT DEFINED(FPC)}
 
 interface
 

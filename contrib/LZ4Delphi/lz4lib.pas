@@ -1172,8 +1172,7 @@ const
     external {$IFDEF POSIX}liblz4{$ENDIF} name _PU + 'LZ4F_decompress_usingDict';
 implementation
   {$IFDEF MSWINDOWS}
-//  uses libucrt;
-  uses libc;
+  // FPC: el C runtime (malloc/free/mem*) lo resuelve linklib msvcrt declarado en xxhashlib.
   {$ENDIF}
   {$IFDEF WIN64}
   {$IFDEF AVX2}

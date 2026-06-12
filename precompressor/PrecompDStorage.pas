@@ -6,7 +6,7 @@ interface
 
 uses
   PrecompUtils
-{$IFDEF MSWINDOWS}
+{$IF DEFINED(MSWINDOWS) AND NOT DEFINED(FPC)}
   , DStorage, Utils, Windows, SysUtils, Classes, Math
 {$ENDIF}
   ;
@@ -16,7 +16,7 @@ var
 
 implementation
 
-{$IFDEF MSWINDOWS}
+{$IF DEFINED(MSWINDOWS) AND NOT DEFINED(FPC)}
 
 const
   DStorageCodecs: array of PChar = ['gdeflate'];
