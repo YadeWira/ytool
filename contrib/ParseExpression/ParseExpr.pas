@@ -569,6 +569,18 @@ begin
     Res := Trunc(Args[0]^);
 end;
 
+procedure _ceil(Param: PExpressionRec);
+begin
+  with Param^ do
+    Res := Ceil(Args[0]^);
+end;
+
+procedure _floor(Param: PExpressionRec);
+begin
+  with Param^ do
+    Res := Floor(Args[0]^);
+end;
+
 procedure _sqrt(Param: PExpressionRec);
 begin
   with Param^ do
@@ -1773,6 +1785,9 @@ begin
     Add(TFunction.Create('round', 'round to the nearest integer', _round, 1));
     Add(TFunction.Create('trunc', 'truncates a real number to an integer',
       _trunc, 1));
+    Add(TFunction.Create('ceil', 'round up to the nearest integer', _ceil, 1));
+    Add(TFunction.Create('floor', 'round down to the nearest integer',
+      _floor, 1));
     Add(TFunction.Create('ln', 'natural logarithm of x', _ln, 1));
     Add(TFunction.Create('log10', 'logarithm base 10 of x', _log10, 1));
     Add(TFunction.Create('logN', 'logarithm base x of y', _logN, 2));
