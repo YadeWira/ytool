@@ -36,6 +36,10 @@ procedure Init;
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(PluginsPath + 'packjpg_dll.dll', True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libpackjpg.so', True));
+{$ENDIF}
   if Lib.Loaded then
   begin
     @pjglib_convert_stream2stream :=
