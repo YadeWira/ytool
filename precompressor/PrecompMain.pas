@@ -115,7 +115,11 @@ type
   end;
 
 const
+{$IFDEF MSWINDOWS}
   SREPEXE64 = 'srep64.exe';
+{$ELSE}
+  SREPEXE64 = 'srep64';
+{$ENDIF}
 
 var
   GlobalSync: TCriticalSection;
@@ -136,7 +140,7 @@ var
   REASSIGN: String = '';
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
-  SREPEXE: String = 'srep.exe';
+  SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
   CACHE: Int64 = 0;
   NULLOUT: Boolean = False;
   DupSysMem: Int64 = 0;
