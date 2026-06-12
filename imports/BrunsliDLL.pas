@@ -50,6 +50,10 @@ procedure Init;
 begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(PluginsPath + 'brunsli.dll', True));
+{$IFDEF UNIX}
+  if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libbrunsli.so', True));
+{$ENDIF}
   if Lib.Loaded then
   begin
     @brunsli_alloc_JPEGData := Lib.GetProcAddr('brunsli_alloc_JPEGData');

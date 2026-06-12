@@ -54,4 +54,22 @@ echo "==> fast-lzma2 (libfast-lzma2.so)"
   "$CC" -shared -fPIC -O2 *.c -lpthread -o "$ROOT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
+# ── brunsli (codec media JPEG alternativo a packjpg) — requiere cmake ────────
+echo "==> brunsli (libbrunsli.so)"
+[ -d "$CSRC/brunsli" ] || git clone --depth 1 --recursive https://github.com/google/brunsli "$CSRC/brunsli"
+if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
+  ( cd "$CSRC/brunsli" && mkdir -p out && cd out && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. >/dev/null 2>&1 && \
+    make -j4 >/dev/null 2>&1 )
+  A="$CSRC/brunsli/out/artifacts"; BR="$CSRC/brunsli/out/_deps/brotli-build"
+  "$CXX" -shared -fPIC -fvisibility=hidden -std=c++11 -O2 -I "$CSRC/brunsli/c/include" \
+    "$ROOT/contrib/brunsli_wrap.cpp" -Wl,--start-group \
+    "$A/libbrunslienc-static.a" "$A/libbrunslidec-static.a" "$A/libbrunslicommon-static.a" \
+    "$BR/libbrotlienc-static.a" "$BR/libbrotlidec-static.a" "$BR/libbrotlicommon-static.a" \
+    -Wl,--end-group -o "$ROOT/libbrunsli.so" \
+    && echo "   OK -> libbrunsli.so" || echo "   (brunsli link fallo)"
+else
+  echo "   (brunsli: falta cmake o el clone)"
+fi
+
 echo "Hecho. Plugins .so/srep64 en la raiz del repo (gitignored)."

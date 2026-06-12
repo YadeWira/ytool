@@ -11,3 +11,4 @@ srep64
 libpackjpg.so
 libpreflate.so
 libfast-lzma2.so
+libbrunsli.so
