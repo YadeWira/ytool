@@ -70,6 +70,7 @@ uses
   LZODLL in 'imports\LZODLL.pas',
   OodleDLL in 'imports\OodleDLL.pas',
   PackJPGDLL in 'imports\PackJPGDLL.pas',
+  PackMP3DLL in 'imports\PackMP3DLL.pas',
   PreflateDLL in 'imports\PreflateDLL.pas',
   ReflateDLL in 'imports\ReflateDLL.pas',
   ZLibDLL in 'imports\ZLibDLL.pas',

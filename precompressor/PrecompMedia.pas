@@ -5,7 +5,7 @@ unit PrecompMedia;
 interface
 
 uses
-  BrunsliDLL, FLACDLL, PackJPGDLL, JoJpegDLL,
+  BrunsliDLL, FLACDLL, PackJPGDLL, PackMP3DLL, JoJpegDLL,
   Utils,
   PrecompUtils,
   SysUtils, Classes, Math;
@@ -16,12 +16,14 @@ var
 implementation
 
 const
-  MediaCodecs: array of PChar = ['flac', 'packjpg', 'brunsli', 'jojpeg'];
-  CODEC_COUNT = 4;
+  MediaCodecs: array of PChar = ['flac', 'packjpg', 'brunsli', 'jojpeg',
+    'packmp3'];
+  CODEC_COUNT = 5;
   FLAC_CODEC = 0;
   PACKJPG_CODEC = 1;
   BRUNSLI_CODEC = 2;
   JOJPEG_CODEC = 3;
+  MP3_CODEC = 4;
 
 const
   FLAC_LEVEL = 5;
@@ -374,6 +376,78 @@ begin
   end;
 end;
 
+// Detecta un stream MP3 (MPEG-1/2/2.5 Layer III) que empieza en InBuff: opcional
+// ID3v2 + frames Layer III consecutivos + opcional ID3v1. Devuelve el tamano total
+// en StreamSize. Conservador (>=2 frames) para evitar falsos positivos con 0xFF
+// sueltos; un fallo solo significa "no se recomprime" (la reversibilidad la
+// garantiza el fallback a literal de xtool).
+function GetMP3Info(InBuff: PByte; InSize: NativeInt;
+  StreamSize: PCardinal): Boolean;
+const
+  BR1: array [0 .. 15] of Integer = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128,
+    160, 192, 224, 256, 320, 0); // MPEG1 LayerIII kbps
+  BR2: array [0 .. 15] of Integer = (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96,
+    112, 128, 144, 160, 0); // MPEG2/2.5 LayerIII kbps
+  MP3SR: array [0 .. 3, 0 .. 3] of Integer = ((11025, 12000, 8000, 0), (0, 0, 0,
+    0), (22050, 24000, 16000, 0), (44100, 48000, 32000, 0));
+var
+  Pos, Start: NativeInt;
+  b0, b1, b2: Byte;
+  ver, lay, bri, sri, pad, br, sr, flen, frames, sz: Integer;
+begin
+  Result := False;
+  StreamSize^ := 0;
+  Pos := 0;
+  if (InSize > 10) and (InBuff[0] = Ord('I')) and (InBuff[1] = Ord('D')) and
+    (InBuff[2] = Ord('3')) then
+  begin
+    sz := ((InBuff[6] and $7F) shl 21) or ((InBuff[7] and $7F) shl 14) or
+      ((InBuff[8] and $7F) shl 7) or (InBuff[9] and $7F);
+    Pos := 10 + sz;
+  end;
+  Start := Pos;
+  frames := 0;
+  while Pos + 4 <= InSize do
+  begin
+    b0 := InBuff[Pos];
+    b1 := InBuff[Pos + 1];
+    b2 := InBuff[Pos + 2];
+    if (b0 <> $FF) or ((b1 and $E0) <> $E0) then
+      break;
+    ver := (b1 shr 3) and 3;
+    lay := (b1 shr 1) and 3;
+    if (ver = 1) or (lay <> 1) then // version reservada / no Layer III (01)
+      break;
+    bri := (b2 shr 4) and $F;
+    sri := (b2 shr 2) and 3;
+    pad := (b2 shr 1) and 1;
+    if (bri = 0) or (bri = 15) or (sri = 3) then
+      break;
+    sr := MP3SR[ver, sri];
+    if sr = 0 then
+      break;
+    if ver = 3 then
+      br := BR1[bri]
+    else
+      br := BR2[bri];
+    if ver = 3 then
+      flen := (144 * br * 1000) div sr + pad
+    else
+      flen := (72 * br * 1000) div sr + pad;
+    if flen < 4 then
+      break;
+    Inc(Pos, flen);
+    Inc(frames);
+  end;
+  if frames < 2 then
+    exit;
+  if (Pos + 128 <= InSize) and (InBuff[Pos] = Ord('T')) and
+    (InBuff[Pos + 1] = Ord('A')) and (InBuff[Pos + 2] = Ord('G')) then
+    Inc(Pos, 128);
+  StreamSize^ := Pos;
+  Result := Pos > Start;
+end;
+
 function BrunsliWriter(cd: Pointer; data: Pointer; Size: NativeUInt)
   : Integer cdecl;
 begin
@@ -402,6 +476,7 @@ begin
   CodecAvailable[PACKJPG_CODEC] := PackJPGDLL.DLLLoaded;
   CodecAvailable[BRUNSLI_CODEC] := BrunsliDLL.DLLLoaded;
   CodecAvailable[JOJPEG_CODEC] := JoJpegDLL.DLLLoaded;
+  CodecAvailable[MP3_CODEC] := PackMP3DLL.DLLLoaded;
   X := 0;
   while Funcs^.GetCodec(Command, X, False) <> '' do
   begin
@@ -420,7 +495,10 @@ begin
       CodecEnabled[BRUNSLI_CODEC] := True
     else if (CompareText(S, MediaCodecs[JOJPEG_CODEC]) = 0) and JoJpegDLL.DLLLoaded
     then
-      CodecEnabled[JOJPEG_CODEC] := True;;
+      CodecEnabled[JOJPEG_CODEC] := True
+    else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
+    then
+      CodecEnabled[MP3_CODEC] := True;
     Inc(X);
   end;
   if CodecAvailable[FLAC_CODEC] then
@@ -502,6 +580,12 @@ begin
     then
     begin
       SetBits(Option^, JOJPEG_CODEC, 0, 3);
+      Result := True;
+    end
+    else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
+    then
+    begin
+      SetBits(Option^, MP3_CODEC, 0, 3);
       Result := True;
     end;
     Inc(I);
@@ -586,6 +670,32 @@ begin
         continue;
       end;
     end;
+    if CodecEnabled[MP3_CODEC] and
+      ((((Input + Pos)^ = $FF) and (((Input + Pos + 1)^ and $E0) = $E0)) or
+      ((PWord(Input + Pos)^ = $4449) and ((Input + Pos + 2)^ = Ord('3')))) then
+    begin
+      Y := SizeEx - Pos;
+      if GetMP3Info(Input + Pos, Y, @data_size) then
+        Y := data_size
+      else
+        Y := 0;
+      if Y > 0 then
+      begin
+        Z := data_size;
+        Output(Instance, Input + Pos, Z);
+        SI.Position := Pos;
+        SI.OldSize := Y;
+        SI.NewSize := Z;
+        SI.Option := 0;
+        SetBits(SI.Option, MP3_CODEC, 0, 3);
+        SI.Status := TStreamStatus.None;
+        Funcs^.LogScan1(MediaCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
+          SI.OldSize, -1);
+        Add(Instance, @SI, nil, nil);
+        Inc(Pos, SI.OldSize);
+        continue;
+      end;
+    end;
     Inc(Pos);
   end;
 end;
@@ -616,6 +726,13 @@ begin
     PACKJPG_CODEC, BRUNSLI_CODEC, JOJPEG_CODEC:
       begin
         if GetJPEGInfo(Input, Y, @data_size, @progressive) then
+          Y := data_size
+        else
+          Y := 0;
+      end;
+    MP3_CODEC:
+      begin
+        if GetMP3Info(Input, Y, @data_size) then
           Y := data_size
         else
           Y := 0;
@@ -767,6 +884,20 @@ begin
           jojpeg_Quit(ctx, jojpeg_Compress);
         end;
       end;
+    MP3_CODEC:
+      begin
+        Buffer := nil;
+        Res := StreamInfo.OldSize;
+        pmplib_init_streams(OldInput, pmplib_memory, StreamInfo^.OldSize,
+          Buffer, pmplib_memory);
+        if pmplib_convert_stream2mem(@Buffer, @Res, nil) and
+          (Res < StreamInfo^.NewSize) then
+        begin
+          Move(Buffer^, NewInput^, Res);
+          StreamInfo^.NewSize := Res;
+          Result := True;
+        end;
+      end;
   end;
   Funcs^.LogProcess(MediaCodecs[GetBits(StreamInfo^.Option, 0, 3)],
     PChar(Params), StreamInfo^.OldSize, StreamInfo^.NewSize, -1, Result);
@@ -888,6 +1019,16 @@ begin
         finally
           jojpeg_Quit(ctx, jojpeg_Decompress);
         end;
+      end;
+    MP3_CODEC:
+      begin
+        Buffer := nil;
+        pmplib_init_streams(Input, pmplib_memory, StreamInfo.NewSize, Buffer,
+          pmplib_memory);
+        Res := StreamInfo.OldSize;
+        Result := pmplib_convert_stream2mem(@Buffer, @Res, nil);
+        if Result then
+          Output(Instance, Buffer, Res);
       end;
   end;
   Funcs^.LogRestore(MediaCodecs[GetBits(StreamInfo.Option, 0, 3)],

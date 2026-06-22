@@ -72,4 +72,16 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+# ── packmp3 (codec media MP3) — proyecto original packjpg/packMP3 v1.0g ──────
+echo "==> packmp3 (libpackmp3.so)"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
+if [ -d "$CSRC/packMP3" ]; then
+  # el upstream solo da C-linkage para BUILD_DLL/Windows; parche para Linux .so
+  sed -i 's/#define EXPORT extern$/#define EXPORT extern "C"/' "$CSRC/packMP3/source/packmp3lib.h"
+  ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
+    source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
+    -lpthread -o "$ROOT/libpackmp3.so" ) \
+    && echo "   OK -> libpackmp3.so" || echo "   (packmp3 fallo)"
+fi
+
 echo "Hecho. Plugins .so/srep64 en la raiz del repo (gitignored)."

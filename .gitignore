@@ -12,3 +12,5 @@ libpackjpg.so
 libpreflate.so
 libfast-lzma2.so
 libbrunsli.so
+testdata/
+libpackmp3.so
