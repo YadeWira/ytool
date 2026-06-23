@@ -1417,6 +1417,11 @@ var
 
 begin
   Result := False;
+  // 0.9.1 (fixes reassign): DBBool solo se asigna dentro de "if UseDB and (Codec>2)"
+  // (~1431) pero se lee en "if not DBBool" (~1505); con UseDB y Codec<=2 (alcanzable al
+  // reasignar/transferir a un codec de indice bajo) se leia sin inicializar -> AddDB no
+  // determinista. FPC no pone a cero los locales. Inicializar elimina el UB.
+  DBBool := False;
   with ComVars1[Depth] do
   begin
     SI2 := InfoStore1[ThreadIndex][StreamIndex];
@@ -1477,7 +1482,12 @@ begin
         InfoStore1[ThreadIndex][StreamIndex] := SI2;
       end;
     end;
-    if (Result = False) and (CurTransfer[Index] <> '') and (LValid = False) then
+    // 0.9.1 (fixes reassign): la rama de transfer NO tenia guarda de recursion (solo la
+    // de REASSIGN miraba Reassigned). Un codec/plugin que re-arma CurTransfer en cada
+    // Process fallido recursaba sin fin (stack overflow). Anadir (Reassigned = False)
+    // limita a UN solo fallback (reassign O transfer) por stream.
+    if (Result = False) and (CurTransfer[Index] <> '') and (LValid = False) and
+      (Reassigned = False) then
     begin
       LValid := PrecompGetCodecIndex(PChar(CurTransfer[Index]), @LCodec,
         @LOption);
@@ -1496,7 +1506,10 @@ begin
     if LValid then
     begin
       MemOutput1[Index].Position := CurPos1[Index];
-      Result := Process(ThreadIndex, StreamIndex, Index, Depth, REASSIGN <> '');
+      // 0.9.1: el reintento se marca Reassigned=True incondicionalmente (antes era
+      // REASSIGN<>'', que no cubria el caso transfer-sin-REASSIGN). Se llega aqui solo si
+      // un fallback se armo (LValid), asi que el siguiente intento no debe re-fallbackear.
+      Result := Process(ThreadIndex, StreamIndex, Index, Depth, True);
       exit;
     end;
     if UseDB then
