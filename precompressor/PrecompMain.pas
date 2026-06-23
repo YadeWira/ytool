@@ -75,8 +75,6 @@ procedure PrecompLogPatch1(OldSize, NewSize, PatchSize: Integer;
   Status: Boolean)cdecl;
 procedure PrecompLogPatch2(OldSize, NewSize, PatchSize: Integer;
   Status: Boolean)cdecl;
-procedure PrecompLogReprocess(Method: PChar; Size1, Size2, Size3: Integer;
-  Status: Boolean)cdecl;
 
 procedure PrecompOutput1(Instance: Integer; const Buffer: Pointer;
   Size: Integer)cdecl;
@@ -136,7 +134,6 @@ var
   EXTRACT: Boolean = False;
   EXTRACT_UNPROCESSED: Boolean = False;
   NOVERIFY: Boolean = False;
-  REPROCESS: String = '';
   REASSIGN: String = '';
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
@@ -192,7 +189,6 @@ begin
   WriteLine('  -db# - decode block size [512mb]');
   WriteLine('  -sp# - srep parameters (separate params with ":")');
   WriteLine('  -p#  - prefetch cache [0mb]');
-  WriteLine('  -r#  - recompress streams detected with another codec');
   WriteLine('  -a#  - assign streams detected to another codec');
   WriteLine('');
   WriteLine('  -lz4#, -zstd#, -oodle# - specify custom library name');
@@ -428,11 +424,6 @@ begin
     EXTCOMP := ArgParse.AsString('-e');
     if FileExists(ExpandPath(PluginsPath + ExtractExec(EXTCOMP), True)) then
       COMPRESS := 2;
-    REPROCESSED := ArgParse.AsBoolean('-r');
-    REPROCESS := ReplaceStr(ArgParse.AsString('-r'), SPrecompSep3,
-      SPrecompSep2);
-    if REPROCESS <> '' then
-      REPROCESSED := False;
     REASSIGN := ReplaceStr(ArgParse.AsString('-a'), SPrecompSep3, SPrecompSep2);
   finally
     ArgParse.Free;
@@ -777,44 +768,6 @@ begin
     S := '[%d] - Patching stream at %s (%d >> %d) [%d] has failed';
   WriteLine(Format(S, [CurDepth[0], LogInt64.ToHexString, OldSize, NewSize,
     PatchSize]));
-end;
-
-procedure PrecompLogReprocess(Method: PChar; Size1, Size2, Size3: Integer;
-  Status: Boolean);
-var
-  S1, S2: String;
-begin
-  if VERBOSE then
-  begin
-    if Size2 < 0 then
-      S1 := '(%d)'
-    else if Size3 < 0 then
-      S1 := '(%d >> %d)'
-    else
-      S1 := '(%d >> %d >> %d)';
-    if Status then
-      S2 := '[%d] Reprocessed stream at %s ' + S1 + IfThen(String(Method) <> '',
-        ' using ' + String(Method), '') + ' successfully'
-    else
-      S2 := '[%d] Reprocessing stream at %s ' + S1 +
-        IfThen(String(Method) <> '', ' using ' + String(Method), '') +
-        ' has failed';
-    WriteLine(Format(S2, [CurDepth[0], LogInt64.ToHexString, Size1,
-      Size2, Size3]));
-  end;
-  // -X (EXTRACT_UNPROCESSED): solo extraer si el reprocess NO tuvo exito.
-  if EXTRACT and (CurDepth[0] = 0) and
-    ((not EXTRACT_UNPROCESSED) or (not Status)) then
-  begin
-    S1 := '%s.raw';
-    with TFileStream.Create(ExtDir + Format(S1, [LogInt64.ToHexString]),
-      fmCreate) do
-      try
-        WriteBuffer(LogPtr^, Size1);
-      finally
-        Free;
-      end;
-  end;
 end;
 
 procedure PrecompOutput1(Instance: Integer; const Buffer: Pointer;
@@ -1368,52 +1321,6 @@ var
   LCodec: Byte;
   LOption: Integer;
   I: Integer;
-  function Reproc(Method: String): Boolean;
-  var
-    Buffer: Pointer;
-    Res: Integer;
-    C1, C2: XXH128_hash_t;
-  begin
-    Result := False;
-    if Depth > 0 then
-      exit;
-    with ComVars1[Depth] do
-    begin
-      Buffer := PrecompAllocator(ThreadIndex, SI1.NewSize);
-      Res := PrecompCompress(PChar(Method),
-        PByte(MemOutput1[ThreadIndex].Memory) + SI2.StorePosition, SI1.NewSize,
-        Buffer, SI1.NewSize, nil, 0);
-      if (Res > 0) and (Res + Int64.Size < SI1.OldSize) then
-      begin
-        PrecompHash('xxh3_128', PByte(MemOutput1[ThreadIndex].Memory) +
-          SI2.StorePosition, SI1.NewSize, @C1, SizeOf(C1));
-        PrecompDecompress(PChar(Method), Buffer, SI1.OldSize,
-          PByte(MemOutput1[ThreadIndex].Memory) + SI2.StorePosition,
-          SI1.NewSize, nil, 0);
-        PrecompHash('xxh3_128', PByte(MemOutput1[ThreadIndex].Memory) +
-          SI2.StorePosition, SI1.NewSize, @C2, SizeOf(C2));
-        if CompareMem(@C1, @C2, SizeOf(C1)) then
-        begin
-          ThreadSync[ThreadIndex].Acquire;
-          try
-            Move(Buffer^, (PByte(DataStore.Slot(ThreadIndex).Memory) +
-              SI2.ActualPosition)^, Res);
-            FillChar((PByte(DataStore.Slot(ThreadIndex).Memory) +
-              SI2.ActualPosition + Res)^, SI1.OldSize - Res, 0);
-            Int64Rec(PInt64(PByte(DataStore.Slot(ThreadIndex).Memory) +
-              SI2.ActualPosition + SI1.OldSize - Int64.Size)^).Lo :=
-              SI1.OldSize;
-            Int64Rec(PInt64(PByte(DataStore.Slot(ThreadIndex).Memory) +
-              SI2.ActualPosition + SI1.OldSize - Int64.Size)^).Hi := Res;
-            Result := True;
-          finally
-            ThreadSync[ThreadIndex].Release;
-          end;
-        end;
-      end;
-      PrecompLogReprocess(PChar(Method), SI1.OldSize, SI1.NewSize, Res, Result);
-    end;
-  end;
 
 begin
   Result := False;
@@ -1452,12 +1359,6 @@ begin
     try
       if NOVERIFY and not(SI2.Codec in [5]) then
         Result := True
-      else if (REPROCESS <> '') and not(SI2.Codec in [5, 13]) then
-      begin
-        Result := False;
-        if Reproc(REPROCESS) then
-          AtomicIncrement(EncInfo.Processed);
-      end
       else
         Result := Codecs[SI2.Codec].Process(Index, Depth,
           PByte(DataStore.Slot(ThreadIndex).Memory) + SI2.ActualPosition,
@@ -1765,8 +1666,7 @@ begin
   for I := Low(ThreadSync) to High(ThreadSync) do
     ThreadSync[I] := TCriticalSection.Create;
   I := XTOOL_PRECOMP;
-  if REPROCESS = '' then
-    Output.WriteBuffer(I, I.Size);
+  Output.WriteBuffer(I, I.Size);
   if UseDB then
   begin
     SetLength(DBInfo, $10000);
@@ -1900,8 +1800,7 @@ begin
     end;
   end;
   ExtDir := IncludeTrailingBackSlash(Options^.ExtractDir);
-  if REPROCESS = '' then
-    Output.WriteBuffer(Options^.Depth, Options^.Depth.Size);
+  Output.WriteBuffer(Options^.Depth, Options^.Depth.Size);
   if REASSIGN <> '' then
     AddMethod(REASSIGN);
   DoScan2 := True;
@@ -1956,7 +1855,8 @@ begin
       else
         S := S + SPrecompSep1 + ExternalMethods[J];
   end;
-  if REPROCESS = '' then
+  // 0.9.1 (quita recompress): la cabecera del archivo se escribe siempre (antes se
+  // omitia bajo "if REPROCESS=''" porque el modo -r no producia un .pmp decodificable).
   begin
     Bytes := BytesOf(S);
     B := Length(Bytes);
@@ -2318,7 +2218,6 @@ begin
           MemStream[I].Position := 0;
           MemStream[I].WriteBuffer(StreamCount1, StreamCount1.Size);
           MemStream[I].WriteBuffer(BlockSize, BlockSize.Size);
-          if REPROCESS = '' then
           begin
             SaveResources;
             TempOutput.WriteBuffer(MemStream[I].Memory^, I64);
@@ -2393,8 +2292,7 @@ begin
             UI32 := Max(DataStore.Size(I) - LastPos, 0)
           else
             UI32 := 0;
-          if REPROCESS = '' then
-            TempOutput.WriteBuffer(UI32, UI32.Size);
+          TempOutput.WriteBuffer(UI32, UI32.Size);
           if UI32 > 0 then
             TempOutput.WriteBuffer
               ((PByte(DataStore.Slot(I).Memory) + LastPos)^, UI32);
@@ -2416,7 +2314,6 @@ begin
       else
         break;
     end;
-    if REPROCESS = '' then
     begin
       SaveResources;
       StreamCount1 := StreamCount1.MinValue;
@@ -3426,8 +3323,7 @@ begin
   try
     EncInit(LInput, Output, @Options);
     Compressed := COMPRESS;
-    if REPROCESS = '' then
-      Output.WriteBuffer(Compressed, Compressed.Size);
+    Output.WriteBuffer(Compressed, Compressed.Size);
     if COMPRESS > 0 then
     begin
       case COMPRESS of

@@ -291,14 +291,6 @@ var
 begin
   Result := False;
   X := GetBits(StreamInfo^.Option, 0, 3);
-  if (StreamInfo^.OldSize > 0) and REPROCESSED then
-    if (Int64Rec(PInt64(PByte(Input) + StreamInfo^.OldSize - Int64.Size)^)
-      .Lo = StreamInfo^.OldSize) and
-      (Int64Rec(PInt64(PByte(Input) + StreamInfo^.OldSize - Int64.Size)^).Lo <
-      Int64Rec(PInt64(PByte(Input) + StreamInfo^.OldSize - Int64.Size)^).Hi)
-    then
-      StreamInfo^.OldSize :=
-        Int64Rec(PInt64(PByte(Input) + StreamInfo^.OldSize - Int64.Size)^).Hi;
   if StreamInfo^.OldSize <= 0 then
     exit;
   StreamInfo^.NewSize := Max(StreamInfo^.NewSize, LMaxSize);

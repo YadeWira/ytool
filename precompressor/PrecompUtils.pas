@@ -394,7 +394,6 @@ var
   DIFF_CLEVEL: Integer = 1;
   OPTIMISE_DEC: Boolean = False;
   FULLSCAN: Boolean = False;
-  REPROCESSED: Boolean = False;
   FORCEDMETHOD: Boolean = False;
   EncodeSICmp: TEncodeSIComparer;
   FutureSICmp: TFutureSIComparer;
