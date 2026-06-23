@@ -527,6 +527,9 @@ var
   DDCount1: TArray<Integer>;
   DDList1: TArray<Int64>;
   DDIndex, DDInit: Integer;
+  // 0.8.3: cuentas vivas para crecer DDList1/DDInfo2 geometricamente. Length(array) pasa a
+  // ser la CAPACIDAD; se recorta a la cuenta (SetLength) antes de consumirlos en la finalizacion.
+  DDList1Count, DDInfo2Count: Integer;
   ComVars1: TArray<TCommonVarsEnc>;
   Tasks: TArray<TTask>;
   CurCodec: TArray<Byte>;
@@ -1082,7 +1085,11 @@ begin
       DB.Option := StreamInfo.Option;
       Move(StreamInfo.Checksum, DB.Checksum, SizeOf(DB.Checksum));
       DB.Status := StreamInfo.Status;
-      Insert(DB, DBInfo[A], Length(DBInfo[A]));
+      // 0.8.3: idem DDInfo1 — crecimiento geometrico; la cuenta viva es DBCount[A]
+      // (el consumidor en ~2410 escribe DBInfo[W,K] para K:=0..DBCount[W]-1, no usa Length).
+      if DBCount[A] >= Length(DBInfo[A]) then
+        SetLength(DBInfo[A], Max(4, Length(DBInfo[A]) * 2));
+      DBInfo[A][DBCount[A]] := DB;
       Inc(DBCount[A]);
     finally
       GlobalSync.Release;
@@ -1158,11 +1165,23 @@ begin
     DD.Index1 := DDIndex;
     DD.Index2 := DDInit;
     DD.Count := 0;
-    I := Length(DDInfo1[A]);
-    Insert(DD, DDInfo1[A], I);
+    // 0.8.3 (encode mas rapido): el Insert de FPC realoca al tamano EXACTO en cada
+    // append (sin holgura) => N inserciones en un bucket son O(N^2). Crecimiento
+    // geometrico: la cuenta viva del bucket es DDCount1[A] (CheckDD itera 0..DDCount1[A]-1
+    // y el serializador indexa via DDList1.Hi, ambos = DDCount1; nadie lee Length(DDInfo1[A]))
+    // => sobre-asignar capacidad es invisible a la salida. Slot de escritura = DDCount1[A].
+    I := DDCount1[A];
+    if I >= Length(DDInfo1[A]) then
+      SetLength(DDInfo1[A], Max(4, Length(DDInfo1[A]) * 2));
+    DDInfo1[A][I] := DD;
     Int64Rec(I64).Words[0] := A;
     Int64Rec(I64).Hi := DDCount1[A];
-    Insert(I64, DDList1, Length(DDList1));
+    // 0.8.3: DDList1 crece geometricamente (cuenta viva DDList1Count); se recorta antes
+    // de consumirla en la finalizacion (Low/High/Length en ~2436-2459).
+    if DDList1Count >= Length(DDList1) then
+      SetLength(DDList1, Max(8, Length(DDList1) * 2));
+    DDList1[DDList1Count] := I64;
+    Inc(DDList1Count);
     Inc(DDCount1[A]);
     Result := True;
   end
@@ -1748,6 +1767,8 @@ begin
     SetLength(DDInfo2, 0);
     SetLength(DDCount1, $10000);
     SetLength(DDList1, 0);
+    DDList1Count := 0;
+    DDInfo2Count := 0;
     for I := Low(DDInfo1) to High(DDInfo1) do
       DDCount1[I] := 0;
     DDIndex := -1;
@@ -2230,7 +2251,12 @@ begin
               begin
                 Int64Rec(I64).Lo := StreamCount2 - 1;
                 Int64Rec(I64).Hi := DupIdx3;
-                Insert(I64, DDInfo2, Length(DDInfo2));
+                // 0.8.3: DDInfo2 crece geometricamente (cuenta viva DDInfo2Count); se recorta
+                // antes de consumirla en la finalizacion (Length/indexado en ~2452-2487).
+                if DDInfo2Count >= Length(DDInfo2) then
+                  SetLength(DDInfo2, Max(8, Length(DDInfo2) * 2));
+                DDInfo2[DDInfo2Count] := I64;
+                Inc(DDInfo2Count);
                 Inc(EncInfo.DupCount);
                 if DupCount = 1 then
                   Inc(EncInfo.DecMem2, StreamInfo.OldSize);
@@ -2414,6 +2440,10 @@ begin
     end;
     if StoreDD > -2 then
     begin
+      // 0.8.3: recorta DDList1/DDInfo2 de capacidad geometrica a su cuenta viva antes de
+      // iterarlas por Low/High/Length; restaura longitudes identicas al codigo previo.
+      SetLength(DDList1, DDList1Count);
+      SetLength(DDInfo2, DDInfo2Count);
       WorkStream[0].Position := 0;
       ComVars1[0].MemStream[0].Position := 0;
       UI32 := 0;
@@ -2640,7 +2670,12 @@ begin
   if (StoreDD > -2) and (CurDepth[Instance] = 0) then
     if ((DDIndex2 < DDCount2) and (DDIndex1 = DDList2[DDIndex2].Index)) then
     begin
-      NStream.Update(0, NStream.MaxSize(0) + CalcDupSysMem);
+      // 0.8.3 (quita el calculo de memoria decode del dedup): antes se recalculaba
+      // CalcDupSysMem (2-4 consultas /proc de memoria) en CADA chunk de salida de un
+      // stream duplicado para reajustar el presupuesto RAM de la cache de duplicados.
+      // El presupuesto ya se fija una vez en DecChunk (NStream.Add ... CalcDupSysMem);
+      // el slot de disco (TPrecompVMStream, ~1TB) absorbe cualquier exceso => quitar
+      // el reajuste por-chunk solo cambia RAM-vs-disco, no los bytes decodificados.
       DataMgr.Write(DDIndex1, Buffer, Size);
     end;
 end;
@@ -2984,8 +3019,11 @@ begin
       Input.ReadBuffer(UI32, UI32.Size);
       SetLength(DDList2, UI32);
       DDCount2 := UI32;
-      for I := Low(DDList2) to High(DDList2) do
-        Input.ReadBuffer(DDList2[I], SizeOf(TDuplicate2));
+      // 0.8.0 (decode mas rapido): la tabla DDList2 son UI32 registros contiguos
+      // empaquetados de 8 bytes; leerla de una sola vez en vez de uno por uno evita
+      // UI32 lecturas (criticas en el path Compressed=2/srep, pipe sin buffer).
+      if UI32 > 0 then
+        Input.ReadBuffer(DDList2[0], Int64(UI32) * SizeOf(TDuplicate2));
       DDIndex1 := -1;
       DDIndex2 := 0;
       Input.ReadBuffer(DDMemSize, DDMemSize.Size);
@@ -3109,7 +3147,7 @@ begin
               if ((DDIndex2 < DDCount2) and (DDIndex1 = DDList2[DDIndex2].Index))
               then
               begin
-                NStream.Update(0, NStream.MaxSize(0) + CalcDupSysMem);
+                // 0.8.3: idem 2643 — sin reajuste por-stream de CalcDupSysMem.
                 DataMgr.Add(DDIndex1, StreamHeader^.OldSize,
                   DDList2[DDIndex2].Count);
                 DataMgr.Write(DDIndex1,

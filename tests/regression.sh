@@ -17,7 +17,9 @@ CORPUS="$WORK/corpus"
 trap 'rm -rf "$WORK"' EXIT
 
 # metodos a probar contra CADA archivo (la reversibilidad debe valer en todos)
-METHODS=("" "-mzlib" "-mzlib+zstd")
+# "-mzlib -dd" ejercita la deduplicacion (path DD de encode y decode); en 23_dup_streams.bin
+# encuentra duplicados reales, en el resto pasa de largo (dedup vacio, igualmente reversible).
+METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd")
 
 fail=0; pass=0
 echo "== ytool regression =="

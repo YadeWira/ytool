@@ -72,6 +72,17 @@ def main():
         many += rng_bytes(64, SEED + 1000 + i)
     write(d, '21_zlib_many.bin', bytes(many))
 
+    # --- streams DUPLICADOS: ejercita el dedup (-dd): N distintos x R copias ---
+    # cada copia identica del mismo stream zlib -> StoreDD las deduplica. Cubre el
+    # path DD de encode (DDInfo1/DDList1/DDInfo2) y de decode (DDList2 + cache de dups).
+    dup = bytearray()
+    for i in range(30):
+        s = zlib.compress(base_text[: 4000 + i * 137], 6)
+        for _ in range(3):
+            dup += s
+            dup += rng_bytes(48, SEED + 5000 + i)  # ruido separador (igual por i)
+    write(d, '23_dup_streams.bin', bytes(dup))
+
     # --- raw deflate (sin cabecera zlib) intercalado ---
     raw = bytearray()
     co = zlib.compressobj(9, zlib.DEFLATED, -15)  # wbits negativos = raw deflate
