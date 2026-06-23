@@ -14,3 +14,8 @@ libfast-lzma2.so
 libbrunsli.so
 testdata/
 libpackmp3.so
+# recursos locales grandes / privados (no versionar; evita que git add -A los suba)
+test-files2.tar
+test-files*.tar
+CONEXION-IA.md
+xtool_base
