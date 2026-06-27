@@ -432,7 +432,10 @@ begin
         LZO1C_999:
           begin
             Params := 'v' + GetBits(StreamInfo.Option, 7, 12).ToString;
-            if not lzo2a_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
+            // fix lzo (0.9.0): el restore de lzo1c llamaba a lzo2a_999_compress
+            // (copy/paste); el encode (LZOProcess) usa lzo1c_999_compress -> los bytes
+            // no coincidian y el stream lzo1c nunca se reconstruia. Ahora simetrico.
+            if not lzo1c_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
               WrkMem[Instance]) = 0 then
               Res1 := 0;
           end;
