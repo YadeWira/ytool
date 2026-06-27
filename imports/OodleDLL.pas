@@ -91,41 +91,41 @@ implementation
 var
   Lib: TLibImport;
 
-procedure Init(Filename: String);
+function Init(Filename: String): Boolean;
 var
   I: Integer;
   C: Cardinal;
 begin
+  Result := False;
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(Filename, True));
   if not Lib.Loaded then
-    for I := 3 to 9 do
-    begin
-      Lib.LoadLib(ExpandPath(PluginsPath + 'oo2core_' + I.ToString +
-        OODLELZ_ARCH, True));
-      if Lib.Loaded then
-        break;
-    end;
-  if not Lib.Loaded then
-    for I := 3 to 9 do
-    begin
-      Lib.LoadLib(ExpandPath(PluginsPath + 'oo2ext_' + I.ToString +
-        OODLELZ_ARCH, True));
-      if Lib.Loaded then
-        break;
-    end;
-  if Lib.Loaded then
   begin
-    Oodle_CheckVersion := Lib.GetProcAddr('Oodle_CheckVersion');
-    if not Assigned(Oodle_CheckVersion) then
-      for I := 0 to 49 do
-      begin
-        @Oodle_CheckVersion :=
-          Lib.GetProcAddr(PAnsiChar('_Oodle_CheckVersion@' + (I * 2).ToString));
-        if Assigned(Oodle_CheckVersion) then
-          break;
-      end;
-    DLLLoaded := Assigned(Oodle_CheckVersion);
+    Lib.Free;
+    Lib := nil;
+    Exit;
+  end;
+  Oodle_CheckVersion := Lib.GetProcAddr('Oodle_CheckVersion');
+  if not Assigned(Oodle_CheckVersion) then
+    for I := 0 to 49 do
+    begin
+      @Oodle_CheckVersion :=
+        Lib.GetProcAddr(PAnsiChar('_Oodle_CheckVersion@' + (I * 2).ToString));
+      if Assigned(Oodle_CheckVersion) then
+        break;
+    end;
+  // 0.9.6 (-oodl#): aceptar esta candidata solo si es una libreria oodle valida
+  // (Oodle_CheckVersion resuelto). Si no, liberarla y devolver False para que el caller
+  // pruebe la siguiente; ademas evita llamar Oodle_CheckVersion sin asignar (crash).
+  if not Assigned(Oodle_CheckVersion) then
+  begin
+    Lib.Free;
+    Lib := nil;
+    Exit;
+  end;
+  DLLLoaded := True;
+  Result := True;
+  begin
     Oodle_CheckVersion(0, @C);
     OldCompress := LongRec(C).Hi < $2E06;
     OldGetCompressedBufferSizeNeeded := LongRec(C).Hi < $2E08;
@@ -233,20 +233,28 @@ const
 
 var
   I: Integer;
-  DLLFile: String;
+  Candidates: TArray<String>;
 
 initialization
 
-DLLFile := PluginsPath + 'oo2core_9' + OODLELZ_ARCH;
+// 0.9.6 (-oodl#): se prueban varias librerias oodle EN ORDEN; gana la primera que carga
+// Y resuelve Oodle_CheckVersion. Candidatas: cada -oodle<path> dado (en orden de aparicion)
+// y luego los nombres por defecto oo2core_9..3 / oo2ext_9..3 en PluginsPath. Antes solo se
+// probaba UNA (-oodle o el default oo2core_9), sin verificar que fuera una oodle valida.
+SetLength(Candidates, 0);
 for I := 1 to ParamCount do
-begin
   if ParamStr(I).StartsWith(DLLParam) then
-  begin
-    DLLFile := ParamStr(I).Substring(DLLParam.Length);
+    Insert(ParamStr(I).Substring(Length(DLLParam)), Candidates,
+      Length(Candidates));
+for I := 9 downto 3 do
+  Insert(PluginsPath + 'oo2core_' + I.ToString + OODLELZ_ARCH, Candidates,
+    Length(Candidates));
+for I := 9 downto 3 do
+  Insert(PluginsPath + 'oo2ext_' + I.ToString + OODLELZ_ARCH, Candidates,
+    Length(Candidates));
+for I := Low(Candidates) to High(Candidates) do
+  if Init(Candidates[I]) then
     break;
-  end;
-end;
-Init(DLLFile);
 
 finalization
 
