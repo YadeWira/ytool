@@ -278,17 +278,20 @@ begin
     exit;
   Res := Max(StreamInfo^.NewSize, LMaxSize);
   Buffer := Funcs^.Allocator(Instance, Res);
+  // fix lzo: el idiom "not lzoCall(...) = 0" se parsea (por precedencia de 'not')
+  // como (not result)=0, que solo captura el codigo -1 y deja pasar otros errores
+  // (-4/-5/-7...). La forma correcta es "lzoCall(...) <> 0".
   case X of
     LZO1X_CODEC:
-      if not lzo1x_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) = 0
+      if lzo1x_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) <> 0
       then
         Res := 0;
     LZO2A_CODEC:
-      if not lzo2a_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) = 0
+      if lzo2a_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) <> 0
       then
         Res := 0;
     LZO1C_CODEC:
-      if not lzo1c_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) = 0
+      if lzo1c_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) <> 0
       then
         Res := 0;
   end;
@@ -316,7 +319,10 @@ begin
   X := GetBits(StreamInfo^.Option, 0, 3);
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
-  Buffer := Funcs^.Allocator(Instance, StreamInfo^.NewSize);
+  // fix lzo: lzo*_compress NO acota la salida -> reservar el peor caso LZO
+  // (n + n/16 + 64 + 3) para evitar overrun en payloads poco compresibles.
+  Buffer := Funcs^.Allocator(Instance, StreamInfo^.NewSize +
+    (StreamInfo^.NewSize shr 4) + 67);
   SOList[Instance][X].Index := 0;
   while SOList[Instance][X].Get(I) >= 0 do
   begin
@@ -343,8 +349,8 @@ begin
               Params := 'l' + I.ToString + ':' + 'v' +
                 GetBits(StreamInfo^.Option, 7, 12).ToString;
               if not Result then
-                if not lzo1x_999_compress_level(NewInput, StreamInfo^.NewSize,
-                  Buffer, @Res1, WrkMem[Instance], nil, 0, nil, I) = 0 then
+                if lzo1x_999_compress_level(NewInput, StreamInfo^.NewSize,
+                  Buffer, @Res1, WrkMem[Instance], nil, 0, nil, I) <> 0 then
                   Res1 := 0;
             end;
         end;
@@ -354,8 +360,8 @@ begin
             begin
               Params := 'v' + GetBits(StreamInfo^.Option, 7, 12).ToString;
               if not Result then
-                if not lzo2a_999_compress(NewInput, StreamInfo^.NewSize, Buffer,
-                  @Res1, WrkMem[Instance]) = 0 then
+                if lzo2a_999_compress(NewInput, StreamInfo^.NewSize, Buffer,
+                  @Res1, WrkMem[Instance]) <> 0 then
                   Res1 := 0;
             end;
         end;
@@ -365,8 +371,8 @@ begin
             begin
               Params := 'v' + GetBits(StreamInfo^.Option, 7, 12).ToString;
               if not Result then
-                if not lzo1c_999_compress(NewInput, StreamInfo^.NewSize, Buffer,
-                  @Res1, WrkMem[Instance]) = 0 then
+                if lzo1c_999_compress(NewInput, StreamInfo^.NewSize, Buffer,
+                  @Res1, WrkMem[Instance]) <> 0 then
                   Res1 := 0;
             end;
         end;
@@ -400,7 +406,8 @@ begin
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
   Params := '';
-  Buffer := Funcs^.Allocator(Instance, StreamInfo.NewSize);
+  Buffer := Funcs^.Allocator(Instance, StreamInfo.NewSize +
+    (StreamInfo.NewSize shr 4) + 67);
   if not Assigned(WrkMem[Instance]) then
     WrkMem[Instance] := GetMemory(L_WORKMEM);
   Res1 := StreamInfo.NewSize;
@@ -411,9 +418,9 @@ begin
           begin
             Params := 'l' + GetBits(StreamInfo.Option, 3, 4).ToString + ':' +
               'v' + GetBits(StreamInfo.Option, 7, 12).ToString;
-            if not lzo1x_999_compress_level(Input, StreamInfo.NewSize, Buffer,
+            if lzo1x_999_compress_level(Input, StreamInfo.NewSize, Buffer,
               @Res1, WrkMem[Instance], nil, 0, nil, GetBits(StreamInfo.Option,
-              3, 4)) = 0 then
+              3, 4)) <> 0 then
               Res1 := 0;
           end;
       end;
@@ -422,8 +429,8 @@ begin
         LZO2A_999:
           begin
             Params := 'v' + GetBits(StreamInfo.Option, 7, 12).ToString;
-            if not lzo2a_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
-              WrkMem[Instance]) = 0 then
+            if lzo2a_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
+              WrkMem[Instance]) <> 0 then
               Res1 := 0;
           end;
       end;
@@ -435,8 +442,8 @@ begin
             // fix lzo (0.9.0): el restore de lzo1c llamaba a lzo2a_999_compress
             // (copy/paste); el encode (LZOProcess) usa lzo1c_999_compress -> los bytes
             // no coincidian y el stream lzo1c nunca se reconstruia. Ahora simetrico.
-            if not lzo1c_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
-              WrkMem[Instance]) = 0 then
+            if lzo1c_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
+              WrkMem[Instance]) <> 0 then
               Res1 := 0;
           end;
       end;

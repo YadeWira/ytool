@@ -19,7 +19,8 @@ trap 'rm -rf "$WORK"' EXIT
 # metodos a probar contra CADA archivo (la reversibilidad debe valer en todos)
 # "-mzlib -dd" ejercita la deduplicacion (path DD de encode y decode); en 23_dup_streams.bin
 # encuentra duplicados reales, en el resto pasa de largo (dedup vacio, igualmente reversible).
-METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -a zstd")
+# "-mlzo1x" ejercita el codec lzo (encode+decode) sobre 50_lzo1x.bin si se genero (ver abajo).
+METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -a zstd" "-mlzo1x")
 
 fail=0; pass=0
 echo "== ytool regression =="
@@ -37,6 +38,14 @@ fi
 
 # 2) corpus -----------------------------------------------------------------
 python3 tests/gen_corpus.py "$CORPUS" >/dev/null || { echo "FALLO gen_corpus"; exit 3; }
+# lzo1x: si hay gcc + liblzo2, compila el generador y crea un stream lzo1x DETECTABLE
+# (cubre el codec lzo, que antes no tenia test). Si falta, se omite y -mlzo1x corre en el
+# resto del corpus (0 streams -> literal -> igualmente reversible).
+if command -v gcc >/dev/null 2>&1 && \
+   gcc -O2 tests/lzo_gen.c -o "$WORK/lzo_gen" -l:liblzo2.so.2 >/dev/null 2>&1; then
+  "$WORK/lzo_gen" 200000 "$CORPUS/50_lzo1x.bin" >/dev/null 2>&1 \
+    && echo "-- lzo: 50_lzo1x.bin generado (codec lzo1x cubierto) --"
+fi
 if [ "${FULL:-0}" = "1" ] && [ -f "$ROOT/test-files2.tar" ]; then
   echo "-- FULL: anadiendo slice de test-files2.tar (300MB) --"
   head -c 300000000 "$ROOT/test-files2.tar" > "$CORPUS/40_realworld_300m.bin"
