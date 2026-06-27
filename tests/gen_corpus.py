@@ -97,6 +97,23 @@ def main():
         big += rng_bytes(40000, SEED + len(big))
     write(d, '30_over_chunk_20m.bin', bytes(big))
 
+    # --- WAV PCM (RIFF): ejercita los codecs de audio (flac/wavpack detectan RIFF,
+    #     decodifican a PCM y recomprimen lossless; restore reproduce el WAV exacto) ---
+    ch, bits, rate, nframes = 2, 16, 44100, 40000
+    block_align = ch * bits // 8
+    byte_rate = rate * block_align
+    pcm = bytearray()
+    y = 0x1234
+    for _ in range(nframes * ch):
+        y ^= (y << 7) & 0xFFFFFFFF
+        y ^= y >> 9
+        pcm += struct.pack('<h', (y % 20000) - 10000)
+    wav = (b'RIFF' + struct.pack('<I', 36 + len(pcm)) + b'WAVE'
+           + b'fmt ' + struct.pack('<IHHIIHH', 16, 1, ch, rate, byte_rate,
+                                    block_align, bits)
+           + b'data' + struct.pack('<I', len(pcm)) + bytes(pcm))
+    write(d, '60_wav_pcm.bin', wav)
+
     files = sorted(os.listdir(d))
     print('corpus generado en %s: %d archivos' % (d, len(files)))
     for f in files:

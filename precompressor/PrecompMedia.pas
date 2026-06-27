@@ -5,7 +5,7 @@ unit PrecompMedia;
 interface
 
 uses
-  BrunsliDLL, FLACDLL, PackJPGDLL, PackMP3DLL, JoJpegDLL,
+  BrunsliDLL, FLACDLL, PackJPGDLL, PackMP3DLL, JoJpegDLL, WavPackDLL,
   Utils,
   PrecompUtils,
   SysUtils, Classes, Math;
@@ -17,13 +17,14 @@ implementation
 
 const
   MediaCodecs: array of PChar = ['flac', 'packjpg', 'brunsli', 'jojpeg',
-    'packmp3'];
-  CODEC_COUNT = 5;
+    'packmp3', 'wavpack'];
+  CODEC_COUNT = 6;
   FLAC_CODEC = 0;
   PACKJPG_CODEC = 1;
   BRUNSLI_CODEC = 2;
   JOJPEG_CODEC = 3;
   MP3_CODEC = 4;
+  WAVPACK_CODEC = 5;
 
 const
   FLAC_LEVEL = 5;
@@ -43,10 +44,25 @@ type
     Input, Output: TMemoryStreamEx;
   end;
 
+  PWvEncCD = ^TWvEncCD;
+
+  TWvEncCD = record
+    Output: TMemoryStreamEx;
+    Error: Boolean;
+  end;
+
+  PWvDecCD = ^TWvDecCD;
+
+  TWvDecCD = record
+    Input: TMemoryStreamEx;
+  end;
+
 var
   cctx, dctx: array of Pointer;
   ccd: array of TFlacEncCD;
   dcd: array of TFlacDecCD;
+  wvenc: array of TWvEncCD;
+  wvdec: array of TWvDecCD;
   JJInst: TArray<Pointer>;
   FlacLevel: Integer = FLAC_LEVEL;
   CodecAvailable, CodecEnabled: TArray<Boolean>;
@@ -291,6 +307,203 @@ begin
   end;
 end;
 
+// ── WavPack (codec lossless de audio, mismo modelo que FLAC: WAV->wv reversible) ──
+function WvBlockOutCB(id, data: Pointer; bcount: Integer): Integer cdecl;
+begin
+  try
+    PWvEncCD(id)^.Output.WriteBuffer(data^, bcount);
+    Result := 1;
+  except
+    PWvEncCD(id)^.Error := True;
+    Result := 0;
+  end;
+end;
+
+function WvReadCB(id, data: Pointer; bcount: Integer): Integer cdecl;
+begin
+  Result := PWvDecCD(id)^.Input.Read(data^, bcount);
+end;
+
+function WvGetPosCB(id: Pointer): Int64 cdecl;
+begin
+  Result := PWvDecCD(id)^.Input.Position;
+end;
+
+function WvSetPosAbsCB(id: Pointer; pos: Int64): Integer cdecl;
+begin
+  PWvDecCD(id)^.Input.Position := pos;
+  Result := 0;
+end;
+
+function WvSetPosRelCB(id: Pointer; delta: Int64; mode: Integer): Integer cdecl;
+begin
+  PWvDecCD(id)^.Input.Seek(delta, TSeekOrigin(mode));
+  Result := 0;
+end;
+
+function WvPushBackCB(id: Pointer; c: Integer): Integer cdecl;
+begin
+  PWvDecCD(id)^.Input.Position := PWvDecCD(id)^.Input.Position - 1;
+  Result := c;
+end;
+
+function WvGetLenCB(id: Pointer): Int64 cdecl;
+begin
+  Result := PWvDecCD(id)^.Input.Size;
+end;
+
+function WvCanSeekCB(id: Pointer): Integer cdecl;
+begin
+  Result := 1;
+end;
+
+function WavpackDecode(cd: PWvDecCD; InBuff: PByte; InSize: Integer;
+  OutBuff: PByte; OutSize: Integer): Integer;
+const
+  READSIZE = 4096;
+var
+  reader: TWavpackStreamReader64;
+  wpc: Pointer;
+  err: array [0 .. 127] of AnsiChar;
+  ch, bytes_ps: Integer;
+  got, I: Cardinal;
+  sbuf: TArray<Integer>;
+  outp: PByte;
+begin
+  Result := 0;
+  cd^.Input.Update(InBuff, InSize);
+  cd^.Input.Position := 0;
+  cd^.Input.Size := InSize;
+  FillChar(reader, SizeOf(reader), 0);
+  reader.read_bytes := @WvReadCB;
+  reader.get_pos := @WvGetPosCB;
+  reader.set_pos_abs := @WvSetPosAbsCB;
+  reader.set_pos_rel := @WvSetPosRelCB;
+  reader.push_back_byte := @WvPushBackCB;
+  reader.get_length := @WvGetLenCB;
+  reader.can_seek := @WvCanSeekCB;
+  FillChar(err, SizeOf(err), 0);
+  wpc := WavpackOpenFileInputEx64(@reader, cd, nil, @err[0], 0, 0);
+  if wpc = nil then
+    exit;
+  try
+    ch := WavpackGetNumChannels(wpc);
+    bytes_ps := WavpackGetBytesPerSample(wpc);
+    if (ch <= 0) or (bytes_ps <= 0) then
+      exit;
+    outp := OutBuff;
+    SetLength(sbuf, READSIZE * ch);
+    while True do
+    begin
+      got := WavpackUnpackSamples(wpc, @sbuf[0], READSIZE);
+      if got = 0 then
+        break;
+      for I := 0 to (got * Cardinal(ch)) - 1 do
+      begin
+        if NativeInt(outp - OutBuff) + bytes_ps > OutSize then
+          break;
+        Move(sbuf[I], outp^, bytes_ps);
+        Inc(outp, bytes_ps);
+      end;
+      if got < READSIZE then
+        break;
+    end;
+    Result := outp - OutBuff;
+  finally
+    WavpackCloseFile(wpc);
+  end;
+end;
+
+function WavpackEncode(ecd: PWvEncCD; dcd: PWvDecCD; InBuff: PByte;
+  InSize: Integer; OutBuff: PByte; OutSize: Integer): Integer;
+const
+  READSIZE = 4096;
+var
+  I, J, X: Integer;
+  Ptr: PByte;
+  wave_hdr: TWAVE_hdr;
+  byte_per_sample: Word;
+  data_size, hdr_size, smp_size: Cardinal;
+  total: Int64;
+  wpc: Pointer;
+  cfg: TWavpackConfig;
+  pcm: TArray<Integer>;
+  vbuf: TArray<Byte>;
+  ok: Boolean;
+begin
+  Result := 0;
+  if not GetWAVEInfo(InBuff, InSize, @wave_hdr, @data_size, @hdr_size) then
+    exit;
+  byte_per_sample := (wave_hdr.bits_per_sample + 7) div 8;
+  smp_size := wave_hdr.num_channels * byte_per_sample;
+  if smp_size = 0 then
+    exit;
+  total := data_size div smp_size;
+  ecd^.Error := False;
+  ecd^.Output.Update(OutBuff, OutSize);
+  ecd^.Output.Size := 0;
+  wpc := WavpackOpenFileOutput(@WvBlockOutCB, ecd, nil);
+  if wpc = nil then
+    exit;
+  ok := True;
+  try
+    FillChar(cfg, SizeOf(cfg), 0);
+    cfg.bytes_per_sample := byte_per_sample;
+    cfg.bits_per_sample := wave_hdr.bits_per_sample;
+    cfg.num_channels := wave_hdr.num_channels;
+    cfg.sample_rate := wave_hdr.sample_rate;
+    if WavpackSetConfiguration64(wpc, @cfg, total, nil) = 0 then
+      exit;
+    if WavpackPackInit(wpc) = 0 then
+      exit;
+    Ptr := InBuff + hdr_size;
+    SetLength(pcm, READSIZE * wave_hdr.num_channels);
+    while True do
+    begin
+      X := 0;
+      for I := 0 to READSIZE - 1 do
+      begin
+        if NativeInt(Ptr + smp_size - InBuff) > hdr_size + data_size then
+          break;
+        Inc(X);
+        for J := 0 to wave_hdr.num_channels - 1 do
+        begin
+          pcm[I * wave_hdr.num_channels + J] :=
+            GetBits(PInteger(Ptr)^, 0, Pred(wave_hdr.bits_per_sample)) -
+            IfThen(GetBits(PInteger(Ptr)^, Pred(wave_hdr.bits_per_sample),
+            1) = 0, 0, 1 shl Pred(wave_hdr.bits_per_sample));
+          Inc(Ptr, byte_per_sample);
+        end;
+      end;
+      if X > 0 then
+        if WavpackPackSamples(wpc, @pcm[0], X) = 0 then
+        begin
+          ok := False;
+          break;
+        end;
+      if (NativeInt(Ptr + smp_size - InBuff) > hdr_size + data_size) or (X = 0)
+      then
+        break;
+    end;
+    if ok then
+      if WavpackFlushSamples(wpc) = 0 then
+        ok := False;
+  finally
+    WavpackCloseFile(wpc);
+  end;
+  if (not ok) or ecd^.Error or (ecd^.Output.Size <= 0) then
+    exit;
+  // VERIFY (libwavpack no tiene set_verify como FLAC): decodificar el .wv recien
+  // creado y exigir que reproduzca EXACTO el PCM original; si no, fallar -> literal.
+  SetLength(vbuf, data_size);
+  if data_size > 0 then
+    if (WavpackDecode(dcd, OutBuff, ecd^.Output.Size, @vbuf[0], data_size)
+      <> Integer(data_size)) or
+      (not CompareMem(@vbuf[0], InBuff + hdr_size, data_size)) then
+      exit;
+  Result := ecd^.Output.Size;
+end;
+
 const
   JPG_HEADER = $D8FF;
   JPG_FOOTER = $D9FF;
@@ -477,6 +690,7 @@ begin
   CodecAvailable[BRUNSLI_CODEC] := BrunsliDLL.DLLLoaded;
   CodecAvailable[JOJPEG_CODEC] := JoJpegDLL.DLLLoaded;
   CodecAvailable[MP3_CODEC] := PackMP3DLL.DLLLoaded;
+  CodecAvailable[WAVPACK_CODEC] := WavPackDLL.DLLLoaded;
   X := 0;
   while Funcs^.GetCodec(Command, X, False) <> '' do
   begin
@@ -498,8 +712,22 @@ begin
       CodecEnabled[JOJPEG_CODEC] := True
     else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
     then
-      CodecEnabled[MP3_CODEC] := True;
+      CodecEnabled[MP3_CODEC] := True
+    else if (CompareText(S, MediaCodecs[WAVPACK_CODEC]) = 0) and
+      WavPackDLL.DLLLoaded then
+      CodecEnabled[WAVPACK_CODEC] := True;
     Inc(X);
+  end;
+  if CodecAvailable[WAVPACK_CODEC] then
+  begin
+    SetLength(wvenc, Count);
+    SetLength(wvdec, Count);
+    for X := Low(wvenc) to High(wvenc) do
+    begin
+      wvenc[X].Output := TMemoryStreamEx.Create(False);
+      wvenc[X].Error := False;
+      wvdec[X].Input := TMemoryStreamEx.Create(False);
+    end;
   end;
   if CodecAvailable[FLAC_CODEC] then
   begin
@@ -541,6 +769,12 @@ begin
       dcd[X].Output.Free;
     end;
   end;
+  if CodecAvailable[WAVPACK_CODEC] then
+    for X := Low(wvenc) to High(wvenc) do
+    begin
+      wvenc[X].Output.Free;
+      wvdec[X].Input.Free;
+    end;
   if CodecAvailable[JOJPEG_CODEC] then
     for X := Low(JJInst) to High(JJInst) do
       if Assigned(JJInst[X]) then
@@ -587,6 +821,12 @@ begin
     begin
       SetBits(Option^, MP3_CODEC, 0, 3);
       Result := True;
+    end
+    else if (CompareText(S, MediaCodecs[WAVPACK_CODEC]) = 0) and
+      WavPackDLL.DLLLoaded then
+    begin
+      SetBits(Option^, WAVPACK_CODEC, 0, 3);
+      Result := True;
     end;
     Inc(I);
   end;
@@ -609,7 +849,8 @@ begin
   Pos := 0;
   while Pos < Size do
   begin
-    if CodecEnabled[FLAC_CODEC] and (PCardinal(Input + Pos)^ = RIFF_SIGN) then
+    if (CodecEnabled[FLAC_CODEC] or CodecEnabled[WAVPACK_CODEC]) and
+      (PCardinal(Input + Pos)^ = RIFF_SIGN) then
     begin
       Y := SizeEx - Pos;
       if GetWAVEInfo(Input + Pos, Y, @wave_hdr, @data_size, @hdr_size) then
@@ -631,7 +872,10 @@ begin
         SI.OldSize := Y;
         SI.NewSize := Z;
         SI.Option := 0;
-        SetBits(SI.Option, FLAC_CODEC, 0, 3);
+        if CodecEnabled[FLAC_CODEC] then
+          SetBits(SI.Option, FLAC_CODEC, 0, 3)
+        else
+          SetBits(SI.Option, WAVPACK_CODEC, 0, 3);
         SI.Status := TStreamStatus.None;
         Funcs^.LogScan1(MediaCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
           SI.OldSize, -1);
@@ -716,7 +960,7 @@ begin
     exit;
   Y := StreamInfo^.OldSize;
   case X of
-    FLAC_CODEC:
+    FLAC_CODEC, WAVPACK_CODEC:
       begin
         if GetWAVEInfo(Input, Y, @wave_hdr, @data_size, @hdr_size) then
           Y := data_size + hdr_size
@@ -743,7 +987,7 @@ begin
   if Y > 0 then
   begin
     Z := data_size;
-    if X = FLAC_CODEC then
+    if (X = FLAC_CODEC) or (X = WAVPACK_CODEC) then
     begin
       Buffer := Funcs^.Allocator(Instance, hdr_size);
       Move(Input^, Buffer^, hdr_size);
@@ -789,6 +1033,18 @@ begin
         Res := StreamInfo.NewSize - Y;
         Res := FlacEncode(cctx[Instance], @ccd[Instance], OldInput,
           StreamInfo^.OldSize, PByte(NewInput) + Y, Res, FlacLevel);
+        if (Res > 0) and (Res + Y < StreamInfo^.NewSize) then
+        begin
+          StreamInfo^.NewSize := Res + Y;
+          Result := True;
+        end;
+      end;
+    WAVPACK_CODEC:
+      begin
+        Y := Integer.Size + PInteger(NewInput)^;
+        Res := StreamInfo.NewSize - Y;
+        Res := WavpackEncode(@wvenc[Instance], @wvdec[Instance], OldInput,
+          StreamInfo^.OldSize, PByte(NewInput) + Y, Res);
         if (Res > 0) and (Res + Y < StreamInfo^.NewSize) then
         begin
           StreamInfo^.NewSize := Res + Y;
@@ -929,6 +1185,23 @@ begin
         Res := StreamInfo.OldSize;
         Res := FlacDecode(dctx[Instance], @dcd[Instance], PByte(Input) + Y,
           StreamInfo.NewSize - Y, Buffer + PInteger(Input)^, Res);
+        if Res > 0 then
+        begin
+          Move((PByte(Input) + Integer.Size)^, Buffer^, PInteger(Input)^);
+          Inc(Res, PInteger(Input)^);
+          Dec(PInteger(Buffer)^);
+          Result := True;
+        end;
+        if Result then
+          Output(Instance, Buffer, Res);
+      end;
+    WAVPACK_CODEC:
+      begin
+        Buffer := Funcs^.Allocator(Instance, StreamInfo.OldSize);
+        Y := Integer.Size + PInteger(Input)^;
+        Res := WavpackDecode(@wvdec[Instance], PByte(Input) + Y,
+          StreamInfo.NewSize - Y, Buffer + PInteger(Input)^,
+          StreamInfo.OldSize - PInteger(Input)^);
         if Res > 0 then
         begin
           Move((PByte(Input) + Integer.Size)^, Buffer^, PInteger(Input)^);
