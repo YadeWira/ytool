@@ -768,17 +768,13 @@ begin
 end;
 
 procedure WriteLine(S: String);
-{$IFDEF MSWINDOWS}
-var
-  ulLength: cardinal;
-{$ENDIF}
 begin
-{$IFDEF MSWINDOWS}
-  WriteConsole(GetStdHandle(STD_ERROR_HANDLE), PChar(S + #13#10),
-    Length(S + #13#10), ulLength, nil);
-{$ELSE}
+  // WriteConsole(GetStdHandle(STD_ERROR_HANDLE),...) exigia un handle de consola
+  // real; sobre SSH sin pty (o con stdout/stderr redirigido a archivo/pipe) ese
+  // handle es un pipe/archivo y WriteConsole fallaba en silencio (sin excepcion,
+  // sin output, exit 0). WriteLn(ErrOutput,...) es igual de valido con consola real
+  // y ademas funciona redirigido -> mismo camino que Unix.
   WriteLn(ErrOutput, S);
-{$ENDIF}
 end;
 
 function GetModuleName: string;
