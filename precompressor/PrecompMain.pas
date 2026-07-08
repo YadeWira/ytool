@@ -189,7 +189,7 @@ begin
   WriteLine('  -db# - decode block size [512mb]');
   WriteLine('  -sp# - srep parameters (separate params with ":")');
   WriteLine('  -p#  - prefetch cache [0mb]');
-  WriteLine('  -a#  - assign streams detected to another codec');
+  WriteLine('  -r#  - reassign streams detected to another codec');
   WriteLine('');
   WriteLine('  -lz4#, -zstd#, -oodle# - specify custom library name');
   WriteLine('');
@@ -424,7 +424,9 @@ begin
     EXTCOMP := ArgParse.AsString('-e');
     if FileExists(ExpandPath(PluginsPath + ExtractExec(EXTCOMP), True)) then
       COMPRESS := 2;
-    REASSIGN := ReplaceStr(ArgParse.AsString('-a'), SPrecompSep3, SPrecompSep2);
+    // 0.9.7: la feature reassign stream pasa a usar -r (antes -a). -r quedo libre al
+    // quitar recompress stream en 0.9.1 (ver task #18).
+    REASSIGN := ReplaceStr(ArgParse.AsString('-r'), SPrecompSep3, SPrecompSep2);
   finally
     ArgParse.Free;
     ExpParse.Free;
