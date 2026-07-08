@@ -114,8 +114,6 @@ const
   CommandErase = 'erase';
   CommandReplace = 'replace';
   CommandExtract = 'extract';
-  CommandPatch = 'patch';
-  CommandArchive = 'archive';
   CommandExecute = 'execute';
   CommandDecode = 'decode';
 
@@ -130,13 +128,11 @@ begin
   WriteLine('Available commands:');
   WriteLine('');
   WriteLine('  ' + CommandDecode);
-  WriteLine('  ' + CommandArchive);
   WriteLine('  ' + CommandErase);
   WriteLine('  ' + CommandExecute);
   WriteLine('  ' + CommandExtract);
   WriteLine('  ' + CommandFind);
   WriteLine('  ' + CommandGenerate);
-  WriteLine('  ' + CommandPatch);
   WriteLine('  ' + CommandPrecomp);
   WriteLine('  ' + CommandReplace);
   WriteLine('');
