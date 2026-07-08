@@ -25,45 +25,79 @@ original file — and `decode` reverses the whole pipeline back to the exact ori
 ## Status
 
 Migrated in full: build, native reversibility, dynamic codec loading, and the encode/decode pipeline all run
-on **FPC 3.2.2 (`{$mode delphi}`)**, Linux and Windows, x86-64.
+on **FPC 3.2.2 (`{$mode delphi}`)**, Linux and Windows, x86-64. Every claim below has been verified by an
+actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the platform(s) listed — not just
+"it compiles".
 
-### Codecs operational on Linux
+### Codecs
 
-| Codec | Library | Notes |
-|---|---|---|
-| zlib / deflate | zlib | raw deflate + zlib-header detection |
-| preflate | [deus-libri/preflate](https://github.com/deus-libri/preflate) | reconstructs deflate from any encoder |
-| PNG | zlib + preflate | reassembles multi-chunk `IDAT` streams |
-| JPEG | [packJPG](https://github.com/packjpg/packJPG) | |
-| JPEG (alt) | [brunsli](https://github.com/google/brunsli) | |
-| FLAC / WAV | libFLAC | lossless audio |
-| WavPack / WAV | [libwavpack](https://github.com/dbry/WavPack) | lossless audio |
-| MP3 | [packJPG/packMP3](https://github.com/packjpg/packMP3) | MPEG-1/2 Layer III |
-| LZ4 | liblz4 | |
-| Zstandard | libzstd | |
-| LZO | liblzo2 | lzo1x / lzo1c / lzo2a |
-| fast-lzma2 | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | final-stage compressor |
-| dedup | [Intensity/srep](https://github.com/Intensity/srep) | external deduplication (`-dd#`) |
+| Codec | Library | Linux | Windows |
+|---|---|---|---|
+| zlib / deflate | zlib | ✅ | ✅ (built into the binary) |
+| preflate | [deus-libri/preflate](https://github.com/deus-libri/preflate) | ✅ | ✅ |
+| PNG | zlib + preflate | ✅ | ✅ |
+| JPEG | [packJPG](https://github.com/packjpg/packJPG) | ✅ | ✅ |
+| JPEG (alt) | [brunsli](https://github.com/google/brunsli) | ✅ | ✅ |
+| FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
+| WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
+| MP3 | [packJPG/packMP3](https://github.com/packjpg/packMP3) | ✅ | ✅ |
+| LZ4 | liblz4 | ✅ | ✅ (built into the binary) |
+| Zstandard | libzstd | ✅ | ✅ (built into the binary) |
+| LZO | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ | ✅ |
+| fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
+| dedup, in-memory (`-dd`) | — | ✅ | ✅ |
+| dedup, external (`-dd<N>`) | [Intensity/srep](https://github.com/Intensity/srep) | ✅ | ❌ (`srep` not cross-compiled for Windows yet) |
+| Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
-**Closed / not implementable in an open build:** Oodle (proprietary; loader exists, activates if you supply
-your own `oo2core`/`oo2ext` library) and TAK (no open-source encoder exists anywhere).
+**Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
+reverse-engineered decoder) and `jojpeg` (no known public source at all). Oodle's *codec* is the same story
+(proprietary bitstream, no legally-redistributable open encoder reproduces it) — but the *loader* is open and
+included; if you legally have an `oo2core`/`oo2ext` DLL/.so, drop it next to the binary or point `-oodle<path>`
+at it and the codec activates.
 
-### Changelog coverage (post-0.7.9, recreated from upstream's published notes)
+Prebuilt binaries (Linux tarball + Windows zip, both with every buildable plugin library included) are on the
+[Releases page](https://github.com/YadeWira/ytool/releases).
 
+### Changelog coverage — inherited/recreated from xtool's own published notes (post-0.7.9, up to 0.9.7)
+
+These recreate upstream Razor12911's *own announced* changes, not new design of ours:
+
+- 0.8.0 / 0.8.3 — deduplication performance (decode up to **4.7×** faster; encode array-growth fixed)
 - 0.8.2 — `ceil`/`floor` in the expression parser
 - 0.8.5 — `-X` (extract only unprocessed streams)
-- 0.8.6 / 0.9.1 — reassign-stream fixes (recursion guard, uninitialized-read fix)
-- 0.8.0 / 0.8.3 — deduplication performance (decode up to **4.7x** faster; encode array growth fixed)
+- 0.8.6 / 0.9.1 — reassign-stream fixes (recursion guard on the transfer path, uninitialized-variable fix)
 - 0.9.0 — lzo hardening (buffer sizing, error-code handling)
 - 0.9.1 — removed the `recompress stream` feature
 - 0.9.2 — three low-memory levels (`-lm1`/`-lm2`/`-lm3`)
 - 0.9.6 — stream-coverage telemetry (%), `-oodl#` multi-library loader
 - 0.9.7 — reassign stream moved from `-a` to `-r`
 
-Not recreated: anything requiring proprietary libraries the project can't ship (Oodle's own codec, TAK), or
-upstream syntax that's meaningless without them (`-mzstd=zstd147`-style library-variant pinning).
+Declared **not applicable** to an open build (would need proprietary multi-DLL infrastructure with no open
+equivalent): the `-mzstd=zstd147`-style library-variant pinning syntax.
 
-## Building (Linux)
+### Beyond the changelog — our own fixes, found during this port (not upstream features)
+
+Found and fixed while building/testing this port, not from any xtool release note:
+
+- Removed two dead CLI commands (`patch`, `archive`) that were listed in `--help` but never actually wired to
+  any handler — running them silently did nothing.
+- Fixed `WriteLine` on Windows: it called `WriteConsole()` directly, which silently produces zero output when
+  stdout/stderr isn't a real console (any redirect, pipe, or non-interactive SSH session) — the process would
+  exit 0 having "worked" while emitting nothing.
+- `WavPack` codec is new (xtool's own changelog only ever mentioned wavpack as an *external plugin transfer
+  target*, 0.8.6 — we built it as a first-class codec instead, since no open TAK encoder exists to pair with it).
+
+### Known limitation, not deeply verified
+
+`ytool` also ships xtool's companion binary-patching toolkit: `generate` / `find` / `erase` / `replace` /
+`extract` / `execute`. The `find` → `extract` chain was tested end-to-end and is bit-exact. `erase` and
+`generate` run and produce output but weren't verified beyond that. `replace` showed **inconsistent exit
+codes across identical invocations** in testing (likely a latent concurrency issue in that legacy code path)
+— treat it as unverified until someone investigates further.
+
+## Building
+
+### Linux
 
 Requirements: FPC 3.2.2+, a C compiler (clang++ or g++), `git`, `cmake` (for brunsli).
 
@@ -83,8 +117,23 @@ fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
 System libraries loaded via `dlopen` fallback if the bundled name isn't found: `libz`, `libzstd`, `liblz4`,
 `liblzo2`, `libFLAC`, `libwavpack`.
 
-Windows build: cross-compile the native objects with `contrib/build-native-windows.sh` (mingw-w64, run on
-Linux), then compile on Windows with FPC/Lazarus via `contrib/winbuild.ps1` (same FPC flags as Linux).
+### Windows
+
+Everything is cross-compiled **from Linux** with mingw-w64, then the FPC binary itself is compiled on
+Windows (FPC/Lazarus has no Linux→Windows cross-compiler for this codebase's dependency set):
+
+```bash
+# on Linux:
+bash contrib/build-native-windows.sh    # native lz4/zstd/xxhash objects (mingw-w64)
+bash contrib/build-plugins-windows.sh   # all 8 plugin DLLs (mingw-w64 + cmake)
+# copy the source tree + the .dll files to a Windows machine with FPC/Lazarus 3.2.2, then:
+```
+```powershell
+# on Windows:
+pwsh -File contrib\winbuild.ps1
+```
+
+Requires `x86_64-w64-mingw32-gcc`/`g++` and `cmake` on the Linux side.
 
 ## Usage
 
