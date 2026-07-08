@@ -1,5 +1,5 @@
 { Shim de compatibilidad para System.TimeSpan de Delphi (no existe en FPC).
-  Solo implementa la superficie usada por xtool: Days/Hours/Minutes/Seconds. }
+  Solo implementa la superficie usada por ytool: Days/Hours/Minutes/Seconds. }
 unit TimeSpan;
 
 interface

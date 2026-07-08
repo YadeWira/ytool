@@ -64,7 +64,7 @@ begin
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Usage:');
   WriteLn(ErrOutput,
-    '  xtool generate [parameters] extracted_streams original_data database_output');
+    '  ytool generate [parameters] extracted_streams original_data database_output');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Parameters:');
@@ -296,7 +296,7 @@ begin
     OStream.LoadFromFile(Output)
   else
   begin
-    K := XTOOL_DB;
+    K := YTOOL_DB;
     OStream.WriteBuffer(K, K.Size);
   end;
   OStream.Position := OStream.Size;

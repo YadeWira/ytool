@@ -13,7 +13,7 @@ uses
   Types, Math, IOUtils;
 
 const
-  XTOOL_DB = $31445458;
+  YTOOL_DB = $31445458;
 
 var
   Codec: TPrecompressor;
@@ -275,7 +275,7 @@ begin
     if FStream.Size >= 8 then
     begin
       FStream.ReadBuffer(I32, I32.Size);
-      if (I32 = XTOOL_DB) then
+      if (I32 = YTOOL_DB) then
       begin
         if FStream.Position < FStream.Size then
         begin

@@ -24,9 +24,9 @@ var
     in_size: Integer; out_dest: Pointer; out_type: Integer)cdecl;
   pjglib_version_info: function: PAnsiChar cdecl;
   pjglib_short_name: function: PAnsiChar cdecl;
-  // v4.0e (fork): control de hilos intra-archivo. xtool ya paraleliza por stream,
+  // v4.0e (fork): control de hilos intra-archivo. ytool ya paraleliza por stream,
   // asi que forzamos packjpg a 1 hilo (n=1) para evitar que su spawn de std::thread
-  // choque con el runtime de hilos de xtool. Opcional (puede no existir en DLLs viejas).
+  // choque con el runtime de hilos de ytool. Opcional (puede no existir en DLLs viejas).
   pjglib_set_intra_file_threads: procedure(n: Integer)cdecl;
 
   DLLLoaded: Boolean = False;

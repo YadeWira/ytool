@@ -12,12 +12,12 @@ resourcestring
   SPrecompSep3 = ',';
   SPrecompSep4 = '/';
   SPrecompSep5 = '/';
-  XTOOL_MAPSUF1 = '-tmp';
-  XTOOL_MAPSUF2 = '_mapped.io';
-  XTOOL_MAPSUF3 = '.tmp';
+  YTOOL_MAPSUF1 = '-tmp';
+  YTOOL_MAPSUF2 = '_mapped.io';
+  YTOOL_MAPSUF3 = '.tmp';
 
 const
-  XTOOL_DB = $31445458;
+  YTOOL_DB = $31445458;
 
 type
   PEntryStruct = ^TEntryStruct;

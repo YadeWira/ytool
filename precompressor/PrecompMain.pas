@@ -18,14 +18,14 @@ uses
   Generics.Defaults, Generics.Collections, Character;
 
 const
-  XTOOL_PRECOMP = $304C5458;
-  XTOOL_BSIZE = 4194304;
+  YTOOL_PRECOMP = $304C5458;
+  YTOOL_BSIZE = 4194304;
 {$IFDEF CPU64BITS}
-  XTOOL_MEMLIMIT = Int64.MaxValue;
+  YTOOL_MEMLIMIT = Int64.MaxValue;
 {$ELSE}
-  XTOOL_MEMLIMIT = $60000000;
+  YTOOL_MEMLIMIT = $60000000;
 {$ENDIF}
-  XTOOL_FREEMEM = $40000000;
+  YTOOL_FREEMEM = $40000000;
 
 type
   PEncodeOptions = ^TEncodeOptions;
@@ -166,7 +166,7 @@ begin
   WriteLine('precomp - data precompressor');
   WriteLine('');
   WriteLine('Usage:');
-  WriteLine('  xtool precomp [parameters] input output');
+  WriteLine('  ytool precomp [parameters] input output');
   WriteLine('');
   WriteLine('');
   WriteLine('Parameters:');
@@ -386,8 +386,8 @@ begin
     CACHE := Round(ExpParse.Evaluate(S));
     if not B then
       CACHE := Max(0, CACHE - GetUsedSystemMemory);
-    if CACHE > Max(0, GetFreeSystemMemory - XTOOL_FREEMEM) then
-      CACHE := Max(0, GetFreeSystemMemory - XTOOL_FREEMEM);
+    if CACHE > Max(0, GetFreeSystemMemory - YTOOL_FREEMEM) then
+      CACHE := Max(0, GetFreeSystemMemory - YTOOL_FREEMEM);
 {$ELSE}
     CACHE := 0;
 {$ENDIF}
@@ -483,8 +483,8 @@ begin
     CACHE := Round(ExpParse.Evaluate(S));
     if not B then
       CACHE := Max(0, CACHE - GetUsedSystemMemory);
-    if CACHE > Max(0, GetFreeSystemMemory - XTOOL_FREEMEM) then
-      CACHE := Max(0, GetFreeSystemMemory - XTOOL_FREEMEM);
+    if CACHE > Max(0, GetFreeSystemMemory - YTOOL_FREEMEM) then
+      CACHE := Max(0, GetFreeSystemMemory - YTOOL_FREEMEM);
 {$ELSE}
     CACHE := 0;
 {$ENDIF}
@@ -1667,7 +1667,7 @@ begin
   SetLength(ThreadSync, Options^.Threads);
   for I := Low(ThreadSync) to High(ThreadSync) do
     ThreadSync[I] := TCriticalSection.Create;
-  I := XTOOL_PRECOMP;
+  I := YTOOL_PRECOMP;
   Output.WriteBuffer(I, I.Size);
   if UseDB then
   begin
@@ -2020,7 +2020,7 @@ begin
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
           '-m' + StoreDD.ToString + T + ' - -', GetCurrentDir, nil, Output,
-          ErrStream), False, XTOOL_BSIZE);
+          ErrStream), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
       end
       else
@@ -2030,7 +2030,7 @@ begin
       LOutput := TBufferedStream.Create
         (TFileStream.Create
         (LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
-        '-dd.tmp')), fmCreate or fmShareDenyNone), False, XTOOL_BSIZE)
+        '-dd.tmp')), fmCreate or fmShareDenyNone), False, YTOOL_BSIZE)
     else
       LOutput := Output;
     TempOutput := TCacheWriteStream.Create(LOutput, LCache);
@@ -2562,8 +2562,8 @@ begin
   else
     Result := Max(0, DupSysMem - GetUsedSystemMemory);
   Result := Min(Result,
-    Max(0, Min(XTOOL_MEMLIMIT - GetUsedProcessMemory({$IFDEF MSWINDOWS}GetCurrentProcess{$ELSE}0{$ENDIF}),
-    GetFreeSystemMemory - XTOOL_FREEMEM)));
+    Max(0, Min(YTOOL_MEMLIMIT - GetUsedProcessMemory({$IFDEF MSWINDOWS}GetCurrentProcess{$ELSE}0{$ENDIF}),
+    GetFreeSystemMemory - YTOOL_FREEMEM)));
 end;
 
 var
@@ -2970,7 +2970,7 @@ begin
       if Assigned(LCache) then
         DecInput[Index] := TCacheReadStream.Create(LStream2, LCache)
       else
-        DecInput[Index] := TBufferedStream.Create(LStream2, True, XTOOL_BSIZE);
+        DecInput[Index] := TBufferedStream.Create(LStream2, True, YTOOL_BSIZE);
     end
     else if Depth = 0 then
       DecInput[Index] := TCacheReadStream.Create(Input, LCache)
@@ -3346,7 +3346,7 @@ begin
             LOutput := TBufferedStream.Create
               (TProcessStream.Create(ExpandPath(PluginsPath +
               ExtractExec(EXTCOMP), True), ExtractParams(EXTCOMP),
-              GetCurrentDir, nil, Output), False, XTOOL_BSIZE);
+              GetCurrentDir, nil, Output), False, YTOOL_BSIZE);
             TProcessStream(TBufferedStream(LOutput).Instance).Execute;
           end;
       end;

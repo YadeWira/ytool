@@ -7,11 +7,11 @@ uses
   Generics.Defaults, Generics.Collections;
 
 const
-  XTOOL_IODEC = $314C5458;
-  XTOOL_EXEC = $324C5458;
-  XTOOL_MAPSUF1 = '-tmp';
-  XTOOL_MAPSUF2 = '_mapped.io';
-  XTOOL_MAPSUF3 = '.tmp';
+  YTOOL_IODEC = $314C5458;
+  YTOOL_EXEC = $324C5458;
+  YTOOL_MAPSUF1 = '-tmp';
+  YTOOL_MAPSUF2 = '_mapped.io';
+  YTOOL_MAPSUF3 = '.tmp';
 
 type
   PEntryStruct1 = ^TEntryStruct1;

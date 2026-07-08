@@ -58,7 +58,7 @@ begin
   WriteLn(ErrOutput, 'execute - parallel program execution');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput, '  xtool execute [parameters] input output [exec_syntax]');
+  WriteLn(ErrOutput, '  ytool execute [parameters] input output [exec_syntax]');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Parameters:');
@@ -305,7 +305,7 @@ var
   end;
 
 begin
-  I := XTOOL_EXEC;
+  I := YTOOL_EXEC;
   Output.WriteBuffer(I, I.Size);
   Init(ParamArg, @LCtx, False);
   SetLength(WorkDir, Options.Threads);
@@ -315,7 +315,7 @@ begin
   begin
     WorkDir[I] := IncludeTrailingPathDelimiter(GetCurrentDir) +
       LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
-      '_' + Random($7FFFFFFF).ToHexString + XTOOL_MAPSUF1));
+      '_' + Random($7FFFFFFF).ToHexString + YTOOL_MAPSUF1));
     CreateDir(WorkDir[I]);
     Tasks[I] := TTask.Create(I, IntPtr(@LCtx), IntPtr(@WorkDir[I]),
       IntPtr(@State[I]));
@@ -431,7 +431,7 @@ begin
   begin
     WorkDir[I] := IncludeTrailingPathDelimiter(GetCurrentDir) +
       LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
-      '_' + Random($7FFFFFFF).ToHexString + XTOOL_MAPSUF1));
+      '_' + Random($7FFFFFFF).ToHexString + YTOOL_MAPSUF1));
     CreateDir(WorkDir[I]);
     Tasks[I] := TTask.Create(I, IntPtr(@LCtx), IntPtr(@WorkDir[I]),
       IntPtr(@State[I]));

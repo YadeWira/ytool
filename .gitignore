@@ -5,8 +5,8 @@
 contrib/.csrc/
 link*.res
 # Nota: contrib/*/*.linux.x64.o se regeneran con contrib/build-native-linux.sh
-/xtool
-/xtool.exe
+/ytool
+/ytool.exe
 srep64
 libpackjpg.so
 libpreflate.so
@@ -18,4 +18,6 @@ libpackmp3.so
 test-files2.tar
 test-files*.tar
 CONEXION-IA.md
-xtool_base
+ytool_base
+# DLLs Windows construidas localmente (contrib/build-plugins-windows.sh), regenerables
+*.dll

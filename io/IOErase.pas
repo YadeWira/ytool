@@ -57,7 +57,7 @@ begin
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Usage:');
   WriteLn(ErrOutput,
-    '  xtool erase [parameters] extracted_streams original_data [decode_data]');
+    '  ytool erase [parameters] extracted_streams original_data [decode_data]');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Parameters:');
@@ -225,7 +225,7 @@ begin
     OStream.LoadFromFile(Output)
   else
   begin
-    K := XTOOL_IODEC;
+    K := YTOOL_IODEC;
     OStream.WriteBuffer(K, K.Size);
   end;
   OStream.Position := OStream.Size;

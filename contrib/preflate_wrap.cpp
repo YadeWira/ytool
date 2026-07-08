@@ -1,5 +1,5 @@
 // Wrapper C que expone decode/reencode con la firma que espera el plugin
-// preflate_dll de xtool (imports/PreflateDLL.pas), puenteando a la API de
+// preflate_dll de ytool (imports/PreflateDLL.pas), puenteando a la API de
 // vectores de preflate upstream.
 #include <vector>
 #include <cstring>

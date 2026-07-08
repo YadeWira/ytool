@@ -74,27 +74,27 @@ bash contrib/build-native-linux.sh
 # 2. optional plugins (srep, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so/exe
 bash contrib/build-plugins-linux.sh
 
-# 3. the xtool binary
+# 3. the ytool binary
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
   -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oxtool xtool.dpr
+  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oytool ytool.dpr
 ```
 
 System libraries loaded via `dlopen` fallback if the bundled name isn't found: `libz`, `libzstd`, `liblz4`,
 `liblzo2`, `libFLAC`, `libwavpack`.
 
-Windows build: see `contrib/build-native-windows.sh` and `winbuild.ps1` (cross-compiled/tested against a
-Windows 10 VM; same FPC flags).
+Windows build: cross-compile the native objects with `contrib/build-native-windows.sh` (mingw-w64, run on
+Linux), then compile on Windows with FPC/Lazarus via `contrib/winbuild.ps1` (same FPC flags as Linux).
 
 ## Usage
 
 ```bash
-./xtool precomp -mzlib+zstd input.bin output.pmp    # precompress with zlib and zstd detectors
-./xtool decode output.pmp restored.bin               # bit-exact restore
+./ytool precomp -mzlib+zstd input.bin output.pmp    # precompress with zlib and zstd detectors
+./ytool decode output.pmp restored.bin               # bit-exact restore
 cmp input.bin restored.bin                           # always identical
 ```
 
-Run `./xtool precomp` with no arguments for the full flag reference.
+Run `./ytool precomp` with no arguments for the full flag reference.
 
 ## Testing
 

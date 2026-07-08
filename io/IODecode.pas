@@ -46,7 +46,7 @@ begin
   WriteLn(ErrOutput, '');
   WriteLn(ErrOutput, 'Usage:');
   WriteLn(ErrOutput,
-    '  xtool extract decode_data original_data extracted_streams ');
+    '  ytool extract decode_data original_data extracted_streams ');
   WriteLn(ErrOutput, '');
 end;
 

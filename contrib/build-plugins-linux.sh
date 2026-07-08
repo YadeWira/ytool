@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Construye los plugins/codecs externos de ytool para Linux x86-64 desde fuente
 # abierta y los deja como .so / binarios en la raiz del repo (junto al ejecutable
-# xtool, que es el PluginsPath por defecto). Estos artefactos estan gitignored
+# ytool, que es el PluginsPath por defecto). Estos artefactos estan gitignored
 # (regenerables). Distintos de contrib/build-native-linux.sh, que hace los objetos
 # C estaticos (lz4/zstd/xxhash) enlazados dentro del binario.
 #

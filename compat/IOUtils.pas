@@ -1,5 +1,5 @@
 { Shim de compatibilidad para System.IOUtils de Delphi (no existe en FPC).
-  Solo implementa la superficie usada por xtool: TPath.GetFullPath,
+  Solo implementa la superficie usada por ytool: TPath.GetFullPath,
   TDirectory.GetFiles (forma de 3 args) y TDirectory.Delete. Las rutas
   devueltas por GetFiles son completas, como en Delphi. }
 unit IOUtils;

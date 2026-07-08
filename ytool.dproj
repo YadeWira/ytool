@@ -3,7 +3,7 @@
         <ProjectGuid>{E490A6E6-3D5F-49E7-860E-CB57A73FBF77}</ProjectGuid>
         <ProjectVersion>19.5</ProjectVersion>
         <FrameworkType>None</FrameworkType>
-        <MainSource>xtool.dpr</MainSource>
+        <MainSource>ytool.dpr</MainSource>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Release</Config>
         <Platform Condition="'$(Platform)'==''">Win64</Platform>
@@ -54,7 +54,7 @@
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
-        <SanitizedProjectName>xtool</SanitizedProjectName>
+        <SanitizedProjectName>ytool</SanitizedProjectName>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Linux64)'!=''">
         <DCC_UnitSearchPath>$(fmxlinux)\Lib\$(ProductVersion)\$(Config);$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
@@ -90,7 +90,7 @@
         <VerInfo_Locale>7177</VerInfo_Locale>
         <Manifest_File>(None)</Manifest_File>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=0.0.0.0;InternalName=;LegalCopyright=Razor12911;LegalTrademarks=;OriginalFilename=xtool.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.0.0;Comments=Created by Razor12911</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=0.0.0.0;InternalName=;LegalCopyright=Razor12911;LegalTrademarks=;OriginalFilename=ytool.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.0.0;Comments=Created by Razor12911</VerInfo_Keys>
         <VerInfo_MajorVer>0</VerInfo_MajorVer>
         <DCC_PEOSVersion>5.1</DCC_PEOSVersion>
         <DCC_PESubSysVersion>5.1</DCC_PESubSysVersion>
@@ -102,7 +102,7 @@
         <Manifest_File>(None)</Manifest_File>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_MajorVer>0</VerInfo_MajorVer>
-        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=0.0.0.0;InternalName=;LegalCopyright=Razor12911;LegalTrademarks=;OriginalFilename=xtool.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.0.0;Comments=Created by Razor12911</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=0.0.0.0;InternalName=;LegalCopyright=Razor12911;LegalTrademarks=;OriginalFilename=ytool.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.0.0;Comments=Created by Razor12911</VerInfo_Keys>
         <AppDPIAwarenessMode>none</AppDPIAwarenessMode>
         <DCC_PEOSVersion>5.2</DCC_PEOSVersion>
         <DCC_PESubSysVersion>5.2</DCC_PESubSysVersion>
@@ -185,7 +185,7 @@
         <BorlandProject>
             <Delphi.Personality>
                 <Source>
-                    <Source Name="MainSource">xtool.dpr</Source>
+                    <Source Name="MainSource">ytool.dpr</Source>
                 </Source>
                 <Excluded_Packages>
                     <Excluded_Packages Name="$(BDSBIN)\dcloffice2k280.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
@@ -208,23 +208,23 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Linux64\Release\xtool" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Linux64\Release\ytool" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Linux64">
-                        <RemoteName>xtool</RemoteName>
+                        <RemoteName>ytool</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Release\xtool.exe" Configuration="Release" Class="ProjectOutput"/>
-                <DeployFile LocalName="Win32\Release\xtool.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\ytool.exe" Configuration="Release" Class="ProjectOutput"/>
+                <DeployFile LocalName="Win32\Release\ytool.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
-                        <RemoteName>xtool.exe</RemoteName>
+                        <RemoteName>ytool.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win64\Release\xtool.exe" Configuration="Release" Class="ProjectOutput"/>
-                <DeployFile LocalName="Win64\Release\xtool.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win64\Release\ytool.exe" Configuration="Release" Class="ProjectOutput"/>
+                <DeployFile LocalName="Win64\Release\ytool.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win64">
-                        <RemoteName>xtool.exe</RemoteName>
+                        <RemoteName>ytool.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>

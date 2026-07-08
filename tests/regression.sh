@@ -4,14 +4,14 @@
 #
 # Uso:
 #   tests/regression.sh                 # build + corpus sintetico
-#   NO_BUILD=1 tests/regression.sh      # usa el binario ./xtool ya compilado
+#   NO_BUILD=1 tests/regression.sh      # usa el binario ./ytool ya compilado
 #   FULL=1 tests/regression.sh          # ademas, slice de test-files2.tar si existe
 #
 # Sale con codigo !=0 si CUALQUIER round-trip no es bit-exacto.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
-XTOOL="$ROOT/xtool"
+XTOOL="$ROOT/ytool"
 WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
 trap 'rm -rf "$WORK"' EXIT
@@ -29,11 +29,11 @@ echo "== ytool regression =="
 
 # 1) build (salvo NO_BUILD) -------------------------------------------------
 if [ "${NO_BUILD:-0}" != "1" ]; then
-  echo "-- building xtool (linux) --"
+  echo "-- building ytool (linux) --"
   bash contrib/build-native-linux.sh >/dev/null 2>&1 || { echo "FALLO build nativo"; exit 3; }
   fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oxtool xtool.dpr >/dev/null 2>&1 \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oytool ytool.dpr >/dev/null 2>&1 \
     || { echo "FALLO compilacion fpc"; exit 3; }
 fi
 [ -x "$XTOOL" ] || { echo "no existe binario $XTOOL"; exit 3; }

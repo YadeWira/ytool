@@ -593,7 +593,7 @@ end;
 // ID3v2 + frames Layer III consecutivos + opcional ID3v1. Devuelve el tamano total
 // en StreamSize. Conservador (>=2 frames) para evitar falsos positivos con 0xFF
 // sueltos; un fallo solo significa "no se recomprime" (la reversibilidad la
-// garantiza el fallback a literal de xtool).
+// garantiza el fallback a literal de ytool).
 function GetMP3Info(InBuff: PByte; InSize: NativeInt;
   StreamSize: PCardinal): Boolean;
 const

@@ -20,7 +20,7 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE. }
 
-program xtool;
+program ytool;
 
 {$APPTYPE CONSOLE}
 {$R *.res}
@@ -121,7 +121,7 @@ const
 
 procedure ProgramInfo;
 begin
-  WriteLine('XTool is created by Razor12911');
+  WriteLine('ytool - open-source recreation of xtool by Razor12911');
   WriteLine('');
 end;
 
@@ -146,10 +146,10 @@ end;
 
 procedure DecodePrintHelp;
 begin
-  WriteLine('decode - restores data processed by xtool');
+  WriteLine('decode - restores data processed by ytool');
   WriteLine('');
   WriteLine('Usage:');
-  WriteLine('  xtool decode input [decode_data] output');
+  WriteLine('  ytool decode input [decode_data] output');
   WriteLine('');
   WriteLine('Parameters:');
   WriteLine('  t# - number of working threads [Threads/2]');
@@ -486,7 +486,7 @@ begin
         try
           Input.ReadBuffer(I, I.Size);
           case I of
-            XTOOL_IODEC:
+            YTOOL_IODEC:
               begin
                 IODecode.ParseExtract(ParamArg[0], IOExt);
                 IODecode.Extract(Input, ParamArgSafe(1, 1),
@@ -527,7 +527,7 @@ begin
         try
           Input.ReadBuffer(I, I.Size);
           case I of
-            XTOOL_PRECOMP:
+            YTOOL_PRECOMP:
               begin
                 Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)
                   ), False, BufferSize);
@@ -538,12 +538,12 @@ begin
                   Output.Free;
                 end;
               end;
-            XTOOL_IODEC:
+            YTOOL_IODEC:
               begin
                 IODecode.ParseDecode(ParamArg[0], IODec);
                 IODecode.Decode(Input, ParamArg[1, 1], ParamArg[1, 2], IODec);
               end;
-            XTOOL_EXEC:
+            YTOOL_EXEC:
               begin
                 SetLength(StrArray, 0);
                 for I := 2 to High(ParamArg[1]) do

@@ -1,6 +1,6 @@
 { Shim de compatibilidad para System.Diagnostics de Delphi (no existe en FPC).
   Implementa TStopwatch sobre GetTickCount64 (multiplataforma en FPC).
-  Superficie usada por xtool: Create/Start/Stop/IsRunning/Elapsed. }
+  Superficie usada por ytool: Create/Start/Stop/IsRunning/Elapsed. }
 unit Diagnostics;
 
 interface

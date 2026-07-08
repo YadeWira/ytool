@@ -1,4 +1,4 @@
-// Wrapper C que expone la API brunsli_* que espera el plugin brunsli.dll de xtool
+// Wrapper C que expone la API brunsli_* que espera el plugin brunsli.dll de ytool
 // (imports/BrunsliDLL.pas), puenteando a la API C++ de Google brunsli.
 #include <cstdint>
 #include <cstddef>
