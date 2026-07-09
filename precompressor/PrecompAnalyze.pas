@@ -93,22 +93,22 @@ var
 begin
   if not FileExists(InputPath) then
   begin
-    WriteLine(Format('No existe el archivo: %s', [InputPath]));
+    WriteLine(Format('File not found: %s', [InputPath]));
     exit;
   end;
   InSize := FileSize(InputPath);
   if InSize = 0 then
   begin
-    WriteLine('Archivo vacio, nada que analizar.');
+    WriteLine('Empty file, nothing to analyze.');
     exit;
   end;
   SelfExe := ExpandFileName(ParamStr(0));
   TmpOut := IncludeTrailingPathDelimiter(GetTempDir) +
     'ytool_analyze_' + IntToStr(Random($7FFFFFFF)) + '.tmp';
-  WriteLine(Format('Analizando %s (%s)', [ExtractFileName(InputPath),
+  WriteLine(Format('Analyzing %s (%s)', [ExtractFileName(InputPath),
     ConvertKB2TB(InSize div 1024)]));
   WriteLine('');
-  WriteLine(Format('%-10s %14s %8s', ['Codec', 'Tamano', 'Ratio']));
+  WriteLine(Format('%-10s %14s %8s', ['Codec', 'Size', 'Ratio']));
   Winners := TStringList.Create;
   BestSingle.Ran := False;
   BestSingle.OutSize := InSize;
@@ -118,7 +118,7 @@ begin
       Trial := RunTrial(SelfExe, InputPath, Candidates[I], TmpOut);
       if not Trial.Ran then
       begin
-        WriteLine(Format('  (%s fallo)', [Candidates[I]]));
+        WriteLine(Format('  (%s failed)', [Candidates[I]]));
         continue;
       end;
       WriteLine(Format('%-10s %14d %7.1f%%', [Trial.Method, Trial.OutSize,
@@ -133,21 +133,21 @@ begin
     WriteLine('');
     if Winners.Count = 0 then
     begin
-      WriteLine('Ningun codec mejoro este archivo. Recomendado: literal (sin -m).');
+      WriteLine('No codec improved this file. Recommended: literal (no -m).');
       exit;
     end;
     CombinedMethod := Winners[0];
     for I := 1 to Winners.Count - 1 do
       CombinedMethod := CombinedMethod + '+' + Winners[I];
     Combined := RunTrial(SelfExe, InputPath, CombinedMethod, TmpOut);
-    // Codecs que compiten por el mismo tipo de stream (ej. packjpg vs brunsli,
-    // ambos JPEG) no siempre dan mejor resultado combinados que el mejor
-    // individual solo -- se compara y se recomienda el que realmente gane.
+    // Codecs competing for the same stream type (e.g. packjpg vs brunsli,
+    // both JPEG) don't always do better combined than the best individual
+    // one alone -- compare and recommend whichever actually wins.
     if Combined.Ran and (Combined.OutSize <= BestSingle.OutSize) then
-      WriteLine(Format('Recomendado: -m%s  (%d bytes, %.1f%% del original)',
+      WriteLine(Format('Recommended: -m%s  (%d bytes, %.1f%% of original)',
         [CombinedMethod, Combined.OutSize, Combined.OutSize / InSize * 100]))
     else
-      WriteLine(Format('Recomendado: -m%s  (%d bytes, %.1f%% del original)',
+      WriteLine(Format('Recommended: -m%s  (%d bytes, %.1f%% of original)',
         [BestSingle.Method, BestSingle.OutSize,
         BestSingle.OutSize / InSize * 100]));
   finally
@@ -159,11 +159,11 @@ procedure PrintHelp;
 begin
   WriteLine('ytool - open-source recreation of xtool by Razor12911');
   WriteLine('');
-  WriteLine('analyze - prueba cada codec de precompresion por separado sobre un');
-  WriteLine('          archivo (compresion real, no solo deteccion) y recomienda');
-  WriteLine('          la combinacion de -m que mejor resultado da. No genera');
-  WriteLine('          ningun archivo de salida, solo un reporte por consola.');
-  WriteLine('          Exclusivo de ytool, sin equivalente en xtool.');
+  WriteLine('analyze - tries each precompression codec separately on a file');
+  WriteLine('          (real compression, not just detection) and recommends');
+  WriteLine('          the -m combination that gives the best result. Produces');
+  WriteLine('          no output file, only a console report.');
+  WriteLine('          Exclusive to ytool, no equivalent in xtool.');
   WriteLine('');
   WriteLine('Usage:');
   WriteLine('  ytool analyze input');
