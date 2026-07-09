@@ -168,5 +168,21 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+# ── packpng (codec PNG/APNG/JNG/MNG) — repo hermano del autor de ytool ───────
+# Mismo criterio que en build-plugins-linux.sh: construir de fuente exige Rust
+# (cross-compile a x86_64-pc-windows-gnu) + cmake para kanzi-cpp -- se baja el
+# .dll ya construido de un release versionado de packPNG en su lugar.
+echo "==> packpng (packpng.dll)"
+PACKPNG_VER="v2.0b"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-win64-lib.zip" \
+  -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then
+  ( cd "$CSRC" && unzip -oq packpng-lib.zip packpng.dll ) 2>/dev/null \
+    && mv -f "$CSRC/packpng.dll" "$ROOT/packpng.dll" \
+    && echo "   OK -> packpng.dll (prebuilt $PACKPNG_VER)" \
+    || echo "   (packpng: extraccion fallo)"
+else
+  echo "   (packpng: descarga fallo)"
+fi
+
 echo "Hecho. srep.exe + plugins .dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."

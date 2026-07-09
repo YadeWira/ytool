@@ -84,4 +84,21 @@ if [ -d "$CSRC/packMP3" ]; then
     && echo "   OK -> libpackmp3.so" || echo "   (packmp3 fallo)"
 fi
 
+# ── packpng (codec PNG/APNG/JNG/MNG) — repo hermano del autor de ytool ───────
+# Construirlo de fuente exige Rust (cross-compile) + cmake para kanzi-cpp --
+# mucho mas pesado que el resto de este script (solo clang++/g++/cmake). En
+# cambio se baja el .so ya construido de un release versionado de packPNG
+# (mismo autor, no un tercero desconocido) -- reproducible sin nuevo toolchain.
+echo "==> packpng (libpackpng.so)"
+PACKPNG_VER="v2.0b"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-linux-x64-lib.tar.gz" \
+  -o "$CSRC/packpng-lib.tar.gz" 2>/dev/null && [ -s "$CSRC/packpng-lib.tar.gz" ]; then
+  tar -xzf "$CSRC/packpng-lib.tar.gz" -C "$CSRC" libpackpng.so 2>/dev/null \
+    && mv -f "$CSRC/libpackpng.so" "$ROOT/libpackpng.so" \
+    && echo "   OK -> libpackpng.so (prebuilt $PACKPNG_VER)" \
+    || echo "   (packpng: extraccion fallo)"
+else
+  echo "   (packpng: descarga fallo)"
+fi
+
 echo "Hecho. Plugins .so/srep64 en la raiz del repo (gitignored)."
