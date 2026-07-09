@@ -4,7 +4,7 @@ interface
 
 uses
   Utils,
-  SysUtils, Classes, Process;
+  SysUtils, Classes, Process, Math;
 
 procedure PrintHelp;
 procedure RunAnalyze(const InputPath: String);
@@ -37,9 +37,11 @@ type
 
 function RunTrial(const SelfExe, InputPath, Method,
   OutputPath: String): TTrialResult;
+const
+  BufSize = 65536;
 var
   Proc: TProcess;
-  Cmd: String;
+  Buf: array [0 .. BufSize - 1] of Byte;
 begin
   Result.Method := Method;
   Result.Ran := False;
@@ -48,20 +50,28 @@ begin
     DeleteFile(OutputPath);
   Proc := TProcess.Create(nil);
   try
-{$IFDEF MSWINDOWS}
-    Proc.Executable := 'cmd.exe';
-    Proc.Parameters.Add('/c');
-    Cmd := '"' + SelfExe + '" precomp -m' + Method + ' "' + InputPath +
-      '" "' + OutputPath + '" > NUL 2>&1';
-{$ELSE}
-    Proc.Executable := '/bin/sh';
-    Proc.Parameters.Add('-c');
-    Cmd := '"' + SelfExe + '" precomp -m' + Method + ' "' + InputPath +
-      '" "' + OutputPath + '" > /dev/null 2>&1';
-{$ENDIF}
-    Proc.Parameters.Add(Cmd);
-    Proc.Options := [poWaitOnExit];
+    Proc.Executable := SelfExe;
+    Proc.Parameters.Add('precomp');
+    Proc.Parameters.Add('-m' + Method);
+    Proc.Parameters.Add(InputPath);
+    Proc.Parameters.Add(OutputPath);
+    Proc.Options := [poUsePipes];
     Proc.Execute;
+    // Sin shell intermedio (evita el infierno de quoting de cmd.exe con
+    // rutas/comillas anidadas); se drenan los pipes de stdout/stderr del
+    // hijo para descartar su salida sin bloquear si llena el buffer.
+    while Proc.Running do
+    begin
+      while Proc.Output.NumBytesAvailable > 0 do
+        Proc.Output.Read(Buf, Min(BufSize, Proc.Output.NumBytesAvailable));
+      while Proc.Stderr.NumBytesAvailable > 0 do
+        Proc.Stderr.Read(Buf, Min(BufSize, Proc.Stderr.NumBytesAvailable));
+      Sleep(10);
+    end;
+    while Proc.Output.NumBytesAvailable > 0 do
+      Proc.Output.Read(Buf, Min(BufSize, Proc.Output.NumBytesAvailable));
+    while Proc.Stderr.NumBytesAvailable > 0 do
+      Proc.Stderr.Read(Buf, Min(BufSize, Proc.Stderr.NumBytesAvailable));
     if FileExists(OutputPath) then
     begin
       Result.OutSize := FileSize(OutputPath);
