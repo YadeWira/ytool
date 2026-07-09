@@ -259,7 +259,11 @@ begin
             end;
         end;
       except
-        Res := False
+        on E: Exception do
+        begin
+          WriteLine(Format('execute failed: %s', [E.Message]));
+          Res := False;
+        end;
       end;
   if Res then
     PByte(State)^ := STATE_EXECUTED

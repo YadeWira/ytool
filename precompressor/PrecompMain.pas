@@ -190,6 +190,9 @@ begin
   WriteLine('  -sp# - srep parameters (separate params with ":")');
   WriteLine('  -p#  - prefetch cache [0mb]');
   WriteLine('  -r#  - reassign streams detected to another codec');
+  WriteLine('  -f   - full scan (disables early-exit in dedup hash search)');
+  WriteLine('  -o   - optimise decode (drop already-verified codec variants)');
+  WriteLine('  -T#  - process/thread priority (0=idle .. 6=time critical) [3]');
   WriteLine('');
   WriteLine('  -lz4#, -zstd#, -oodle# - specify custom library name');
   WriteLine('');
@@ -1179,6 +1182,9 @@ begin
           @PrecompAddStream, @PrecompFunctions);
       except
         on E: Exception do
+          WriteLine(Format('Scan1 codec %s failed: %s',
+            [IfThen(Length(Codecs[I].Names) > 0, Codecs[I].Names[0],
+            I.ToString), E.Message]));
       end;
       CurTransfer[Index] := '';
     end;
@@ -1299,6 +1305,9 @@ begin
             end;
           except
             on E: Exception do
+              WriteLine(Format('Scan2 codec %s failed: %s',
+                [IfThen(Length(Codecs[SI2.Codec].Names) > 0,
+                Codecs[SI2.Codec].Names[0], IntToStr(SI2.Codec)), E.Message]));
           end;
         end
         else

@@ -185,6 +185,8 @@ begin
         CodecDLL[I].Scan1(Instance, Input, Size, SizeEx, TPrecompOutput(Output),
           @AddStream, @PrecompFunctions);
     except
+      on E: Exception do
+        WriteLine(Format('DLL plugin #%d Scan1 failed: %s', [I, E.Message]));
     end;
   end;
 end;
