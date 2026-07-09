@@ -19,7 +19,9 @@ const
   PackPNGName: PChar = 'packpng';
   PNG_SIG: Int64 = $A1A0A0D474E5089;
   JNG_SIG: Int64 = $A1A0A0D474E4A8B;
+  MNG_SIG: Int64 = $A1A0A0D474E4D8A;
   IEND_TYPE = $444E4549; // 'IEND', misma convencion little-endian que PrecompZLib.PNG_END
+  MEND_TYPE = $444E454D; // 'MEND', terminador real de MNG (no IEND)
 
 type
   PChunkHdr = ^TChunkHdr;
@@ -32,11 +34,15 @@ var
   CodecAvailable: Boolean;
   CodecEnabled: Boolean;
 
-// Camina los chunks [len(4)+tipo(4)+datos+crc(4)] de un PNG/JNG embebido en un
-// blob arbitrario (mas grande) hasta encontrar IEND, validando el CRC de cada
-// chunk (misma tecnica que EncodePNG en PrecompZLib.pas) para no confundir un
-// patron de bytes incidental con un contenedor real. MNG queda fuera: termina
-// en MEND, no en IEND, y requeriria su propio parser (no cubierto aqui).
+// Camina los chunks [len(4)+tipo(4)+datos+crc(4)] de un PNG/JNG/MNG embebido
+// en un blob arbitrario (mas grande), validando el CRC de cada chunk (misma
+// tecnica que EncodePNG en PrecompZLib.pas) para no confundir un patron de
+// bytes incidental con un contenedor real. PNG/JNG terminan en IEND. MNG
+// termina en MEND -- sus sub-imagenes PNG/JNG embebidas SI usan IEND para
+// cada una, pero eso es un chunk intermedio del contenedor, no el final;
+// por eso en modo MNG el walker ignora IEND por completo y solo se detiene
+// en MEND (la disposicion de chunks es plana, sin anidamiento real, asi que
+// no hace falta recursar para saltear los sub-streams).
 function GetPNGFamilyInfo(Input: PByte; MaxSize: NativeInt;
   out TotalSize: Integer): Boolean;
 var
@@ -45,13 +51,18 @@ var
   Chunk: TChunkHdr;
   DataSize: Integer;
   CRC: Cardinal;
+  StopType: Integer;
 begin
   Result := False;
   TotalSize := 0;
   if MaxSize < 8 then
     exit;
   Sig := PInt64(Input)^;
-  if (Sig <> PNG_SIG) and (Sig <> JNG_SIG) then
+  if Sig = MNG_SIG then
+    StopType := MEND_TYPE
+  else if (Sig = PNG_SIG) or (Sig = JNG_SIG) then
+    StopType := IEND_TYPE
+  else
     exit;
   CurPos := 8;
   while CurPos + SizeOf(TChunkHdr) <= MaxSize do
@@ -66,7 +77,7 @@ begin
     if CRC <> PCardinal(Input + CurPos + SizeOf(TChunkHdr) + DataSize)^ then
       exit;
     Inc(CurPos, SizeOf(TChunkHdr) + DataSize + Cardinal.Size);
-    if Chunk.Header = IEND_TYPE then
+    if Chunk.Header = StopType then
     begin
       TotalSize := CurPos;
       Result := True;
