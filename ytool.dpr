@@ -443,7 +443,7 @@ begin
       if Length(ParamArg[1]) < 1 then
         PrecompAnalyze.PrintHelp
       else
-        PrecompAnalyze.RunAnalyze(ParamArg[1, 0]);
+        PrecompAnalyze.RunAnalyze(ParamArg[1, 0], ParamArg[0]);
     if ParamStr(1).StartsWith(CommandGenerate, True) then
       if Length(ParamArg[1]) < 3 then
         DbgMain.PrintHelp
