@@ -3341,6 +3341,7 @@ begin
   end;
   LInput := TCacheReadStream.Create(Input, LCache, ccNone);
   FillChar(EncInfo, SizeOf(EncInfo), 0);
+  EncFreed := False;
   ConTask := TTask.Create;
   ConTask.Priority := tpIdle;
   Stopwatch := TStopwatch.Create;
