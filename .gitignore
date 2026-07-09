@@ -8,6 +8,7 @@ link*.res
 /ytool
 /ytool.exe
 srep64
+srep.exe
 libpackjpg.so
 libpreflate.so
 libfast-lzma2.so

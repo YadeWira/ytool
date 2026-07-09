@@ -46,7 +46,7 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | LZO | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ | ✅ |
 | fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
-| dedup, external (`-dd<N>`) | [Intensity/srep](https://github.com/Intensity/srep) | ✅ | ❌ (`srep` not cross-compiled for Windows yet) |
+| dedup, external (`-dd<N>`) | [Intensity/srep](https://github.com/Intensity/srep) | ✅ | ✅ |
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
 **Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
@@ -86,6 +86,9 @@ Found and fixed while building/testing this port, not from any xtool release not
   exit 0 having "worked" while emitting nothing.
 - `WavPack` codec is new (xtool's own changelog only ever mentioned wavpack as an *external plugin transfer
   target*, 0.8.6 — we built it as a first-class codec instead, since no open TAK encoder exists to pair with it).
+- Ported `srep` (external dedup, `-dd<N>`) to Windows: its Win32 threading backend was missing from the
+  [Intensity/srep](https://github.com/Intensity/srep) fork (only Unix was kept); adapted from the public-domain
+  LZMA SDK (Igor Pavlov), same underlying API. See `contrib/srep-win32/`.
 
 ### Known limitation, not deeply verified
 
@@ -125,7 +128,7 @@ Windows (FPC/Lazarus has no Linux→Windows cross-compiler for this codebase's d
 ```bash
 # on Linux:
 bash contrib/build-native-windows.sh    # native lz4/zstd/xxhash objects (mingw-w64)
-bash contrib/build-plugins-windows.sh   # all 8 plugin DLLs (mingw-w64 + cmake)
+bash contrib/build-plugins-windows.sh   # 8 plugin DLLs + srep.exe (mingw-w64 + cmake)
 # copy the source tree + the .dll files to a Windows machine with FPC/Lazarus 3.2.2, then:
 ```
 ```powershell

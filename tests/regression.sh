@@ -21,7 +21,10 @@ trap 'rm -rf "$WORK"' EXIT
 # encuentra duplicados reales, en el resto pasa de largo (dedup vacio, igualmente reversible).
 # "-mlzo1x" ejercita el codec lzo (encode+decode) sobre 50_lzo1x.bin si se genero (ver abajo).
 # "-mwavpack"/"-mflac" ejercitan los codecs de audio sobre 60_wav_pcm.bin (RIFF -> recompresion lossless).
-METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -r zstd" "-mlzo1x" \
+# "-mzlib -dd1" ejercita el dedup EXTERNO (srep64/srep.exe); si el binario no esta presente,
+# StoreDD cae silenciosamente a -1 (dedup en memoria) -> sigue siendo reversible, solo con
+# menos cobertura real hasta que se genere con contrib/build-plugins-{linux,windows}.sh.
+METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" "-mlzo1x" \
   "-mwavpack" "-mflac")
 
 fail=0; pass=0

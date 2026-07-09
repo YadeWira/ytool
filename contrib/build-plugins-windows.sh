@@ -39,6 +39,33 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 EOF
 
+# ── srep (dedup externo -dd<N>) — Intensity/srep, con backend Win32 propio ──
+# La API de threading de srep (Compression/LZMA2/C/ThreadsUnix.h) es la misma del
+# LZMA SDK de 7-Zip (Igor Pavlov, dominio publico); el lado Windows (ThreadsWin32.*)
+# no venia en este fork (se quedo solo con el Unix), asi que se agrega adaptado desde
+# el LZMA SDK oficial (contrib/srep-win32/). Handle.h es un stub: Synchronization.h lo
+# incluye bajo #ifdef _WIN32 pero ninguna clase de ese archivo usa un tipo "Handle".
+# Ademas: -DUNICODE/-D_UNICODE (Common.h asume TCHAR=wchar_t), -lole32 -luuid (COM,
+# por el indicador de progreso del taskbar de Windows 7, feature irrelevante para un
+# helper headless pero que igual hay que linkear), y un shim de mayuscula/minuscula
+# para <ShObjIdl.h> (mingw-w64 trae "shobjidl.h"; solo importa en un FS case-sensitive
+# como Linux, en Windows real nunca fue un problema).
+echo "==> srep (srep.exe)"
+[ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
+if [ -d "$CSRC/srep" ]; then
+  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
+    "$CSRC/srep/Compression/LZMA2/C/"
+  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
+  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
+    -I"$ROOT/contrib/mingw-shims" \
+    -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
+    -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
+    -Wno-write-strings -Wno-unused-result \
+    Compression/Common.cpp Compression/SREP/srep.cpp \
+    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep.exe" ) \
+    && echo "   OK -> srep.exe" || echo "   (srep fallo)"
+fi
+
 # ── lzo2 (codec lzo1x/lzo1c/lzo2a) — tarball oficial Oberhumer ───────────────
 echo "==> lzo2 (lzo2.dll)"
 if [ ! -d "$CSRC/lzo-2.10" ]; then
@@ -141,5 +168,5 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-echo "Hecho. Plugins .dll en la raiz del repo (gitignored)."
+echo "Hecho. srep.exe + plugins .dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
