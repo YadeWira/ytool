@@ -86,6 +86,7 @@ uses
   PrecompZSTD in 'precompressor\PrecompZSTD.pas',
   PrecompMedia in 'precompressor\PrecompMedia.pas',
   PrecompPackPNG in 'precompressor\PrecompPackPNG.pas',
+  PrecompAnalyze in 'precompressor\PrecompAnalyze.pas',
   PrecompOodle in 'precompressor\PrecompOodle.pas',
   PrecompINI in 'precompressor\PrecompINI.pas',
   PrecompINIEx in 'precompressor\PrecompINIEx.pas',
@@ -116,6 +117,7 @@ const
   CommandExtract = 'extract';
   CommandExecute = 'execute';
   CommandDecode = 'decode';
+  CommandAnalyze = 'analyze';
 
 procedure ProgramInfo;
 begin
@@ -127,6 +129,7 @@ procedure ListCommands;
 begin
   WriteLine('Available commands:');
   WriteLine('');
+  WriteLine('  ' + CommandAnalyze);
   WriteLine('  ' + CommandDecode);
   WriteLine('  ' + CommandErase);
   WriteLine('  ' + CommandExecute);
@@ -436,6 +439,11 @@ begin
           Output.Free;
         end;
       end;
+    if ParamStr(1).StartsWith(CommandAnalyze, True) then
+      if Length(ParamArg[1]) < 1 then
+        PrecompAnalyze.PrintHelp
+      else
+        PrecompAnalyze.RunAnalyze(ParamArg[1, 0]);
     if ParamStr(1).StartsWith(CommandGenerate, True) then
       if Length(ParamArg[1]) < 3 then
         DbgMain.PrintHelp
