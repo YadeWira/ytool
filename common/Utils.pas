@@ -631,8 +631,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: UInt8; Value: Int8; Index: TInt8_BitIndex;
@@ -641,8 +645,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: Int16; Value: Int16; Index: TInt16_BitIndex;
@@ -651,8 +659,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: UInt16; Value: Int16; Index: TInt16_BitIndex;
@@ -661,8 +673,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: Int32; Value: Int32; Index: TInt32_BitIndex;
@@ -671,8 +687,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: UInt32; Value: Int32; Index: TInt32_BitIndex;
@@ -681,8 +701,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: Int64; Value: Int64; Index: TInt64_BitIndex;
@@ -691,8 +715,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 procedure SetBits(var Data: UInt64; Value: Int64; Index: TInt64_BitIndex;
@@ -701,8 +729,12 @@ var
   I: Integer;
 begin
   I := Index + Count;
-  Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
-    (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index);
+  if Index > 0 then
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index) or GetBits(Data, 0, Index)
+  else
+    Data := (GetBits(Data, I, Data.Size * 8 - I) shl I) or
+      (GetBits(Value, 0, Count) shl Index);
 end;
 
 function AtomicIncrement(var Target: longint): longint;
