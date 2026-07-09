@@ -36,7 +36,8 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | zlib / deflate | zlib | ✅ | ✅ (built into the binary) |
 | preflate | [deus-libri/preflate](https://github.com/deus-libri/preflate) | ✅ | ✅ |
 | PNG | zlib + preflate | ✅ | ✅ |
-| JPEG | [packJPG](https://github.com/packjpg/packJPG) | ✅ | ✅ |
+| PNG/APNG/JNG (alt, `-mpackpng`) | [packPNG](https://github.com/YadeWira/packPNG) (preflate + WebP-lossless) | ✅ | ✅ |
+| JPEG | [packJPG](https://github.com/YadeWira/packJPG) (our own fork, LGPLv3) | ✅ | ✅ |
 | JPEG (alt) | [brunsli](https://github.com/google/brunsli) | ✅ | ✅ |
 | FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
 | WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
@@ -89,6 +90,13 @@ Found and fixed while building/testing this port, not from any xtool release not
 - Ported `srep` (external dedup, `-dd<N>`) to Windows: its Win32 threading backend was missing from the
   [Intensity/srep](https://github.com/Intensity/srep) fork (only Unix was kept); adapted from the public-domain
   LZMA SDK (Igor Pavlov), same underlying API. See `contrib/srep-win32/`.
+- New codec `-mpackpng` (PNG/APNG/JNG via [packPNG](https://github.com/YadeWira/packPNG), preflate +
+  WebP-lossless) — coexists with the classic zlib-based PNG codec, ~45% smaller on real-world images since it
+  models pixels instead of just re-encoding the deflate stream. MNG isn't covered (ends at a different chunk,
+  `MEND` not `IEND`, needing its own container-size parser — deferred).
+- New command `analyze` — **exclusive to `ytool`, no xtool equivalent.** Runs a real compression trial per
+  codec against a file and recommends a `-m` combination based on actual measured ratio, not just stream
+  detection. See [CLI Reference](https://github.com/YadeWira/ytool/wiki/CLI-Reference#analyze).
 
 ### Known limitation, not deeply verified
 
