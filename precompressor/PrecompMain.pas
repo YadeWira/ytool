@@ -2659,6 +2659,7 @@ begin
       if (Succ(Depth) = Length(ComVars2)) and (Length(Tasks) > 1) then
         DecCallThreads(Index1, Depth);
       SH := PStreamHeader(MemStream1[Index1].Memory) + X;
+      AtomicIncrement(EncInfo.Count);
       if MT then
       begin
         LOutput := @PrecompOutput3;
@@ -2719,6 +2720,7 @@ begin
           StreamInfo[Index1]^.Completed[X] := True
         else
           DataMgr.CopyData(SH^.Option, DecOutput[Index1]);
+        AtomicIncrement(EncInfo.Processed);
         X := AtomicIncrement(StreamIdx[Index1]^);
         continue;
       end;
@@ -2731,6 +2733,7 @@ begin
         @PrecompFunctions) = False) then
         raise Exception.CreateFmt(SPrecompError3,
           [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
+      AtomicIncrement(EncInfo.Processed);
       if MT then
       begin
         Ptr1 := PByte(MemInput[Index1].Memory) + Pos;
@@ -3261,8 +3264,10 @@ var
       UserTime);
     FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
 {$ENDIF}
+    SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
+      EncInfo.Count.ToString;
     TS := Stopwatch.Elapsed;
-    SL[0] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
+    SL[1] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
       [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
 {$IFDEF MSWINDOWS}
       + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
@@ -3291,6 +3296,7 @@ begin
 {$ENDIF}
   CLine := 0;
   SL := TStringList.Create;
+  SL.Add('Streams: 0 / 0');
   SL.Add('Time: 00:00:00');
   SL.Add('');
   while Stopwatch.IsRunning do
