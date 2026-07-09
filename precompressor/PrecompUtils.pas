@@ -21,8 +21,6 @@ resourcestring
   SPrecompSep5 = '\';
 
 const
-  SuccessStatus = 4;
-
   DEFAULT_STREAM = 0;
   EXTENDED_STREAM = 1;
   NESTED_STREAM = 2;
@@ -35,7 +33,7 @@ type
 
   TPrecompStr = array [0 .. 255] of Char;
 
-  TStreamStatus = (None, Invalid, Predicted, Database);
+  TStreamStatus = (None, Invalid, Predicted, Database, Success);
 
   PDepthStream = ^TDepthStream;
 

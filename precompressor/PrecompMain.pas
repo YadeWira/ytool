@@ -1450,7 +1450,7 @@ begin
       SI2.NewSize := SI1.NewSize;
       SI2.Resource := SI1.Resource;
       SI2.Option := SI1.Option;
-      SI2.Status := TStreamStatus(SuccessStatus);
+      SI2.Status := TStreamStatus.Success;
       SI2.ExtPosition := CurPos1[Index];
       SI2.ExtSize := MemOutput1[Index].Position - CurPos1[Index];
       SI2.ExtThread := Index;
@@ -2154,13 +2154,13 @@ begin
               InfoStore1[I].Index := InfoStore1[I].Index - 1;
               break;
             end;
-            if (Integer(StreamInfo.Status) <> SuccessStatus) or
+            if (StreamInfo.Status <> TStreamStatus.Success) or
               (LastStream > StreamInfo.ActualPosition) or
               (StreamInfo.ActualPosition >= DataStore.Size(I)) then
             begin
               if LastStream > StreamInfo.ActualPosition then
               begin
-                if StreamInfo.Status = TStreamStatus(SuccessStatus) then
+                if StreamInfo.Status = TStreamStatus.Success then
                   AtomicDecrement(EncInfo.Processed);
                 AtomicDecrement(EncInfo.Count);
               end;
