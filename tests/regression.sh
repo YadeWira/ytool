@@ -24,8 +24,28 @@ trap 'rm -rf "$WORK"' EXIT
 # "-mzlib -dd1" ejercita el dedup EXTERNO (srep64/srep.exe); si el binario no esta presente,
 # StoreDD cae silenciosamente a -1 (dedup en memoria) -> sigue siendo reversible, solo con
 # menos cobertura real hasta que se genere con contrib/build-plugins-{linux,windows}.sh.
-METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" "-mlzo1x" \
-  "-mwavpack" "-mflac")
+# "-mzlib -r xor"/"-r aes"/"-r rc4" ejercitan PrecompCrypto.pas (antes sin ningun test):
+# CryptoScan1 es un no-op, solo se activan reasignando streams ya detectados por otro
+# codec (igual que "-r zstd" ya hacia) -> round-trip real sobre 20_zlib_streams.bin.
+# "-mpng" ejercita el contenedor PNG (61_png_min.bin, generado in situ, sin dependencias).
+# "-mpreflate" ejercita ReflateDLL/PreflateDLL contra los mismos streams de
+# 20_zlib_streams.bin; preflate SI tiene .so en este repo -> cobertura real. "-mreflate"
+# se deja igual por si algun dia se agrega esa lib: si falta, cae a 0 streams (reversible
+# trivial), mismo criterio que "-dd1" con srep.
+# "-mlz4f"/"-mpackjpg"/"-mbrunsli"/"-mpackmp3" dependen de archivos OPCIONALES del corpus
+# (ver gen_corpus.py: requieren el modulo python "lz4", Pillow, y el binario "lame"
+# respectivamente). Si faltan, esos archivos no se generan y el metodo corre sobre 0
+# streams -> reversible trivial, sin cobertura real hasta que la maquina los tenga.
+# NOTA "-mlz4f": el frame LZ4 generado SI se detecta (magic 0x184D2204) pero la
+# recompresion no reproduce el frame original byte a byte -> cae al fallback seguro
+# (Streams 0/1, no 1/1). Es reversible igual, pero no prueba el codec de punta a punta;
+# queda documentado como limitacion conocida, no arreglado en esta pasada.
+# PENDIENTE (no cubierto aqui): "-mlz4"/"-mlz4hc" (bloque LZ4 crudo, heuristica de
+# token byte $F0-$F4 en PrecompLZ4.pas) necesitarian un generador dedicado como
+# tests/lzo_gen.c, no un simple frame -> se deja fuera de esta pasada de cobertura.
+METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
+  "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
+  "-mpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" "-mpackmp3")
 
 fail=0; pass=0
 echo "== ytool regression =="

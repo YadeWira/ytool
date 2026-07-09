@@ -8,7 +8,10 @@ tamanos que cruzan el chunk de 16MB, datos incompresibles, y mezclas. Determinis
 Uso:  python3 tests/gen_corpus.py <dir_salida>
 """
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import zlib
 import struct
 
@@ -34,6 +37,97 @@ def write(d, name, data):
     with open(p, 'wb') as f:
         f.write(data)
     return p
+
+
+def png_chunk(tag, data):
+    return (struct.pack('>I', len(data)) + tag + data
+            + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+
+def make_png(w, h, seed):
+    """PNG minimo valido (IHDR+IDAT+IEND, RGB 8bpc, sin filtro) para -mpng."""
+    raw = bytearray()
+    x = seed & 0xFFFFFFFF
+    for y in range(h):
+        raw.append(0)  # filter type 0 (None) por scanline
+        for _ in range(w * 3):
+            x = (x * 1103515245 + 12345) & 0xFFFFFFFF
+            raw.append((x >> 24) & 0xFF)
+    ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+    idat = zlib.compress(bytes(raw), 9)
+    return (b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', ihdr)
+            + png_chunk(b'IDAT', idat) + png_chunk(b'IEND', b''))
+
+
+def make_lz4f(seed):
+    """Frame LZ4 real (magic 0x184D2204) via el modulo python 'lz4', si esta disponible."""
+    try:
+        import lz4.frame
+    except ImportError:
+        return None
+    text = (b'lz4 frame payload %d ' % seed) * 4000
+    return lz4.frame.compress(text)
+
+
+def make_jpeg(seed):
+    """JPEG baseline real (no progresivo) via Pillow, si esta disponible."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    img = Image.new('RGB', (32, 32))
+    px = img.load()
+    x = seed
+    for y in range(32):
+        for xi in range(32):
+            x = (x * 1103515245 + 12345) & 0xFFFFFFFF
+            px[xi, y] = ((x >> 24) & 0xFF, (x >> 16) & 0xFF, (x >> 8) & 0xFF)
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tf:
+        img.save(tf.name, format='JPEG', quality=75, progressive=False,
+                  optimize=False)
+        path = tf.name
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    finally:
+        os.unlink(path)
+
+
+def make_mp3(seed):
+    """MP3 CBR real via 'lame' (CLI externa), si esta disponible."""
+    lame = shutil.which('lame')
+    if not lame:
+        return None
+    ch, rate, nframes = 2, 44100, 40000
+    y = seed & 0xFFFFFFFF
+    pcm = bytearray()
+    for _ in range(nframes * ch):
+        y ^= (y << 7) & 0xFFFFFFFF
+        y ^= y >> 9
+        pcm += struct.pack('<h', (y % 20000) - 10000)
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as wf, \
+         tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as mf:
+        wav_path, mp3_path = wf.name, mf.name
+    try:
+        block_align = ch * 2
+        wav = (b'RIFF' + struct.pack('<I', 36 + len(pcm)) + b'WAVE'
+               + b'fmt ' + struct.pack('<IHHIIHH', 16, 1, ch, rate,
+                                        rate * block_align, block_align, 16)
+               + b'data' + struct.pack('<I', len(pcm)) + bytes(pcm))
+        with open(wav_path, 'wb') as f:
+            f.write(wav)
+        r = subprocess.run([lame, '--quiet', '--cbr', '-b', '128',
+                             '--noreplaygain', wav_path, mp3_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+        if r.returncode != 0 or not os.path.exists(mp3_path):
+            return None
+        with open(mp3_path, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (wav_path, mp3_path):
+            if os.path.exists(p):
+                os.unlink(p)
 
 
 def main():
@@ -113,6 +207,37 @@ def main():
                                     block_align, bits)
            + b'data' + struct.pack('<I', len(pcm)) + bytes(pcm))
     write(d, '60_wav_pcm.bin', wav)
+
+    # --- PNG minimo (IHDR/IDAT/IEND): ejercita el codec -mpng (detecta el
+    #     contenedor PNG, no solo el deflate crudo que ya cubre 20_zlib_streams.bin) ---
+    write(d, '61_png_min.bin', make_png(24, 24, SEED))
+
+    # --- Los siguientes 3 son OPCIONALES: requieren una herramienta externa
+    #     presente en la maquina que genera el corpus (no en runtime de ytool).
+    #     Si falta, simplemente no se escribe el archivo y el metodo correspondiente
+    #     (-mlz4f/-mpackjpg+-mbrunsli/-mpackmp3 en regression.sh) corre igual pero
+    #     sin encontrar el stream real -> reversible trivial, cobertura de codec = 0
+    #     para esa corrida (mismo criterio ya usado con 50_lzo1x.bin/gcc+liblzo2).
+    lz4f = make_lz4f(SEED)
+    if lz4f is not None:
+        write(d, '70_lz4f.bin', lz4f)
+    else:
+        print('aviso: modulo python "lz4" no disponible, se omite 70_lz4f.bin '
+              '(sin cobertura real de -mlz4f)', file=sys.stderr)
+
+    jpeg = make_jpeg(SEED)
+    if jpeg is not None:
+        write(d, '71_jpeg_min.bin', jpeg)
+    else:
+        print('aviso: Pillow (PIL) no disponible, se omite 71_jpeg_min.bin '
+              '(sin cobertura real de -mpackjpg/-mbrunsli)', file=sys.stderr)
+
+    mp3 = make_mp3(SEED)
+    if mp3 is not None:
+        write(d, '72_mp3_min.bin', mp3)
+    else:
+        print('aviso: "lame" no disponible, se omite 72_mp3_min.bin '
+              '(sin cobertura real de -mpackmp3)', file=sys.stderr)
 
     files = sorted(os.listdir(d))
     print('corpus generado en %s: %d archivos' % (d, len(files)))
