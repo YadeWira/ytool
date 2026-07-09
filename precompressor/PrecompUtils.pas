@@ -13,8 +13,7 @@ uses
 
 resourcestring
   SPrecompError1 = 'Method ''%s'' not found';
-  SPrecompError2 = 'Failed to initialise ''%s''';
-  SPrecompError3 = 'Error in the method ''%s''';
+  SPrecompError3 = 'Error in the method ''%s'' (stream #%d, pos %d, depth %d)';
   SPrecompSep1 = '+';
   SPrecompSep2 = ':';
   SPrecompSep3 = ',';

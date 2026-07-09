@@ -2729,7 +2729,8 @@ begin
         Y := 0;
       if (Codecs[SH^.Codec].Restore(Index2, Depth, Ptr1, Ptr2, SI, LOutput,
         @PrecompFunctions) = False) then
-        raise Exception.CreateFmt(SPrecompError3, [Codecs[SH^.Codec].Names[Y]]);
+        raise Exception.CreateFmt(SPrecompError3,
+          [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
       if MT then
       begin
         Ptr1 := PByte(MemInput[Index1].Memory) + Pos;
