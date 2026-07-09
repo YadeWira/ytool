@@ -114,9 +114,9 @@ begin
       if Assigned(Oodle_CheckVersion) then
         break;
     end;
-  // 0.9.6 (-oodl#): aceptar esta candidata solo si es una libreria oodle valida
-  // (Oodle_CheckVersion resuelto). Si no, liberarla y devolver False para que el caller
-  // pruebe la siguiente; ademas evita llamar Oodle_CheckVersion sin asignar (crash).
+  // 0.9.6 (-oodl#): only accept this candidate if it's a valid Oodle library
+  // (Oodle_CheckVersion resolved). Otherwise, free it and return False so the caller
+  // tries the next one; also avoids calling an unassigned Oodle_CheckVersion (crash).
   if not Assigned(Oodle_CheckVersion) then
   begin
     Lib.Free;
@@ -237,10 +237,11 @@ var
 
 initialization
 
-// 0.9.6 (-oodl#): se prueban varias librerias oodle EN ORDEN; gana la primera que carga
-// Y resuelve Oodle_CheckVersion. Candidatas: cada -oodle<path> dado (en orden de aparicion)
-// y luego los nombres por defecto oo2core_9..3 / oo2ext_9..3 en PluginsPath. Antes solo se
-// probaba UNA (-oodle o el default oo2core_9), sin verificar que fuera una oodle valida.
+// 0.9.6 (-oodl#): tries several Oodle libraries IN ORDER; the first one that loads
+// AND resolves Oodle_CheckVersion wins. Candidates: each -oodle<path> given (in the
+// order given) and then the default names oo2core_9..3 / oo2ext_9..3 in PluginsPath.
+// Previously only ONE was tried (-oodle or the default oo2core_9), without checking
+// that it was actually a valid Oodle library.
 SetLength(Candidates, 0);
 for I := 1 to ParamCount do
   if ParamStr(I).StartsWith(DLLParam) then

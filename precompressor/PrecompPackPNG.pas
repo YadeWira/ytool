@@ -20,8 +20,8 @@ const
   PNG_SIG: Int64 = $A1A0A0D474E5089;
   JNG_SIG: Int64 = $A1A0A0D474E4A8B;
   MNG_SIG: Int64 = $A1A0A0D474E4D8A;
-  IEND_TYPE = $444E4549; // 'IEND', misma convencion little-endian que PrecompZLib.PNG_END
-  MEND_TYPE = $444E454D; // 'MEND', terminador real de MNG (no IEND)
+  IEND_TYPE = $444E4549; // 'IEND', same little-endian convention as PrecompZLib.PNG_END
+  MEND_TYPE = $444E454D; // 'MEND', MNG's real terminator (not IEND)
 
 type
   PChunkHdr = ^TChunkHdr;
@@ -34,15 +34,15 @@ var
   CodecAvailable: Boolean;
   CodecEnabled: Boolean;
 
-// Camina los chunks [len(4)+tipo(4)+datos+crc(4)] de un PNG/JNG/MNG embebido
-// en un blob arbitrario (mas grande), validando el CRC de cada chunk (misma
-// tecnica que EncodePNG en PrecompZLib.pas) para no confundir un patron de
-// bytes incidental con un contenedor real. PNG/JNG terminan en IEND. MNG
-// termina en MEND -- sus sub-imagenes PNG/JNG embebidas SI usan IEND para
-// cada una, pero eso es un chunk intermedio del contenedor, no el final;
-// por eso en modo MNG el walker ignora IEND por completo y solo se detiene
-// en MEND (la disposicion de chunks es plana, sin anidamiento real, asi que
-// no hace falta recursar para saltear los sub-streams).
+// Walks the [len(4)+type(4)+data+crc(4)] chunks of a PNG/JNG/MNG embedded
+// in an arbitrary (larger) blob, validating each chunk's CRC (same
+// technique as EncodePNG in PrecompZLib.pas) so an incidental byte pattern
+// isn't mistaken for a real container. PNG/JNG terminate at IEND. MNG
+// terminates at MEND -- its embedded PNG/JNG sub-images DO use IEND for
+// each one, but that's an intermediate chunk of the container, not the
+// end; that's why in MNG mode the walker ignores IEND entirely and only
+// stops at MEND (the chunk layout is flat, with no real nesting, so there's
+// no need to recurse to skip over the sub-streams).
 function GetPNGFamilyInfo(Input: PByte; MaxSize: NativeInt;
   out TotalSize: Integer): Boolean;
 var

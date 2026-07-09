@@ -320,7 +320,7 @@ begin
         'm':
           begin
             Options.LowMem := True;
-            // 0.9.2: -lm[1..3] niveles de memoria baja (default 1).
+            // 0.9.2: -lm[1..3] low-memory levels (default 1).
             if (Length(S) > 1) and (S[2] in ['1' .. '3']) then
               Options.LowMemLevel := Ord(S[2]) - Ord('0')
             else
@@ -396,10 +396,10 @@ begin
 {$ELSE}
     CACHE := 0;
 {$ENDIF}
-    // 0.9.2: niveles de memoria baja (RAM vs velocidad). N1 ya reduce las
-    // estructuras de escaneo a 1 hilo (en EncInit). N2 recorta el cache de I/O;
-    // N3 lo elimina y fuerza el ChunkSize minimo. Todas son configuraciones
-    // validas -> no afecta la reversibilidad.
+    // 0.9.2: low-memory levels (RAM vs speed). N1 already reduces the
+    // scanning structures to 1 thread (in EncInit). N2 trims the I/O cache;
+    // N3 removes it and forces the minimum ChunkSize. All are valid
+    // configurations -> does not affect reversibility.
     if Options.LowMem then
     begin
       if Options.LowMemLevel >= 2 then
@@ -416,7 +416,7 @@ begin
     Options.ExtractDir := ArgParse.AsString('-x');
     if Options.ExtractDir <> '' then
       EXTRACT := DirectoryExists(Options.ExtractDir);
-    // 0.8.5: -X<dir> extrae SOLO los streams que no se pudieron procesar.
+    // 0.8.5: -X<dir> extracts ONLY the streams that could not be processed.
     if not EXTRACT then
     begin
       Options.ExtractDir := ArgParse.AsString('-X');
@@ -429,8 +429,8 @@ begin
     EXTCOMP := ArgParse.AsString('-e');
     if FileExists(ExpandPath(PluginsPath + ExtractExec(EXTCOMP), True)) then
       COMPRESS := 2;
-    // 0.9.7: la feature reassign stream pasa a usar -r (antes -a). -r quedo libre al
-    // quitar recompress stream en 0.9.1 (ver task #18).
+    // 0.9.7: the reassign stream feature now uses -r (was -a). -r became free when
+    // recompress stream was removed in 0.9.1 (see task #18).
     REASSIGN := ReplaceStr(ArgParse.AsString('-r'), SPrecompSep3, SPrecompSep2);
   finally
     ArgParse.Free;
@@ -525,8 +525,8 @@ var
   DDCount1: TArray<Integer>;
   DDList1: TArray<Int64>;
   DDIndex, DDInit: Integer;
-  // 0.8.3: cuentas vivas para crecer DDList1/DDInfo2 geometricamente. Length(array) pasa a
-  // ser la CAPACIDAD; se recorta a la cuenta (SetLength) antes de consumirlos en la finalizacion.
+  // 0.8.3: live counts to grow DDList1/DDInfo2 geometrically. Length(array) becomes
+  // the CAPACITY; it is trimmed to the count (SetLength) before consuming them at finalization.
   DDList1Count, DDInfo2Count: Integer;
   ComVars1: TArray<TCommonVarsEnc>;
   Tasks: TArray<TTask>;
@@ -709,7 +709,7 @@ begin
     WriteLine(Format(S2, [CurDepth[0], Codec, LogInt64.ToHexString, Size1,
       Size2, Size3]));
   end;
-  // -X (EXTRACT_UNPROCESSED): solo extraer si el stream NO se pudo procesar.
+  // -X (EXTRACT_UNPROCESSED): only extract if the stream could NOT be processed.
   if EXTRACT and (CurDepth[0] = 0) and
     ((not EXTRACT_UNPROCESSED) or (not Status)) then
   begin
@@ -1050,8 +1050,8 @@ begin
       DB.Option := StreamInfo.Option;
       Move(StreamInfo.Checksum, DB.Checksum, SizeOf(DB.Checksum));
       DB.Status := StreamInfo.Status;
-      // 0.8.3: idem DDInfo1 — crecimiento geometrico; la cuenta viva es DBCount[A]
-      // (el consumidor en ~2410 escribe DBInfo[W,K] para K:=0..DBCount[W]-1, no usa Length).
+      // 0.8.3: same as DDInfo1 — geometric growth; the live count is DBCount[A]
+      // (the consumer at ~2410 writes DBInfo[W,K] for K:=0..DBCount[W]-1, does not use Length).
       if DBCount[A] >= Length(DBInfo[A]) then
         SetLength(DBInfo[A], Max(4, Length(DBInfo[A]) * 2));
       DBInfo[A][DBCount[A]] := DB;
@@ -1130,19 +1130,19 @@ begin
     DD.Index1 := DDIndex;
     DD.Index2 := DDInit;
     DD.Count := 0;
-    // 0.8.3 (encode mas rapido): el Insert de FPC realoca al tamano EXACTO en cada
-    // append (sin holgura) => N inserciones en un bucket son O(N^2). Crecimiento
-    // geometrico: la cuenta viva del bucket es DDCount1[A] (CheckDD itera 0..DDCount1[A]-1
-    // y el serializador indexa via DDList1.Hi, ambos = DDCount1; nadie lee Length(DDInfo1[A]))
-    // => sobre-asignar capacidad es invisible a la salida. Slot de escritura = DDCount1[A].
+    // 0.8.3 (faster encode): FPC's Insert reallocates to the EXACT size on each
+    // append (no slack) => N insertions into a bucket are O(N^2). Geometric
+    // growth: the bucket's live count is DDCount1[A] (CheckDD iterates 0..DDCount1[A]-1
+    // and the serializer indexes via DDList1.Hi, both = DDCount1; nobody reads Length(DDInfo1[A]))
+    // => over-allocating capacity is invisible to the output. Write slot = DDCount1[A].
     I := DDCount1[A];
     if I >= Length(DDInfo1[A]) then
       SetLength(DDInfo1[A], Max(4, Length(DDInfo1[A]) * 2));
     DDInfo1[A][I] := DD;
     Int64Rec(I64).Words[0] := A;
     Int64Rec(I64).Hi := DDCount1[A];
-    // 0.8.3: DDList1 crece geometricamente (cuenta viva DDList1Count); se recorta antes
-    // de consumirla en la finalizacion (Low/High/Length en ~2436-2459).
+    // 0.8.3: DDList1 grows geometrically (live count DDList1Count); it is trimmed before
+    // consuming it at finalization (Low/High/Length at ~2436-2459).
     if DDList1Count >= Length(DDList1) then
       SetLength(DDList1, Max(8, Length(DDList1) * 2));
     DDList1[DDList1Count] := I64;
@@ -1342,10 +1342,10 @@ var
 
 begin
   Result := False;
-  // 0.9.1 (fixes reassign): DBBool solo se asigna dentro de "if UseDB and (Codec>2)"
-  // (~1431) pero se lee en "if not DBBool" (~1505); con UseDB y Codec<=2 (alcanzable al
-  // reasignar/transferir a un codec de indice bajo) se leia sin inicializar -> AddDB no
-  // determinista. FPC no pone a cero los locales. Inicializar elimina el UB.
+  // 0.9.1 (fixes reassign): DBBool is only assigned inside "if UseDB and (Codec>2)"
+  // (~1431) but is read in "if not DBBool" (~1505); with UseDB and Codec<=2 (reachable when
+  // reassigning/transferring to a low-index codec) it was read uninitialized -> AddDB was not
+  // deterministic. FPC does not zero locals. Initializing removes the UB.
   DBBool := False;
   with ComVars1[Depth] do
   begin
@@ -1401,10 +1401,10 @@ begin
         InfoStore1[ThreadIndex][StreamIndex] := SI2;
       end;
     end;
-    // 0.9.1 (fixes reassign): la rama de transfer NO tenia guarda de recursion (solo la
-    // de REASSIGN miraba Reassigned). Un codec/plugin que re-arma CurTransfer en cada
-    // Process fallido recursaba sin fin (stack overflow). Anadir (Reassigned = False)
-    // limita a UN solo fallback (reassign O transfer) por stream.
+    // 0.9.1 (fixes reassign): the transfer branch had NO recursion guard (only the
+    // REASSIGN one checked Reassigned). A codec/plugin that re-arms CurTransfer on every
+    // failed Process would recurse endlessly (stack overflow). Adding (Reassigned = False)
+    // limits it to a SINGLE fallback (reassign OR transfer) per stream.
     if (Result = False) and (CurTransfer[Index] <> '') and (LValid = False) and
       (Reassigned = False) then
     begin
@@ -1425,9 +1425,9 @@ begin
     if LValid then
     begin
       MemOutput1[Index].Position := CurPos1[Index];
-      // 0.9.1: el reintento se marca Reassigned=True incondicionalmente (antes era
-      // REASSIGN<>'', que no cubria el caso transfer-sin-REASSIGN). Se llega aqui solo si
-      // un fallback se armo (LValid), asi que el siguiente intento no debe re-fallbackear.
+      // 0.9.1: the retry is marked Reassigned=True unconditionally (previously it was
+      // REASSIGN<>'', which did not cover the transfer-without-REASSIGN case). We only get
+      // here if a fallback was armed (LValid), so the next attempt must not re-fallback.
       Result := Process(ThreadIndex, StreamIndex, Index, Depth, True);
       exit;
     end;
@@ -1873,8 +1873,8 @@ begin
       else
         S := S + SPrecompSep1 + ExternalMethods[J];
   end;
-  // 0.9.1 (quita recompress): la cabecera del archivo se escribe siempre (antes se
-  // omitia bajo "if REPROCESS=''" porque el modo -r no producia un .pmp decodificable).
+  // 0.9.1 (removes recompress): the file header is now always written (previously it was
+  // omitted under "if REPROCESS=''" because -r mode did not produce a decodable .pmp).
   begin
     Bytes := BytesOf(S);
     B := Length(Bytes);
@@ -2182,8 +2182,8 @@ begin
               begin
                 Int64Rec(I64).Lo := StreamCount2 - 1;
                 Int64Rec(I64).Hi := DupIdx3;
-                // 0.8.3: DDInfo2 crece geometricamente (cuenta viva DDInfo2Count); se recorta
-                // antes de consumirla en la finalizacion (Length/indexado en ~2452-2487).
+                // 0.8.3: DDInfo2 grows geometrically (live count DDInfo2Count); it is trimmed
+                // before consuming it at finalization (Length/indexing at ~2452-2487).
                 if DDInfo2Count >= Length(DDInfo2) then
                   SetLength(DDInfo2, Max(8, Length(DDInfo2) * 2));
                 DDInfo2[DDInfo2Count] := I64;
@@ -2297,8 +2297,8 @@ begin
             if Depth = 0 then
               Inc(EncInfo.InflSize, UI32 + UI32.Size);
             LastPos := StreamInfo.ActualPosition + StreamInfo.OldSize;
-            // cobertura de streams (0.9.6): suma del tamano original (en el
-            // archivo) de cada stream confirmado, para el % vs datos crudos.
+            // stream coverage (0.9.6): sum of the original size (in the
+            // file) of each confirmed stream, for the % vs raw data.
             if Depth = 0 then
               Inc(EncInfo.CovSize, StreamInfo.OldSize);
             if Succ(J - LastIndex) = StreamCount1 then
@@ -2368,8 +2368,8 @@ begin
     end;
     if StoreDD > -2 then
     begin
-      // 0.8.3: recorta DDList1/DDInfo2 de capacidad geometrica a su cuenta viva antes de
-      // iterarlas por Low/High/Length; restaura longitudes identicas al codigo previo.
+      // 0.8.3: trims DDList1/DDInfo2 from geometric capacity to their live count before
+      // iterating them via Low/High/Length; restores lengths identical to the previous code.
       SetLength(DDList1, DDList1Count);
       SetLength(DDInfo2, DDInfo2Count);
       WorkStream[0].Position := 0;
@@ -2598,12 +2598,12 @@ begin
   if (StoreDD > -2) and (CurDepth[Instance] = 0) then
     if ((DDIndex2 < DDCount2) and (DDIndex1 = DDList2[DDIndex2].Index)) then
     begin
-      // 0.8.3 (quita el calculo de memoria decode del dedup): antes se recalculaba
-      // CalcDupSysMem (2-4 consultas /proc de memoria) en CADA chunk de salida de un
-      // stream duplicado para reajustar el presupuesto RAM de la cache de duplicados.
-      // El presupuesto ya se fija una vez en DecChunk (NStream.Add ... CalcDupSysMem);
-      // el slot de disco (TPrecompVMStream, ~1TB) absorbe cualquier exceso => quitar
-      // el reajuste por-chunk solo cambia RAM-vs-disco, no los bytes decodificados.
+      // 0.8.3 (removes the decode memory calc from dedup): previously
+      // CalcDupSysMem (2-4 /proc memory queries) was recalculated on EVERY output chunk of a
+      // duplicate stream to readjust the RAM budget for the duplicate cache.
+      // The budget is already set once in DecChunk (NStream.Add ... CalcDupSysMem);
+      // the disk slot (TPrecompVMStream, ~1TB) absorbs any excess => removing
+      // the per-chunk readjustment only changes RAM-vs-disk, not the decoded bytes.
       DataMgr.Write(DDIndex1, Buffer, Size);
     end;
 end;
@@ -2951,9 +2951,9 @@ begin
       Input.ReadBuffer(UI32, UI32.Size);
       SetLength(DDList2, UI32);
       DDCount2 := UI32;
-      // 0.8.0 (decode mas rapido): la tabla DDList2 son UI32 registros contiguos
-      // empaquetados de 8 bytes; leerla de una sola vez en vez de uno por uno evita
-      // UI32 lecturas (criticas en el path Compressed=2/srep, pipe sin buffer).
+      // 0.8.0 (faster decode): the DDList2 table is UI32 contiguous
+      // records packed 8 bytes; reading it in one shot instead of one at a time avoids
+      // UI32 reads (critical on the Compressed=2/srep path, unbuffered pipe).
       if UI32 > 0 then
         Input.ReadBuffer(DDList2[0], Int64(UI32) * SizeOf(TDuplicate2));
       DDIndex1 := -1;
@@ -3079,7 +3079,7 @@ begin
               if ((DDIndex2 < DDCount2) and (DDIndex1 = DDList2[DDIndex2].Index))
               then
               begin
-                // 0.8.3: idem 2643 — sin reajuste por-stream de CalcDupSysMem.
+                // 0.8.3: same as 2643 — no per-stream readjustment of CalcDupSysMem.
                 DataMgr.Add(DDIndex1, StreamHeader^.OldSize,
                   DDList2[DDIndex2].Count);
                 DataMgr.Write(DDIndex1,
@@ -3153,8 +3153,8 @@ var
       UserTime);
     FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
 {$ENDIF}
-    // cobertura de streams (0.9.6): % del archivo que eran streams vs datos crudos.
-    // Guard explicito: IfThen NO es perezoso y evaluaria la division con InSize=0.
+    // stream coverage (0.9.6): % of the file that were streams vs raw data.
+    // Explicit guard: IfThen is NOT lazy and would evaluate the division with InSize=0.
     if EncInfo.InSize > 0 then
       CovStr := Format(' (%.2f%%)',
         [EncInfo.CovSize / EncInfo.InSize * 100])

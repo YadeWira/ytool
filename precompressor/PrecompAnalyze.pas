@@ -12,26 +12,26 @@ procedure RunAnalyze(const InputPath: String; const Flags: TArray<String>);
 implementation
 
 const
-  // Por defecto, archivos mas grandes que esto se analizan por muestra (los
-  // primeros SampleSize bytes) en vez de completos -- cada candidato corre
-  // una compresion real (ver Candidates mas abajo), asi que el costo escala
-  // linealmente con el tamano del archivo Y la cantidad de candidatos; sobre
-  // archivos de varios GB, analizar completo puede tardar minutos/horas. El
-  // flag -full fuerza el analisis completo si se prefiere exactitud sobre
-  // velocidad.
+  // By default, files larger than this are analyzed by sample (the
+  // first SampleSize bytes) instead of in full -- each candidate runs
+  // a real compression (see Candidates below), so cost scales
+  // linearly with file size AND the number of candidates; on
+  // multi-GB files, analyzing in full can take minutes/hours. The
+  // -full flag forces full analysis if accuracy is preferred over
+  // speed.
   SampleSize: Int64 = 64 * 1024 * 1024;
-  // Candidatos con deteccion propia (Scan1 independiente, no via -r). Se
-  // excluyen jojpeg (sin fuente abierta), la familia oodle (lib propietaria
-  // no incluida por defecto) y xor/aes/rc4 (PrecompCrypto.Scan1 es un no-op,
-  // solo se activan reasignando streams ya detectados por otro codec).
+  // Candidates with their own detection (standalone Scan1, not via -r).
+  // Excluded: jojpeg (no open source), the oodle family (proprietary lib
+  // not included by default), and xor/aes/rc4 (PrecompCrypto.Scan1 is a
+  // no-op, only activated by reassigning streams already detected by another codec).
   //
-  // Cada prueba corre en un SUBPROCESO propio (ytool precomp -m<codec>), no
-  // llamando PrecompMain.Encode() varias veces en el mismo proceso: ese
-  // pipeline asume una sola invocacion por proceso (encontrado durante la
-  // implementacion de este comando -- EncFreed y varios TMemoryStream/
-  // TDataStore globales nunca se resetean/liberan entre llamadas, y la
-  // segunda invocacion siempre termina en Access Violation). Hacerlo via
-  // subproceso reusa el camino de "precomp" real, ya probado exhaustivamente.
+  // Each trial runs in its own SUBPROCESS (ytool precomp -m<codec>), not
+  // by calling PrecompMain.Encode() multiple times in the same process: that
+  // pipeline assumes a single invocation per process (found while
+  // implementing this command -- EncFreed and several global TMemoryStream/
+  // TDataStore instances are never reset/freed between calls, and the
+  // second invocation always ends in an Access Violation). Doing it via a
+  // subprocess reuses the real "precomp" path, already tested exhaustively.
   Candidates: array [0 .. 16] of String = ('zlib', 'reflate', 'preflate',
     'lz4', 'lz4hc', 'lz4f', 'lzo1x', 'lzo2a', 'lzo1c', 'zstd', 'flac',
     'wavpack', 'packjpg', 'brunsli', 'packmp3', 'packpng', 'png');
@@ -65,9 +65,9 @@ begin
     Proc.Parameters.Add(OutputPath);
     Proc.Options := [poUsePipes];
     Proc.Execute;
-    // Sin shell intermedio (evita el infierno de quoting de cmd.exe con
-    // rutas/comillas anidadas); se drenan los pipes de stdout/stderr del
-    // hijo para descartar su salida sin bloquear si llena el buffer.
+    // No intermediate shell (avoids cmd.exe quoting hell with
+    // nested paths/quotes); the child's stdout/stderr pipes are drained
+    // to discard its output without blocking if the buffer fills up.
     while Proc.Running do
     begin
       while Proc.Output.NumBytesAvailable > 0 do
@@ -104,8 +104,8 @@ begin
     end;
 end;
 
-// Copia los primeros Count bytes de Src a un archivo temporal nuevo; devuelve
-// la ruta del temporal. El caller es responsable de borrarlo.
+// Copies the first Count bytes of Src to a new temp file; returns
+// the temp file's path. The caller is responsible for deleting it.
 function MakeSample(const Src: String; Count: Int64): String;
 var
   InF, OutF: TFileStream;

@@ -1,9 +1,9 @@
 unit WavPackDLL;
 
-// Binding de libwavpack 5.x para el codec WavPack de ytool (mirror de FLACDLL).
-// API validada via probe C: encode (OpenFileOutput+SetConfiguration64+PackInit+
-// PackSamples+FlushSamples) y decode (OpenFileInputEx64+UnpackSamples) en memoria
-// con callbacks; round-trip PCM bit-exacto. libwavpack.so.1 (system) en Unix.
+// Binding for libwavpack 5.x for ytool's WavPack codec (mirrors FLACDLL).
+// API validated via a C probe: encode (OpenFileOutput+SetConfiguration64+PackInit+
+// PackSamples+FlushSamples) and decode (OpenFileInputEx64+UnpackSamples) in memory
+// with callbacks; bit-exact PCM round-trip. libwavpack.so.1 (system) on Unix.
 
 interface
 

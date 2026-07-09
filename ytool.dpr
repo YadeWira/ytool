@@ -31,7 +31,7 @@ program ytool;
 
 uses
 {$IFDEF UNIX}
-  cthreads, // driver de hilos pthread; debe ir primero (TThread/TTask)
+  cthreads, // pthread thread driver; must come first (TThread/TTask)
 {$ENDIF}
 {$IFDEF UseFastMM}
   FastMM4 in 'contrib\FastMM4-AVX\FastMM4.pas',
@@ -103,8 +103,8 @@ uses
   IOCommon in 'io\IOCommon.pas';
 
 {$IFDEF MSWINDOWS}
-// FPC: el evaluador de {$SETPEFLAGS} no resuelve constantes de unidad; usamos el
-// valor numerico = LARGE_ADDRESS_AWARE($20) or RELOCS_STRIPPED($01) or DEBUG_STRIPPED($200).
+// FPC: the {$SETPEFLAGS} evaluator does not resolve unit constants; we use the
+// numeric value = LARGE_ADDRESS_AWARE($20) or RELOCS_STRIPPED($01) or DEBUG_STRIPPED($200).
 {$SETPEFLAGS $221}
 {$ENDIF}
 

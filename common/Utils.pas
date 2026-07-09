@@ -506,12 +506,12 @@ type
 
   PExecOutput = ^TExecOutput;
   TExecOutput = procedure(const Buffer: Pointer; Size: Integer);
-  { FPC 3.2.2 no tiene function references (TFunc); el unico callback no-nil
-    usado es un metodo (TCacheReadStream.FCallback), de ahi "of object". }
+  { FPC 3.2.2 doesn't have function references (TFunc); the only non-nil
+    callback used is a method (TCacheReadStream.FCallback), hence "of object". }
   TCopyCallback = function(ASize: Int64): Boolean of object;
 
-{ Compat de los intrinsecos atomicos de Delphi sobre InterLocked* de FPC.
-  AtomicIncrement/Decrement devuelven el valor NUEVO; AtomicExchange el ANTERIOR. }
+{ Compatibility shim for Delphi's atomic intrinsics on top of FPC's InterLocked*.
+  AtomicIncrement/Decrement return the NEW value; AtomicExchange returns the OLD one. }
 function AtomicIncrement(var Target: longint): longint; overload;
 function AtomicIncrement(var Target: Int64): Int64; overload;
 function AtomicIncrement(var Target: longint; const Value: longint): longint; overload;
@@ -801,11 +801,11 @@ end;
 
 procedure WriteLine(S: String);
 begin
-  // WriteConsole(GetStdHandle(STD_ERROR_HANDLE),...) exigia un handle de consola
-  // real; sobre SSH sin pty (o con stdout/stderr redirigido a archivo/pipe) ese
-  // handle es un pipe/archivo y WriteConsole fallaba en silencio (sin excepcion,
-  // sin output, exit 0). WriteLn(ErrOutput,...) es igual de valido con consola real
-  // y ademas funciona redirigido -> mismo camino que Unix.
+  // WriteConsole(GetStdHandle(STD_ERROR_HANDLE),...) required a real console
+  // handle; over SSH without a pty (or with stdout/stderr redirected to a
+  // file/pipe) that handle is a pipe/file and WriteConsole failed silently
+  // (no exception, no output, exit 0). WriteLn(ErrOutput,...) is just as
+  // valid with a real console and also works redirected -> same path as Unix.
   WriteLn(ErrOutput, S);
 end;
 
@@ -1428,7 +1428,7 @@ begin
   else
     FMapHandle := 0;
 {$ENDIF}
-  // En Linux el mapeo es por-vista (mmap del fd), no hay handle global.
+  // On Linux the mapping is per-view (mmap of the fd), there's no global handle.
 end;
 
 function TFileStreamEx.MapView(APos, ASize: Int64): Pointer;
@@ -4308,7 +4308,7 @@ end;
 
 {$IFDEF MSWINDOWS}
 type
-  // FPC no trae la unidad PsAPI de Delphi; declaramos lo mínimo desde psapi.dll.
+  // FPC doesn't ship Delphi's PsAPI unit; declare the minimum from psapi.dll.
   TProcessMemoryCounters = record
     cb: DWORD;
     PageFaultCount: DWORD;
@@ -4326,7 +4326,7 @@ function GetProcessMemoryInfo(Process: THandle; ppsmemCounters: Pointer;
   cb: DWORD): BOOL; stdcall; external 'psapi.dll' name 'GetProcessMemoryInfo';
 
 type
-  // MEMORYSTATUSEX: tampoco está en la unidad Windows de FPC 3.2.2.
+  // MEMORYSTATUSEX: also not in FPC 3.2.2's Windows unit.
   TMemoryStatusEx = record
     dwLength: DWORD;
     dwMemoryLoad: DWORD;
@@ -4936,9 +4936,9 @@ begin
   end;
 end;
 {$ELSE}
-{ TODO Linux: reimplementar la familia Exec* sobre TProcess/TProcessStream
-  (soporte de codecs/plugins ejecutables externos). Por ahora lanzan excepcion;
-  la precompresion con codecs internos no las usa. }
+{ TODO Linux: reimplement the Exec* family on top of TProcess/TProcessStream
+  (support for external executable codecs/plugins). For now they raise an
+  exception; precompression with the internal codecs doesn't use them. }
 function Exec(Executable, CommandLine, WorkDir: string): Boolean;
 begin
   Result := False;

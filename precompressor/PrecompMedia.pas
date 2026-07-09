@@ -307,7 +307,7 @@ begin
   end;
 end;
 
-// ── WavPack (codec lossless de audio, mismo modelo que FLAC: WAV->wv reversible) ──
+// ── WavPack (lossless audio codec, same model as FLAC: WAV->wv reversible) ──
 function WvBlockOutCB(id, data: Pointer; bcount: Integer): Integer cdecl;
 begin
   try
@@ -493,8 +493,8 @@ begin
   end;
   if (not ok) or ecd^.Error or (ecd^.Output.Size <= 0) then
     exit;
-  // VERIFY (libwavpack no tiene set_verify como FLAC): decodificar el .wv recien
-  // creado y exigir que reproduzca EXACTO el PCM original; si no, fallar -> literal.
+  // VERIFY (libwavpack has no set_verify like FLAC): decode the just-created
+  // .wv and require it to reproduce the EXACT original PCM; if not, fail -> literal.
   SetLength(vbuf, data_size);
   if data_size > 0 then
     if (WavpackDecode(dcd, OutBuff, ecd^.Output.Size, @vbuf[0], data_size)
@@ -589,11 +589,11 @@ begin
   end;
 end;
 
-// Detecta un stream MP3 (MPEG-1/2/2.5 Layer III) que empieza en InBuff: opcional
-// ID3v2 + frames Layer III consecutivos + opcional ID3v1. Devuelve el tamano total
-// en StreamSize. Conservador (>=2 frames) para evitar falsos positivos con 0xFF
-// sueltos; un fallo solo significa "no se recomprime" (la reversibilidad la
-// garantiza el fallback a literal de ytool).
+// Detects an MP3 stream (MPEG-1/2/2.5 Layer III) starting at InBuff: optional
+// ID3v2 + consecutive Layer III frames + optional ID3v1. Returns the total size
+// in StreamSize. Conservative (>=2 frames) to avoid false positives with stray
+// 0xFF bytes; a failure only means "not recompressed" (reversibility is
+// guaranteed by ytool's fallback to literal).
 function GetMP3Info(InBuff: PByte; InSize: NativeInt;
   StreamSize: PCardinal): Boolean;
 const
@@ -629,7 +629,7 @@ begin
       break;
     ver := (b1 shr 3) and 3;
     lay := (b1 shr 1) and 3;
-    if (ver = 1) or (lay <> 1) then // version reservada / no Layer III (01)
+    if (ver = 1) or (lay <> 1) then // reserved version / not Layer III (01)
       break;
     bri := (b2 shr 4) and $F;
     sri := (b2 shr 2) and 3;

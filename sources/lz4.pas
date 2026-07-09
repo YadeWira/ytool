@@ -77,8 +77,8 @@ function LZ4_decompress_generic(const source: pointer; const dest: pointer;
 
 implementation
 
-{ En el original WIN64 se usa como sinonimo de "64-bit". En Linux x64 WIN64 no
-  esta definido, asi que definimos LZ4_CPU64 para las rutas de 64 bits. }
+{ In the original, WIN64 is used as a synonym for "64-bit". On Linux x64 WIN64
+  isn't defined, so we define LZ4_CPU64 for the 64-bit code paths instead. }
 {$IFDEF CPUX86_64}{$DEFINE LZ4_CPU64}{$ENDIF}
 
 function LZ4_read_ARCH(const p: pointer): size_t; inline;
@@ -103,7 +103,7 @@ asm
   shr eax, 3
 end;
 {$ELSE}
-// FPC: usa el intrinseco BsfQWord (evita asm Intel estilo Delphi).
+// FPC: uses the BsfQWord intrinsic (avoids Delphi-style Intel asm).
 function LZ4_NbCommonBytesx64(value: size_t): cardinal;
 begin
   Result := BsfQWord(value) shr 3;

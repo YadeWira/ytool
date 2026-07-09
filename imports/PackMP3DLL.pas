@@ -52,9 +52,9 @@ begin
     DLLLoaded := Assigned(pmplib_init_streams) and
       Assigned(pmplib_convert_stream2stream) and
       Assigned(pmplib_convert_stream2mem);
-    // FPC desenmascara las excepciones de FPU por defecto; packMP3 hace punto
-    // flotante (IMDCT) asumiendo el modo IEEE enmascarado de C -> sin esto una
-    // operacion FP normal dispara SIGFPE dentro de la lib y aborta la conversion.
+    // FPC unmasks FPU exceptions by default; packMP3 does floating point
+    // (IMDCT) assuming C's IEEE-masked mode -> without this, a normal FP
+    // operation inside the lib triggers SIGFPE and aborts the conversion.
     if DLLLoaded then
       SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
         exUnderflow, exPrecision]);

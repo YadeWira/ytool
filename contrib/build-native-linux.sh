@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Reconstruye los objetos C nativos (lz4/zstd) para Linux x86-64 (Opcion C de la
-# migracion a FPC). Salida: contrib/{LZ4Delphi,ZSTD4Delphi}/*.linux.x64.o
+# Rebuilds the native C objects (lz4/zstd) for Linux x86-64 (Option C of the
+# migration to FPC). Output: contrib/{LZ4Delphi,ZSTD4Delphi}/*.linux.x64.o
 #
-# Fuentes esperadas en contrib/.csrc (gitignored). Si no estan, se clonan:
-#   zstd v1.5.2 (debe coincidir con ZSTD_VERSION_STRING en ZSTDLib.pas)
-#   lz4  (release reciente)
+# Sources expected in contrib/.csrc (gitignored). If missing, they are cloned:
+#   zstd v1.5.2 (must match ZSTD_VERSION_STRING in ZSTDLib.pas)
+#   lz4  (recent release)
 #
-# Notas clave:
-#  - zstd: -DZSTD_DISABLE_ASM (evita los .S de huf_decompress; usa fallback C,
-#    salida identica). NO se incluye xxhash.c: zstd deja XXH64 sin definir y se
-#    resuelve al enlace final desde el objeto de lz4 (que SI incluye xxhash.c).
-#    Asi se evita el choque de simbolos XXH* al enlazar lz4lib + ZSTDLib juntos.
-#  - lz4: incluye xxhash.c -> es el "dueno" de los simbolos XXH* (usados tambien
-#    por la unidad xxhashlib).
+# Key notes:
+#  - zstd: -DZSTD_DISABLE_ASM (avoids huf_decompress .S files; uses C fallback,
+#    identical output). xxhash.c is NOT included: zstd leaves XXH64 undefined and
+#    it is resolved at final link from the lz4 object (which DOES include xxhash.c).
+#    This avoids XXH* symbol clashes when linking lz4lib + ZSTDLib together.
+#  - lz4: includes xxhash.c -> is the "owner" of the XXH* symbols (also used
+#    by the xxhashlib unit).
 set -euo pipefail
 cd "$(dirname "$0")"                 # contrib/
 CSRC="$(pwd)/.csrc"

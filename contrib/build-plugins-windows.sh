@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Cross-compila los plugins/codecs externos de ytool para Windows x86-64 DESDE LINUX
-# via mingw-w64 (x86_64-w64-mingw32-gcc/g++) + cmake, y los deja como .dll en la raiz
-# del repo. Estos artefactos estan gitignored (regenerables). Hermano de
-# contrib/build-plugins-linux.sh (misma fuente, distinto compilador/formato de salida).
+# Cross-compiles ytool's external plugins/codecs for Windows x86-64 FROM LINUX
+# via mingw-w64 (x86_64-w64-mingw32-gcc/g++) + cmake, and leaves them as .dll in the
+# repo root. These artifacts are gitignored (regenerable). Sibling of
+# contrib/build-plugins-linux.sh (same source, different compiler/output format).
 #
-# Requisitos: git, mingw-w64 (x86_64-w64-mingw32-gcc/g++), cmake. Cada plugin es
-# independiente: si una fuente no clona o el cross-compile falla, se salta y sigue.
+# Requirements: git, mingw-w64 (x86_64-w64-mingw32-gcc/g++), cmake. Each plugin is
+# independent: if a source fails to clone or the cross-compile fails, it is skipped and continues.
 #
-# jojpeg_dll.dll NO se construye: no existe fuente publica/abierta de jojpeg (como
-# oodle), asi que ese codec queda dormido en el build Windows tambien.
+# jojpeg_dll.dll is NOT built: no public/open source exists for jojpeg (like
+# oodle), so that codec also stays dormant in the Windows build.
 #
-# LECCION MinGW: los headers upstream (packjpg/packmp3/fast-lzma2) definen su macro
-# EXPORT/API con __declspec(dllexport) solo bajo ciertos -D (BUILD_DLL, BUILD_LIB,
-# FL2_DLL_EXPORT...); para no depender de que cada uno este bien cableado, TODOS los
-# links de plugin agregan -Wl,--export-all-symbols (fuerza la tabla de exportacion PE
-# aunque falte el atributo), salvo que ya usen su propio -D idiomatico (fast-lzma2).
-# packMP3 en particular: sus funciones pmplib_* estan DENTRO de un #if defined(BUILD_LIB)
-# en el .cpp (no solo en el .h) -> hay que pasar -DBUILD_LIB o el codigo ni se compila.
+# LESSON MinGW: upstream headers (packjpg/packmp3/fast-lzma2) define their
+# EXPORT/API macro with __declspec(dllexport) only under certain -D (BUILD_DLL, BUILD_LIB,
+# FL2_DLL_EXPORT...); to avoid depending on each one being correctly wired, ALL
+# plugin links add -Wl,--export-all-symbols (forces the PE export table
+# even if the attribute is missing), except when they already use their own idiomatic -D (fast-lzma2).
+# packMP3 in particular: its pmplib_* functions are INSIDE an #if defined(BUILD_LIB)
+# in the .cpp (not just in the .h) -> you must pass -DBUILD_LIB or the code doesn't even compile.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -39,17 +39,17 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 EOF
 
-# ── srep (dedup externo -dd<N>) — Intensity/srep, con backend Win32 propio ──
-# La API de threading de srep (Compression/LZMA2/C/ThreadsUnix.h) es la misma del
-# LZMA SDK de 7-Zip (Igor Pavlov, dominio publico); el lado Windows (ThreadsWin32.*)
-# no venia en este fork (se quedo solo con el Unix), asi que se agrega adaptado desde
-# el LZMA SDK oficial (contrib/srep-win32/). Handle.h es un stub: Synchronization.h lo
-# incluye bajo #ifdef _WIN32 pero ninguna clase de ese archivo usa un tipo "Handle".
-# Ademas: -DUNICODE/-D_UNICODE (Common.h asume TCHAR=wchar_t), -lole32 -luuid (COM,
-# por el indicador de progreso del taskbar de Windows 7, feature irrelevante para un
-# helper headless pero que igual hay que linkear), y un shim de mayuscula/minuscula
-# para <ShObjIdl.h> (mingw-w64 trae "shobjidl.h"; solo importa en un FS case-sensitive
-# como Linux, en Windows real nunca fue un problema).
+# ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
+# srep's threading API (Compression/LZMA2/C/ThreadsUnix.h) is the same one from
+# 7-Zip's LZMA SDK (Igor Pavlov, public domain); the Windows side (ThreadsWin32.*)
+# wasn't included in this fork (it kept only the Unix one), so it's added, adapted from
+# the official LZMA SDK (contrib/srep-win32/). Handle.h is a stub: Synchronization.h
+# includes it under #ifdef _WIN32 but no class in that file uses a "Handle" type.
+# Also: -DUNICODE/-D_UNICODE (Common.h assumes TCHAR=wchar_t), -lole32 -luuid (COM,
+# for the Windows 7 taskbar progress indicator, a feature irrelevant for a
+# headless helper but still needs linking), and a case shim
+# for <ShObjIdl.h> (mingw-w64 ships "shobjidl.h"; only matters on a case-sensitive FS
+# like Linux, on real Windows it was never a problem).
 echo "==> srep (srep.exe)"
 [ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
 if [ -d "$CSRC/srep" ]; then
@@ -66,7 +66,7 @@ if [ -d "$CSRC/srep" ]; then
     && echo "   OK -> srep.exe" || echo "   (srep fallo)"
 fi
 
-# ── lzo2 (codec lzo1x/lzo1c/lzo2a) — tarball oficial Oberhumer ───────────────
+# ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
 echo "==> lzo2 (lzo2.dll)"
 if [ ! -d "$CSRC/lzo-2.10" ]; then
   curl -sL https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz \
@@ -76,7 +76,7 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2.dll" ) \
   && echo "   OK -> lzo2.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (codec media JPEG) — fork v4.0e del usuario ──────────────────────
+# ── packjpg (JPEG media codec) — user's fork v4.0e ──────────────────────
 echo "==> packjpg (packjpg_dll.dll)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
@@ -84,7 +84,7 @@ echo "==> packjpg (packjpg_dll.dll)"
   -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
   && echo "   OK -> packjpg_dll.dll" || echo "   (packjpg fallo)"
 
-# ── preflate (mejora el codec zlib: reconstruye deflate de cualquier encoder) ─
+# ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (preflate_dll.dll)"
 [ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
 if [ -d "$CSRC/preflate" ]; then
@@ -98,14 +98,14 @@ if [ -d "$CSRC/preflate" ]; then
   ) && echo "   OK -> preflate_dll.dll" || echo "   (preflate fallo)"
 fi
 
-# ── fast-lzma2 (compresion LZMA2 final interna, -l#) ─────────────────────────
+# ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
 echo "==> fast-lzma2 (fast-lzma2.dll)"
 [ -d "$CSRC/fast-lzma2" ] || git clone --depth 1 https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2"
 ( cd "$CSRC/fast-lzma2" && "$CC" -shared -O2 -DFL2_DLL_EXPORT=1 -Wl,--export-all-symbols \
   *.c -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
 
-# ── packmp3 (codec media MP3) — proyecto original packjpg/packMP3 v1.0g ──────
+# ── packmp3 (MP3 media codec) — original packjpg/packMP3 v1.0g project ──────
 echo "==> packmp3 (packmp3_dll.dll)"
 [ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
@@ -113,7 +113,7 @@ echo "==> packmp3 (packmp3_dll.dll)"
   -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll.dll" ) \
   && echo "   OK -> packmp3_dll.dll" || echo "   (packmp3 fallo)"
 
-# ── FLAC (codec media WAV lossless) ──────────────────────────────────────────
+# ── FLAC (lossless WAV media codec) ──────────────────────────────────────────
 echo "==> FLAC (libFLAC_dynamic.dll)"
 [ -d "$CSRC/flac" ] || git clone --depth 1 https://github.com/xiph/flac.git "$CSRC/flac"
 if [ -d "$CSRC/flac" ] && command -v cmake >/dev/null; then
@@ -132,7 +132,7 @@ else
   echo "   (FLAC: falta cmake o el clone)"
 fi
 
-# ── WavPack (codec media WAV lossless, alternativa a FLAC) ───────────────────
+# ── WavPack (lossless WAV media codec, alternative to FLAC) ───────────────────
 echo "==> WavPack (wavpackdll.dll)"
 [ -d "$CSRC/wavpack" ] || git clone --depth 1 https://github.com/dbry/WavPack.git "$CSRC/wavpack"
 if [ -d "$CSRC/wavpack" ] && command -v cmake >/dev/null; then
@@ -148,7 +148,7 @@ else
   echo "   (WavPack: falta cmake o el clone)"
 fi
 
-# ── brunsli (codec media JPEG alternativo a packjpg) — requiere cmake ────────
+# ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
 echo "==> brunsli (brunsli.dll)"
 [ -d "$CSRC/brunsli" ] || git clone --depth 1 --recursive https://github.com/google/brunsli "$CSRC/brunsli"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
@@ -168,10 +168,10 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packpng (codec PNG/APNG/JNG/MNG) — repo hermano del autor de ytool ───────
-# Mismo criterio que en build-plugins-linux.sh: construir de fuente exige Rust
-# (cross-compile a x86_64-pc-windows-gnu) + cmake para kanzi-cpp -- se baja el
-# .dll ya construido de un release versionado de packPNG en su lugar.
+# ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
+# Same criteria as in build-plugins-linux.sh: building from source requires Rust
+# (cross-compile to x86_64-pc-windows-gnu) + cmake for kanzi-cpp -- instead the
+# already-built .dll is downloaded from a versioned packPNG release.
 echo "==> packpng (packpng.dll)"
 PACKPNG_VER="v2.0b"
 if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-win64-lib.zip" \

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Suite de regresion de ytool: verifica REVERSIBILIDAD bit-exacta (decode(precomp(x))==x)
-# y reporta ratios de precompresion. Es la red de seguridad al recrear features post-0.7.9.
+# ytool regression suite: verifies bit-exact REVERSIBILITY (decode(precomp(x))==x)
+# and reports precompression ratios. It's the safety net when recreating post-0.7.9 features.
 #
-# Uso:
-#   tests/regression.sh                 # build + corpus sintetico
-#   NO_BUILD=1 tests/regression.sh      # usa el binario ./ytool ya compilado
-#   FULL=1 tests/regression.sh          # ademas, slice de test-files2.tar si existe
+# Usage:
+#   tests/regression.sh                 # build + synthetic corpus
+#   NO_BUILD=1 tests/regression.sh      # use the already-built ./ytool binary
+#   FULL=1 tests/regression.sh          # also, slice of test-files2.tar if present
 #
-# Sale con codigo !=0 si CUALQUIER round-trip no es bit-exacto.
+# Exits with code !=0 if ANY round-trip is not bit-exact.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -16,39 +16,39 @@ WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
 trap 'rm -rf "$WORK"' EXIT
 
-# metodos a probar contra CADA archivo (la reversibilidad debe valer en todos)
-# "-mzlib -dd" ejercita la deduplicacion (path DD de encode y decode); en 23_dup_streams.bin
-# encuentra duplicados reales, en el resto pasa de largo (dedup vacio, igualmente reversible).
-# "-mlzo1x" ejercita el codec lzo (encode+decode) sobre 50_lzo1x.bin si se genero (ver abajo).
-# "-mwavpack"/"-mflac" ejercitan los codecs de audio sobre 60_wav_pcm.bin (RIFF -> recompresion lossless).
-# "-mzlib -dd1" ejercita el dedup EXTERNO (srep64/srep.exe); si el binario no esta presente,
-# StoreDD cae silenciosamente a -1 (dedup en memoria) -> sigue siendo reversible, solo con
-# menos cobertura real hasta que se genere con contrib/build-plugins-{linux,windows}.sh.
-# "-mzlib -r xor"/"-r aes"/"-r rc4" ejercitan PrecompCrypto.pas (antes sin ningun test):
-# CryptoScan1 es un no-op, solo se activan reasignando streams ya detectados por otro
-# codec (igual que "-r zstd" ya hacia) -> round-trip real sobre 20_zlib_streams.bin.
-# "-mpng" ejercita el contenedor PNG (61_png_min.bin, generado in situ, sin dependencias).
-# "-mpackpng" ejercita el codec packPNG (repo hermano YadeWira/packPNG, preflate +
-# WebP-lossless) sobre 62_png_photo.bin -- a diferencia de 61_png_min.bin (ruido puro,
-# sirve solo para -mpng que no modela pixeles), este PNG tiene gradiente real para que
-# el codec de imagen tenga algo que ganar. Requiere libpackpng.so/packpng.dll en el
-# repo (no vendorizado aun, ver Fase 6); si falta, DLLLoaded=False y el metodo corre
-# sobre 0 streams -> reversible trivial, mismo criterio que preflate/srep cuando faltan.
-# "-mpreflate" ejercita ReflateDLL/PreflateDLL contra los mismos streams de
-# 20_zlib_streams.bin; preflate SI tiene .so en este repo -> cobertura real. "-mreflate"
-# se deja igual por si algun dia se agrega esa lib: si falta, cae a 0 streams (reversible
-# trivial), mismo criterio que "-dd1" con srep.
-# "-mlz4f"/"-mpackjpg"/"-mbrunsli"/"-mpackmp3" dependen de archivos OPCIONALES del corpus
-# (ver gen_corpus.py: requieren el modulo python "lz4", Pillow, y el binario "lame"
-# respectivamente). Si faltan, esos archivos no se generan y el metodo corre sobre 0
-# streams -> reversible trivial, sin cobertura real hasta que la maquina los tenga.
-# NOTA "-mlz4f": el frame LZ4 generado SI se detecta (magic 0x184D2204) pero la
-# recompresion no reproduce el frame original byte a byte -> cae al fallback seguro
-# (Streams 0/1, no 1/1). Es reversible igual, pero no prueba el codec de punta a punta;
-# queda documentado como limitacion conocida, no arreglado en esta pasada.
-# PENDIENTE (no cubierto aqui): "-mlz4"/"-mlz4hc" (bloque LZ4 crudo, heuristica de
-# token byte $F0-$F4 en PrecompLZ4.pas) necesitarian un generador dedicado como
-# tests/lzo_gen.c, no un simple frame -> se deja fuera de esta pasada de cobertura.
+# methods to test against EVERY file (reversibility must hold for all of them)
+# "-mzlib -dd" exercises deduplication (encode and decode DD path); on 23_dup_streams.bin
+# it finds real duplicates, on the rest it passes through (empty dedup, still reversible).
+# "-mlzo1x" exercises the lzo codec (encode+decode) on 50_lzo1x.bin if it was generated (see below).
+# "-mwavpack"/"-mflac" exercise the audio codecs on 60_wav_pcm.bin (RIFF -> lossless recompression).
+# "-mzlib -dd1" exercises EXTERNAL dedup (srep64/srep.exe); if the binary isn't present,
+# StoreDD silently falls back to -1 (in-memory dedup) -> still reversible, just with
+# less real coverage until it's generated with contrib/build-plugins-{linux,windows}.sh.
+# "-mzlib -r xor"/"-r aes"/"-r rc4" exercise PrecompCrypto.pas (previously with no test):
+# CryptoScan1 is a no-op, they only activate by reassigning streams already detected by another
+# codec (same as "-r zstd" already did) -> real round-trip on 20_zlib_streams.bin.
+# "-mpng" exercises the PNG container (61_png_min.bin, generated in situ, no dependencies).
+# "-mpackpng" exercises the packPNG codec (sibling repo YadeWira/packPNG, preflate +
+# WebP-lossless) on 62_png_photo.bin -- unlike 61_png_min.bin (pure noise,
+# only useful for -mpng which doesn't model pixels), this PNG has a real gradient so
+# the image codec has something to gain. Requires libpackpng.so/packpng.dll in the
+# repo (not vendored yet, see Phase 6); if missing, DLLLoaded=False and the method runs
+# over 0 streams -> trivially reversible, same criterion as preflate/srep when missing.
+# "-mpreflate" exercises ReflateDLL/PreflateDLL against the same streams from
+# 20_zlib_streams.bin; preflate DOES have a .so in this repo -> real coverage. "-mreflate"
+# is left as-is in case that lib is ever added: if missing, it falls back to 0 streams (trivially
+# reversible), same criterion as "-dd1" with srep.
+# "-mlz4f"/"-mpackjpg"/"-mbrunsli"/"-mpackmp3" depend on OPTIONAL corpus files
+# (see gen_corpus.py: they require the python module "lz4", Pillow, and the "lame"
+# binary respectively). If missing, those files aren't generated and the method runs over 0
+# streams -> trivially reversible, no real coverage until the machine has them.
+# NOTE "-mlz4f": the generated LZ4 frame IS detected (magic 0x184D2204) but the
+# recompression doesn't reproduce the original frame byte for byte -> it falls back to the safe
+# fallback (Streams 0/1, not 1/1). It's still reversible, but doesn't test the codec end to end;
+# documented as a known limitation, not fixed in this pass.
+# PENDING (not covered here): "-mlz4"/"-mlz4hc" (raw LZ4 block, token byte heuristic
+# $F0-$F4 in PrecompLZ4.pas) would need a dedicated generator like
+# tests/lzo_gen.c, not a simple frame -> left out of this coverage pass.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
   "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
@@ -57,29 +57,29 @@ METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
 fail=0; pass=0
 echo "== ytool regression =="
 
-# 1) build (salvo NO_BUILD) -------------------------------------------------
+# 1) build (unless NO_BUILD) -------------------------------------------------
 if [ "${NO_BUILD:-0}" != "1" ]; then
   echo "-- building ytool (linux) --"
-  bash contrib/build-native-linux.sh >/dev/null 2>&1 || { echo "FALLO build nativo"; exit 3; }
+  bash contrib/build-native-linux.sh >/dev/null 2>&1 || { echo "native build FAILED"; exit 3; }
   fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
     -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oytool ytool.dpr >/dev/null 2>&1 \
-    || { echo "FALLO compilacion fpc"; exit 3; }
+    || { echo "fpc compilation FAILED"; exit 3; }
 fi
-[ -x "$XTOOL" ] || { echo "no existe binario $XTOOL"; exit 3; }
+[ -x "$XTOOL" ] || { echo "binary does not exist $XTOOL"; exit 3; }
 
 # 2) corpus -----------------------------------------------------------------
-python3 tests/gen_corpus.py "$CORPUS" >/dev/null || { echo "FALLO gen_corpus"; exit 3; }
-# lzo1x: si hay gcc + liblzo2, compila el generador y crea un stream lzo1x DETECTABLE
-# (cubre el codec lzo, que antes no tenia test). Si falta, se omite y -mlzo1x corre en el
-# resto del corpus (0 streams -> literal -> igualmente reversible).
+python3 tests/gen_corpus.py "$CORPUS" >/dev/null || { echo "gen_corpus FAILED"; exit 3; }
+# lzo1x: if gcc + liblzo2 are present, compiles the generator and creates a DETECTABLE
+# lzo1x stream (covers the lzo codec, which previously had no test). If missing, it's skipped
+# and -mlzo1x runs on the rest of the corpus (0 streams -> literal -> still reversible).
 if command -v gcc >/dev/null 2>&1 && \
    gcc -O2 tests/lzo_gen.c -o "$WORK/lzo_gen" -l:liblzo2.so.2 >/dev/null 2>&1; then
   "$WORK/lzo_gen" 200000 "$CORPUS/50_lzo1x.bin" >/dev/null 2>&1 \
-    && echo "-- lzo: 50_lzo1x.bin generado (codec lzo1x cubierto) --"
+    && echo "-- lzo: 50_lzo1x.bin generated (lzo1x codec covered) --"
 fi
 if [ "${FULL:-0}" = "1" ] && [ -f "$ROOT/test-files2.tar" ]; then
-  echo "-- FULL: anadiendo slice de test-files2.tar (300MB) --"
+  echo "-- FULL: adding slice of test-files2.tar (300MB) --"
   head -c 300000000 "$ROOT/test-files2.tar" > "$CORPUS/40_realworld_300m.bin"
 fi
 

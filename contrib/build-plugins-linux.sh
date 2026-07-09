@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Construye los plugins/codecs externos de ytool para Linux x86-64 desde fuente
-# abierta y los deja como .so / binarios en la raiz del repo (junto al ejecutable
-# ytool, que es el PluginsPath por defecto). Estos artefactos estan gitignored
-# (regenerables). Distintos de contrib/build-native-linux.sh, que hace los objetos
-# C estaticos (lz4/zstd/xxhash) enlazados dentro del binario.
+# Builds ytool's external plugins/codecs for Linux x86-64 from open source
+# and leaves them as .so / binaries in the repo root (next to the ytool
+# executable, which is the default PluginsPath). These artifacts are gitignored
+# (regenerable). Different from contrib/build-native-linux.sh, which builds the
+# static C objects (lz4/zstd/xxhash) linked inside the binary.
 #
-# Fuentes se clonan a contrib/.csrc (gitignored). Requisitos: git, clang++/g++,
-# cmake (para brunsli). Cada plugin es independiente: si una fuente no clona, se
-# salta y sigue con las demas.
+# Sources are cloned to contrib/.csrc (gitignored). Requirements: git, clang++/g++,
+# cmake (for brunsli). Each plugin is independent: if a source fails to clone, it
+# is skipped and the rest continue.
 #
-# LECCION FPC<->C: las libs con punto flotante intensivo (packjpg DCT, etc.) pueden
-# disparar SIGFPE bajo FPC (que desenmascara las excepciones FPU). El fix vive en
-# el lado Pascal (SetExceptionMask en el *DLL.pas correspondiente), no aqui.
+# LESSON FPC<->C: libs with heavy floating point (packjpg DCT, etc.) can
+# trigger SIGFPE under FPC (which unmasks FPU exceptions). The fix lives on
+# the Pascal side (SetExceptionMask in the corresponding *DLL.pas), not here.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -25,7 +25,7 @@ echo "==> srep"
 ( cd "$CSRC/srep" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
   && echo "   OK -> srep64" || echo "   (srep fallo)"
 
-# ── packjpg (codec media JPEG) — fork v4.0e del usuario ──────────────────────
+# ── packjpg (JPEG media codec) — user's fork v4.0e ──────────────────────
 echo "==> packjpg (libpackjpg.so)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
@@ -33,7 +33,7 @@ echo "==> packjpg (libpackjpg.so)"
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
   -o "$ROOT/libpackjpg.so" ) && echo "   OK -> libpackjpg.so" || echo "   (packjpg fallo)"
 
-# ── preflate (mejora el codec zlib: reconstruye deflate de cualquier encoder) ─
+# ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (libpreflate.so)"
 [ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
 if [ -d "$CSRC/preflate" ]; then
@@ -47,14 +47,14 @@ if [ -d "$CSRC/preflate" ]; then
   ) && echo "   OK -> libpreflate.so" || echo "   (preflate fallo)"
 fi
 
-# ── fast-lzma2 (compresion LZMA2 final interna, -l#) ─────────────────────────
+# ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
 echo "==> fast-lzma2 (libfast-lzma2.so)"
 [ -d "$CSRC/fast-lzma2" ] || git clone --depth 1 https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2"
 ( cd "$CSRC/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
   "$CC" -shared -fPIC -O2 *.c -lpthread -o "$ROOT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
-# ── brunsli (codec media JPEG alternativo a packjpg) — requiere cmake ────────
+# ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
 echo "==> brunsli (libbrunsli.so)"
 [ -d "$CSRC/brunsli" ] || git clone --depth 1 --recursive https://github.com/google/brunsli "$CSRC/brunsli"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
@@ -72,11 +72,11 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packmp3 (codec media MP3) — proyecto original packjpg/packMP3 v1.0g ──────
+# ── packmp3 (MP3 media codec) — original packjpg/packMP3 v1.0g project ──────
 echo "==> packmp3 (libpackmp3.so)"
 [ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
 if [ -d "$CSRC/packMP3" ]; then
-  # el upstream solo da C-linkage para BUILD_DLL/Windows; parche para Linux .so
+  # upstream only gives C-linkage for BUILD_DLL/Windows; patch for Linux .so
   sed -i 's/#define EXPORT extern$/#define EXPORT extern "C"/' "$CSRC/packMP3/source/packmp3lib.h"
   ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
     source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
@@ -84,11 +84,11 @@ if [ -d "$CSRC/packMP3" ]; then
     && echo "   OK -> libpackmp3.so" || echo "   (packmp3 fallo)"
 fi
 
-# ── packpng (codec PNG/APNG/JNG/MNG) — repo hermano del autor de ytool ───────
-# Construirlo de fuente exige Rust (cross-compile) + cmake para kanzi-cpp --
-# mucho mas pesado que el resto de este script (solo clang++/g++/cmake). En
-# cambio se baja el .so ya construido de un release versionado de packPNG
-# (mismo autor, no un tercero desconocido) -- reproducible sin nuevo toolchain.
+# ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
+# Building it from source requires Rust (cross-compile) + cmake for kanzi-cpp --
+# much heavier than the rest of this script (only clang++/g++/cmake). Instead,
+# the already-built .so is downloaded from a versioned packPNG release
+# (same author, not an unknown third party) -- reproducible without a new toolchain.
 echo "==> packpng (libpackpng.so)"
 PACKPNG_VER="v2.0b"
 if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-linux-x64-lib.tar.gz" \

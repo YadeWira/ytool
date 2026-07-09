@@ -52,8 +52,8 @@ begin
     @packpng_version := Lib.GetProcAddr('packpng_version');
     DLLLoaded := Assigned(packpng_compress_mem) and
       Assigned(packpng_decompress_mem) and Assigned(packpng_free);
-    // packpng usa WebP-lossless/kanzi/LZMA2 internamente (punto flotante); mismo
-    // gotcha que packjpg/packmp3: FPC desenmascara excepciones FPU por defecto.
+    // packpng uses WebP-lossless/kanzi/LZMA2 internally (floating point); same
+    // gotcha as packjpg/packmp3: FPC unmasks FPU exceptions by default.
     if DLLLoaded then
       SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
         exUnderflow, exPrecision]);

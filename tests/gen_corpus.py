@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Genera un corpus sintetico y reproducible para las pruebas de regresion de ytool.
+"""Generates a synthetic, reproducible corpus for ytool's regression tests.
 
-Cubre casos limite y datos con streams reales (zlib/deflate) a distintos niveles,
-tamanos que cruzan el chunk de 16MB, datos incompresibles, y mezclas. Determinista
-(semilla fija) para que los ratios sean comparables entre corridas.
+Covers edge cases and data with real streams (zlib/deflate) at various levels,
+sizes that cross the 16MB chunk boundary, incompressible data, and mixes. Deterministic
+(fixed seed) so ratios are comparable across runs.
 
-Uso:  python3 tests/gen_corpus.py <dir_salida>
+Usage:  python3 tests/gen_corpus.py <output_dir>
 """
 import os
 import shutil
@@ -19,7 +19,7 @@ SEED = 0xC0FFEE
 
 
 def rng_bytes(n, seed):
-    """PRNG simple y portable (xorshift64) -> bytes pseudo-aleatorios deterministas."""
+    """Simple, portable PRNG (xorshift64) -> deterministic pseudo-random bytes."""
     out = bytearray(n)
     x = seed & 0xFFFFFFFFFFFFFFFF
     i = 0
@@ -45,11 +45,11 @@ def png_chunk(tag, data):
 
 
 def make_png(w, h, seed):
-    """PNG minimo valido (IHDR+IDAT+IEND, RGB 8bpc, sin filtro) para -mpng."""
+    """Minimal valid PNG (IHDR+IDAT+IEND, RGB 8bpc, no filter) for -mpng."""
     raw = bytearray()
     x = seed & 0xFFFFFFFF
     for y in range(h):
-        raw.append(0)  # filter type 0 (None) por scanline
+        raw.append(0)  # filter type 0 (None) per scanline
         for _ in range(w * 3):
             x = (x * 1103515245 + 12345) & 0xFFFFFFFF
             raw.append((x >> 24) & 0xFF)
@@ -60,14 +60,14 @@ def make_png(w, h, seed):
 
 
 def make_png_photo(w, h, seed):
-    """PNG con estructura espacial real (gradiente + patron), no ruido, para
-    -mpackpng: un codec de imagen real (WebP-lossless) solo gana sobre datos
-    con correlacion; ruido puro (como make_png) lo derrota igual que a
-    cualquier compresor de imagenes, dando fallback trivial sin cobertura
-    real. 61_png_min.bin (make_png) sigue sin tocarse, sirve para -mpng."""
+    """PNG with real spatial structure (gradient + pattern), not noise, for
+    -mpackpng: a real image codec (WebP-lossless) only wins over data with
+    correlation; pure noise (like make_png) defeats it the same as any
+    image compressor, giving a trivial fallback with no real coverage.
+    61_png_min.bin (make_png) is left untouched, it's used for -mpng."""
     raw = bytearray()
     for y in range(h):
-        raw.append(0)  # filter type 0 (None) por scanline
+        raw.append(0)  # filter type 0 (None) per scanline
         for xi in range(w):
             r = (xi * 255) // max(w - 1, 1)
             g = (y * 255) // max(h - 1, 1)
@@ -80,7 +80,7 @@ def make_png_photo(w, h, seed):
 
 
 def make_lz4f(seed):
-    """Frame LZ4 real (magic 0x184D2204) via el modulo python 'lz4', si esta disponible."""
+    """Real LZ4 frame (magic 0x184D2204) via the python 'lz4' module, if available."""
     try:
         import lz4.frame
     except ImportError:
@@ -90,7 +90,7 @@ def make_lz4f(seed):
 
 
 def make_jpeg(seed):
-    """JPEG baseline real (no progresivo) via Pillow, si esta disponible."""
+    """Real baseline JPEG (not progressive) via Pillow, if available."""
     try:
         from PIL import Image
     except ImportError:
@@ -114,7 +114,7 @@ def make_jpeg(seed):
 
 
 def make_mp3(seed):
-    """MP3 CBR real via 'lame' (CLI externa), si esta disponible."""
+    """Real CBR MP3 via 'lame' (external CLI), if available."""
     lame = shutil.which('lame')
     if not lame:
         return None
@@ -160,59 +160,59 @@ def main():
     base_text = (b'The quick brown fox jumps over the lazy dog. '
                  b'Lorem ipsum dolor sit amet. ') * 3000
 
-    # --- casos limite ---
+    # --- edge cases ---
     write(d, '01_empty.bin', b'')
     write(d, '02_one_byte.bin', b'\x42')
     write(d, '03_tiny_text.bin', b'hello world\n')
 
-    # --- incompresible (no debe encontrar streams; reversibilidad pura) ---
+    # --- incompressible (should find no streams; pure reversibility) ---
     write(d, '10_random_2m.bin', rng_bytes(2_000_000, SEED))
 
-    # --- altamente compresible (texto plano, sin streams pero util para ratio) ---
+    # --- highly compressible (plain text, no streams but useful for ratio) ---
     write(d, '11_text_8m.bin', base_text[:8_000_000] if len(base_text) >= 8_000_000
           else base_text * (8_000_000 // len(base_text) + 1))
 
-    # --- streams zlib/deflate reales a varios niveles, intercalados con ruido ---
+    # --- real zlib/deflate streams at various levels, interleaved with noise ---
     blob = bytearray()
     for i, lvl in enumerate([1, 3, 6, 9, 6, 1]):
         blob += zlib.compress(base_text[: 50000 + i * 20000], lvl)
         blob += rng_bytes(500, SEED + i)
     write(d, '20_zlib_streams.bin', bytes(blob))
 
-    # --- muchos streams zlib pequenos (estresa el scanner/contador) ---
+    # --- many small zlib streams (stresses the scanner/counter) ---
     many = bytearray()
     for i in range(200):
         many += zlib.compress(("payload-%d " % i).encode() * (100 + i), (i % 9) + 1)
         many += rng_bytes(64, SEED + 1000 + i)
     write(d, '21_zlib_many.bin', bytes(many))
 
-    # --- streams DUPLICADOS: ejercita el dedup (-dd): N distintos x R copias ---
-    # cada copia identica del mismo stream zlib -> StoreDD las deduplica. Cubre el
-    # path DD de encode (DDInfo1/DDList1/DDInfo2) y de decode (DDList2 + cache de dups).
+    # --- DUPLICATE streams: exercises dedup (-dd): N distinct x R copies ---
+    # each identical copy of the same zlib stream -> StoreDD deduplicates them. Covers the
+    # DD path on encode (DDInfo1/DDList1/DDInfo2) and on decode (DDList2 + dup cache).
     dup = bytearray()
     for i in range(30):
         s = zlib.compress(base_text[: 4000 + i * 137], 6)
         for _ in range(3):
             dup += s
-            dup += rng_bytes(48, SEED + 5000 + i)  # ruido separador (igual por i)
+            dup += rng_bytes(48, SEED + 5000 + i)  # separator noise (same per i)
     write(d, '23_dup_streams.bin', bytes(dup))
 
-    # --- raw deflate (sin cabecera zlib) intercalado ---
+    # --- raw deflate (no zlib header) interleaved ---
     raw = bytearray()
-    co = zlib.compressobj(9, zlib.DEFLATED, -15)  # wbits negativos = raw deflate
+    co = zlib.compressobj(9, zlib.DEFLATED, -15)  # negative wbits = raw deflate
     raw += co.compress(base_text[:80000]) + co.flush()
     raw += rng_bytes(400, SEED + 7)
     write(d, '22_raw_deflate.bin', bytes(raw))
 
-    # --- cruza el chunk de 16MB: zlib streams dispersos en ~20MB ---
+    # --- crosses the 16MB chunk: zlib streams scattered across ~20MB ---
     big = bytearray()
     while len(big) < 20_000_000:
         big += zlib.compress(base_text[:30000], 6)
         big += rng_bytes(40000, SEED + len(big))
     write(d, '30_over_chunk_20m.bin', bytes(big))
 
-    # --- WAV PCM (RIFF): ejercita los codecs de audio (flac/wavpack detectan RIFF,
-    #     decodifican a PCM y recomprimen lossless; restore reproduce el WAV exacto) ---
+    # --- WAV PCM (RIFF): exercises the audio codecs (flac/wavpack detect RIFF,
+    #     decode to PCM and recompress lossless; restore reproduces the exact WAV) ---
     ch, bits, rate, nframes = 2, 16, 44100, 40000
     block_align = ch * bits // 8
     byte_rate = rate * block_align
@@ -228,21 +228,21 @@ def main():
            + b'data' + struct.pack('<I', len(pcm)) + bytes(pcm))
     write(d, '60_wav_pcm.bin', wav)
 
-    # --- PNG minimo (IHDR/IDAT/IEND): ejercita el codec -mpng (detecta el
-    #     contenedor PNG, no solo el deflate crudo que ya cubre 20_zlib_streams.bin) ---
+    # --- minimal PNG (IHDR/IDAT/IEND): exercises the -mpng codec (detects the
+    #     PNG container, not just raw deflate already covered by 20_zlib_streams.bin) ---
     write(d, '61_png_min.bin', make_png(24, 24, SEED))
 
-    # --- PNG con estructura espacial real (gradiente): ejercita -mpackpng
-    #     (packPNG/WebP-lossless) de verdad -- ruido puro como make_png() no
-    #     sirve, ningun codec de imagen gana sobre datos sin correlacion ---
+    # --- PNG with real spatial structure (gradient): genuinely exercises -mpackpng
+    #     (packPNG/WebP-lossless) -- pure noise like make_png() doesn't
+    #     work, no image codec wins over uncorrelated data ---
     write(d, '62_png_photo.bin', make_png_photo(48, 48, SEED))
 
-    # --- Los siguientes 3 son OPCIONALES: requieren una herramienta externa
-    #     presente en la maquina que genera el corpus (no en runtime de ytool).
-    #     Si falta, simplemente no se escribe el archivo y el metodo correspondiente
-    #     (-mlz4f/-mpackjpg+-mbrunsli/-mpackmp3 en regression.sh) corre igual pero
-    #     sin encontrar el stream real -> reversible trivial, cobertura de codec = 0
-    #     para esa corrida (mismo criterio ya usado con 50_lzo1x.bin/gcc+liblzo2).
+    # --- The following 3 are OPTIONAL: they require an external tool
+    #     present on the machine generating the corpus (not at ytool runtime).
+    #     If missing, the file simply isn't written and the corresponding method
+    #     (-mlz4f/-mpackjpg+-mbrunsli/-mpackmp3 in regression.sh) still runs but
+    #     without finding the real stream -> trivial reversibility, codec coverage = 0
+    #     for that run (same criterion already used with 50_lzo1x.bin/gcc+liblzo2).
     lz4f = make_lz4f(SEED)
     if lz4f is not None:
         write(d, '70_lz4f.bin', lz4f)

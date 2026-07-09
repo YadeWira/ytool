@@ -278,9 +278,9 @@ begin
     exit;
   Res := Max(StreamInfo^.NewSize, LMaxSize);
   Buffer := Funcs^.Allocator(Instance, Res);
-  // fix lzo: el idiom "not lzoCall(...) = 0" se parsea (por precedencia de 'not')
-  // como (not result)=0, que solo captura el codigo -1 y deja pasar otros errores
-  // (-4/-5/-7...). La forma correcta es "lzoCall(...) <> 0".
+  // lzo fix: the idiom "not lzoCall(...) = 0" parses (due to 'not' precedence)
+  // as (not result)=0, which only catches error code -1 and lets other errors
+  // through (-4/-5/-7...). The correct form is "lzoCall(...) <> 0".
   case X of
     LZO1X_CODEC:
       if lzo1x_decompress_safe(Input, StreamInfo^.OldSize, Buffer, @Res) <> 0
@@ -319,8 +319,9 @@ begin
   X := GetBits(StreamInfo^.Option, 0, 3);
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
-  // fix lzo: lzo*_compress NO acota la salida -> reservar el peor caso LZO
-  // (n + n/16 + 64 + 3) para evitar overrun en payloads poco compresibles.
+  // lzo fix: lzo*_compress does NOT bound the output -> reserve the LZO
+  // worst case (n + n/16 + 64 + 3) to avoid an overrun on poorly compressible
+  // payloads.
   Buffer := Funcs^.Allocator(Instance, StreamInfo^.NewSize +
     (StreamInfo^.NewSize shr 4) + 67);
   SOList[Instance][X].Index := 0;
@@ -439,9 +440,10 @@ begin
         LZO1C_999:
           begin
             Params := 'v' + GetBits(StreamInfo.Option, 7, 12).ToString;
-            // fix lzo (0.9.0): el restore de lzo1c llamaba a lzo2a_999_compress
-            // (copy/paste); el encode (LZOProcess) usa lzo1c_999_compress -> los bytes
-            // no coincidian y el stream lzo1c nunca se reconstruia. Ahora simetrico.
+            // lzo fix (0.9.0): lzo1c's restore was calling lzo2a_999_compress
+            // (copy/paste bug); the encode side (LZOProcess) uses lzo1c_999_compress
+            // -> the bytes never matched and the lzo1c stream never reconstructed.
+            // Now symmetric.
             if lzo1c_999_compress(Input, StreamInfo.NewSize, Buffer, @Res1,
               WrkMem[Instance]) <> 0 then
               Res1 := 0;

@@ -24,9 +24,10 @@ var
     in_size: Integer; out_dest: Pointer; out_type: Integer)cdecl;
   pjglib_version_info: function: PAnsiChar cdecl;
   pjglib_short_name: function: PAnsiChar cdecl;
-  // v4.0e (fork): control de hilos intra-archivo. ytool ya paraleliza por stream,
-  // asi que forzamos packjpg a 1 hilo (n=1) para evitar que su spawn de std::thread
-  // choque con el runtime de hilos de ytool. Opcional (puede no existir en DLLs viejas).
+  // v4.0e (fork): intra-file thread control. ytool already parallelizes per
+  // stream, so we force packjpg to 1 thread (n=1) to avoid its std::thread
+  // spawn clashing with ytool's own threading runtime. Optional (may not
+  // exist in older DLLs).
   pjglib_set_intra_file_threads: procedure(n: Integer)cdecl;
 
   DLLLoaded: Boolean = False;
@@ -60,9 +61,9 @@ begin
       Lib.GetProcAddr('pjglib_set_intra_file_threads');
     if Assigned(pjglib_set_intra_file_threads) then
       pjglib_set_intra_file_threads(1);
-    // FPC desenmascara las excepciones de FPU por defecto; packjpg hace mucho
-    // punto flotante (DCT) asumiendo el modo IEEE enmascarado de C -> sin esto,
-    // una operacion FP normal dispara SIGFPE dentro de la lib y aborta la conversion.
+    // FPC unmasks FPU exceptions by default; packjpg does a lot of floating
+    // point (DCT) assuming C's IEEE-masked mode -> without this, a normal FP
+    // operation inside the lib triggers SIGFPE and aborts the conversion.
     if DLLLoaded then
       SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
         exUnderflow, exPrecision]);
