@@ -110,6 +110,8 @@ type
     InSize, InflSize, SrepSize, CompSize: Int64;
     CovSize: Int64;
     SrepMem: Integer;
+    PatchCount: Integer;
+    PatchSize: Int64;
   end;
 
 const
@@ -750,6 +752,11 @@ procedure PrecompLogPatch1(OldSize, NewSize, PatchSize: Integer;
 var
   S: String;
 begin
+  if Status then
+  begin
+    AtomicIncrement(EncInfo.PatchCount);
+    Inc(EncInfo.PatchSize, PatchSize);
+  end;
   if not VERBOSE then
     exit;
   if Status then
@@ -3145,14 +3152,16 @@ var
     // cobertura de streams (0.9.6): % del archivo que eran streams vs datos crudos.
     // Guard explicito: IfThen NO es perezoso y evaluaria la division con InSize=0.
     if EncInfo.InSize > 0 then
-      CovStr := Format(' (coverage %.2f%%)',
+      CovStr := Format(' (%.2f%%)',
         [EncInfo.CovSize / EncInfo.InSize * 100])
     else
       CovStr := '';
     SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
       EncInfo.Count.ToString + CovStr;
+    SL[1] := 'Patched: ' + EncInfo.PatchCount.ToString + ' (' +
+      ConvertKB2TB(EncInfo.PatchSize div 1024) + ')';
     TS := Stopwatch.Elapsed;
-    SL[1] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
+    SL[2] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
       [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
 {$IFDEF MSWINDOWS}
       + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
@@ -3163,20 +3172,20 @@ var
     I64 := I64 div 1024;
     if StoreDD > -2 then
     begin
-      I := 4;
-      SL[2] := 'Duplicates: ' + EncInfo.DupCount.ToString + ' (' +
+      I := 5;
+      SL[3] := 'Duplicates: ' + EncInfo.DupCount.ToString + ' (' +
         ConvertKB2TB(EncInfo.DecMem2 div 1024) + ') [' +
         ConvertKB2TB(EncInfo.DupSize1 div 1024) + ' >> ' +
         ConvertKB2TB(EncInfo.DupSize2 div 1024) + ']     ';
       if StoreDD > 0 then
       begin
-        I := 5;
-        SL[3] := 'Srep decompression memory: ' +
+        I := 6;
+        SL[4] := 'Srep decompression memory: ' +
           ConvertKB2TB(EncInfo.SrepMem * 1024) + '     ';
       end;
     end
     else
-      I := 3;
+      I := 4;
     SL[I] := 'Size: ' + ConvertKB2TB(EncInfo.InSize div 1024) +
       IfThen(StoreDD > -2,
       ' >> ' + ConvertKB2TB((EncInfo.InflSize + EncInfo.DupSize2) div 1024), '')
@@ -3207,6 +3216,7 @@ begin
   CLine := 0;
   SL := TStringList.Create;
   SL.Add('Streams: 0 / 0');
+  SL.Add('Patched: 0 (0.00 MB)');
   SL.Add('Time: 00:00:00');
   if StoreDD > -2 then
   begin
