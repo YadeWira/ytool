@@ -1262,9 +1262,9 @@ end;
 function PrecompFileOpen(FileName: PChar; Create: Boolean): THandle;
 begin
   if Create then
-    FileCreate(FileName)
+    Result := FileCreate(FileName)
   else
-    FileOpen(FileName, fmOpenReadWrite or fmShareDenyNone);
+    Result := FileOpen(FileName, fmOpenReadWrite or fmShareDenyNone);
 end;
 
 procedure PrecompFileClose(Handle: THandle);
