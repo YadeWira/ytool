@@ -1,0 +1,26 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install FPC + build deps
+        run: sudo apt-get update && sudo apt-get install -y fpc gcc
+
+      # tests/regression.sh builds the native lz4/zstd/xxhash objects (contrib/
+      # build-native-linux.sh), compiles ytool with FPC, generates a synthetic
+      # corpus, and round-trips every codec against it (decode(precomp(x))==x).
+      # It already degrades gracefully if optional corpus tools are missing
+      # (python "lz4", Pillow, "lame") — not installed here on purpose, to keep
+      # this workflow minimal; that only reduces real coverage for -mlz4f/
+      # -mpackjpg/-mbrunsli/-mpackmp3 in CI, same as running locally without them.
+      # Windows is not covered here: it requires the manual mingw-w64
+      # cross-compile + Windows-VM verification flow (see contrib/build-native-
+      # windows.sh, contrib/build-plugins-windows.sh), out of scope for this
+      # first CI pass.
+      - name: Run regression suite (builds native objs + fpc + round-trips)
+        run: bash tests/regression.sh
