@@ -59,6 +59,26 @@ def make_png(w, h, seed):
             + png_chunk(b'IDAT', idat) + png_chunk(b'IEND', b''))
 
 
+def make_png_photo(w, h, seed):
+    """PNG con estructura espacial real (gradiente + patron), no ruido, para
+    -mpackpng: un codec de imagen real (WebP-lossless) solo gana sobre datos
+    con correlacion; ruido puro (como make_png) lo derrota igual que a
+    cualquier compresor de imagenes, dando fallback trivial sin cobertura
+    real. 61_png_min.bin (make_png) sigue sin tocarse, sirve para -mpng."""
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)  # filter type 0 (None) por scanline
+        for xi in range(w):
+            r = (xi * 255) // max(w - 1, 1)
+            g = (y * 255) // max(h - 1, 1)
+            b = ((xi + y + seed) % 32) * 8
+            raw += bytes((r, g, b))
+    ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+    idat = zlib.compress(bytes(raw), 9)
+    return (b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', ihdr)
+            + png_chunk(b'IDAT', idat) + png_chunk(b'IEND', b''))
+
+
 def make_lz4f(seed):
     """Frame LZ4 real (magic 0x184D2204) via el modulo python 'lz4', si esta disponible."""
     try:
@@ -211,6 +231,11 @@ def main():
     # --- PNG minimo (IHDR/IDAT/IEND): ejercita el codec -mpng (detecta el
     #     contenedor PNG, no solo el deflate crudo que ya cubre 20_zlib_streams.bin) ---
     write(d, '61_png_min.bin', make_png(24, 24, SEED))
+
+    # --- PNG con estructura espacial real (gradiente): ejercita -mpackpng
+    #     (packPNG/WebP-lossless) de verdad -- ruido puro como make_png() no
+    #     sirve, ningun codec de imagen gana sobre datos sin correlacion ---
+    write(d, '62_png_photo.bin', make_png_photo(48, 48, SEED))
 
     # --- Los siguientes 3 son OPCIONALES: requieren una herramienta externa
     #     presente en la maquina que genera el corpus (no en runtime de ytool).

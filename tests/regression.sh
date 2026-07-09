@@ -28,6 +28,12 @@ trap 'rm -rf "$WORK"' EXIT
 # CryptoScan1 es un no-op, solo se activan reasignando streams ya detectados por otro
 # codec (igual que "-r zstd" ya hacia) -> round-trip real sobre 20_zlib_streams.bin.
 # "-mpng" ejercita el contenedor PNG (61_png_min.bin, generado in situ, sin dependencias).
+# "-mpackpng" ejercita el codec packPNG (repo hermano YadeWira/packPNG, preflate +
+# WebP-lossless) sobre 62_png_photo.bin -- a diferencia de 61_png_min.bin (ruido puro,
+# sirve solo para -mpng que no modela pixeles), este PNG tiene gradiente real para que
+# el codec de imagen tenga algo que ganar. Requiere libpackpng.so/packpng.dll en el
+# repo (no vendorizado aun, ver Fase 6); si falta, DLLLoaded=False y el metodo corre
+# sobre 0 streams -> reversible trivial, mismo criterio que preflate/srep cuando faltan.
 # "-mpreflate" ejercita ReflateDLL/PreflateDLL contra los mismos streams de
 # 20_zlib_streams.bin; preflate SI tiene .so en este repo -> cobertura real. "-mreflate"
 # se deja igual por si algun dia se agrega esa lib: si falta, cae a 0 streams (reversible
@@ -45,7 +51,8 @@ trap 'rm -rf "$WORK"' EXIT
 # tests/lzo_gen.c, no un simple frame -> se deja fuera de esta pasada de cobertura.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" "-mpackmp3")
+  "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
+  "-mpackmp3")
 
 fail=0; pass=0
 echo "== ytool regression =="

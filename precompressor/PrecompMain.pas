@@ -8,7 +8,7 @@ uses
   InitCode,
   Threading, Utils, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
-  PrecompOodle, PrecompMedia, PrecompINI, PrecompINIEx,
+  PrecompOodle, PrecompMedia, PrecompPackPNG, PrecompINI, PrecompINIEx,
   PrecompSearch, PrecompDLL, PrecompEXE,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -3328,6 +3328,7 @@ begin
   Insert(PrecompZSTD.Codec, Codecs, Length(Codecs));
   Insert(PrecompOodle.Codec, Codecs, Length(Codecs));
   Insert(PrecompMedia.Codec, Codecs, Length(Codecs));
+  Insert(PrecompPackPNG.Codec, Codecs, Length(Codecs));
   Insert(PrecompUtils.Codec, Codecs, Length(Codecs));
   if Output is TBufferedStream then
     NULLOUT := TBufferedStream(Output).Instance is TNullStream;
@@ -3440,6 +3441,7 @@ begin
   Insert(PrecompZSTD.Codec, Codecs, Length(Codecs));
   Insert(PrecompOodle.Codec, Codecs, Length(Codecs));
   Insert(PrecompMedia.Codec, Codecs, Length(Codecs));
+  Insert(PrecompPackPNG.Codec, Codecs, Length(Codecs));
   Insert(PrecompUtils.Codec, Codecs, Length(Codecs));
   FillChar(EncInfo, SizeOf(EncInfo), 0);
   ConTask := TTask.Create;
