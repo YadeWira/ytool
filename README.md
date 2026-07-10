@@ -99,6 +99,15 @@ Found and fixed while building/testing this port, not from any xtool release not
 - New command `analyze` — **exclusive to `ytool`, no xtool equivalent.** Runs a real compression trial per
   codec against a file and recommends a `-m` combination based on actual measured ratio, not just stream
   detection. See [CLI Reference](https://github.com/YadeWira/ytool/wiki/CLI-Reference#analyze).
+- Fixed a typo'd conditional-compilation symbol (`CPU64BITS`, never a real FPC symbol — the correct one is
+  `CPU64`) that had silently taken the 32-bit branch on **every 64-bit build**, Linux and Windows alike, for
+  the whole life of this port: the memory limit was capped at 1.5GB instead of the intended 64-bit ceiling,
+  the `-p` I/O-cache option was force-disabled, and `srep64` was never selected over the fallback path. Fixed
+  across `common/Utils.pas`, `precompressor/PrecompMain.pas`, `imports/OodleDLL.pas`.
+- `ytool` also builds and runs natively on **Windows x86 (32-bit, i386-win32)** — verified under WOW64 on
+  Windows 7 SP1 x64 with a bit-exact round-trip against the 64-bit build. No prebuilt binary yet (needs a
+  32-bit `zlib1.dll` packaging decision first); see `contrib/winbuild-x86.ps1` and
+  [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
 
 ### Known limitation, not deeply verified
 
