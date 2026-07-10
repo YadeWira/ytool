@@ -223,6 +223,7 @@ var
   data_size, hdr_size, smp_size: Cardinal;
   ok: Boolean;
   pcm: TArray<Integer>;
+  SampleBuf: Cardinal;
 begin
   Result := 0;
   ok := False;
@@ -261,9 +262,19 @@ begin
             begin
               if NativeInt(Ptr - InBuff) > hdr_size + data_size then
                 break;
+              { byte_per_sample can be < 4 (8/16/24-bit PCM) -- reading a
+                full 4-byte Integer straight off Ptr would over-read past
+                the actual sample (and, for the very last sample in the
+                buffer, potentially past InBuff's allocation entirely).
+                The extra bytes were always masked out by the GetBits calls
+                below regardless of their value, but reading them at all is
+                undefined behavior; copy exactly byte_per_sample bytes into
+                a zeroed scratch value instead. }
+              SampleBuf := 0;
+              Move(Ptr^, SampleBuf, byte_per_sample);
               pcm[I * wave_hdr.num_channels + J] :=
-                GetBits(PInteger(Ptr)^, 0, Pred(wave_hdr.bits_per_sample)) -
-                IfThen(GetBits(PInteger(Ptr)^, Pred(wave_hdr.bits_per_sample),
+                GetBits(SampleBuf, 0, Pred(wave_hdr.bits_per_sample)) -
+                IfThen(GetBits(SampleBuf, Pred(wave_hdr.bits_per_sample),
                 1) = 0, 0, 1 shl Pred(wave_hdr.bits_per_sample));
               Inc(Ptr, byte_per_sample);
             end;
