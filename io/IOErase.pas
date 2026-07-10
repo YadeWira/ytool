@@ -272,12 +272,7 @@ begin
             WaitForAll(Tasks);
             for J := Low(Tasks) to High(Tasks) do
               if Tasks[J].Status = TThreadStatus.tsErrored then
-                try
-                  Tasks[J].RaiseLastError;
-                except
-                  on E: Exception do
-                    WriteLine(Format('erase: worker #%d failed: %s', [J, E.Message]));
-                end;
+                Tasks[J].RaiseLastError;
             for J := Low(Tasks) to High(Tasks) do
             begin
               InfoStore[J].Index := 0;

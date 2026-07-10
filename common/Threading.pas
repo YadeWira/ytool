@@ -3,7 +3,7 @@ unit Threading;
 interface
 
 uses
-  SysUtils, Classes;
+  SysUtils, Classes, SyncObjs;
 
 type
   TThreadStatus = (tsReady, tsRunning, tsErrored, tsTerminated);
@@ -30,6 +30,14 @@ type
     FSync: Boolean;
     FErrorMsg: string;
     FStatus: TThreadStatus;
+    { FStatus doubles as both the ready/running/errored signal AND the
+      implicit memory fence for whatever the worker wrote before the
+      transition (buffer contents, InfoStore entries, etc.) -- without a
+      real synchronization primitive, the main thread reading FStatus isn't
+      guaranteed to see the worker's writes that happened-before it, nor is
+      it guaranteed to see FStatus itself promptly. FLock provides both the
+      visibility guarantee and mutual exclusion. }
+    FLock: TCriticalSection;
     FProc0: TTaskProc0;
     FProc1: TTaskProc1;
     FProc2: TTaskProc2;
@@ -42,6 +50,8 @@ type
     FMth4: TTaskMethod4;
     FArgs: array [0 .. 3] of IntPtr;
     FStarted: Boolean;
+    function GetStatus: TThreadStatus;
+    procedure SetStatus(Value: TThreadStatus);
     procedure ClearProcs;
     function HasProc: Boolean;
     procedure RunProc;
@@ -65,7 +75,7 @@ type
     procedure Start;
     procedure Wait;
     procedure RaiseLastError;
-    property Status: TThreadStatus read FStatus;
+    property Status: TThreadStatus read GetStatus;
     property Sync: Boolean read FSync write FSync;
   end;
 
@@ -78,6 +88,7 @@ implementation
 constructor TTask.Create(Arg1, Arg2, Arg3, Arg4: IntPtr);
 begin
   inherited Create(True);
+  FLock := TCriticalSection.Create;
   FSync := False;
   FErrorMsg := '';
   FStatus := tsReady;
@@ -91,8 +102,29 @@ end;
 
 destructor TTask.Destroy;
 begin
-  FStatus := tsTerminated;
+  SetStatus(tsTerminated);
   inherited Destroy;
+  FLock.Free;
+end;
+
+function TTask.GetStatus: TThreadStatus;
+begin
+  FLock.Enter;
+  try
+    Result := FStatus;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TTask.SetStatus(Value: TThreadStatus);
+begin
+  FLock.Enter;
+  try
+    FStatus := Value;
+  finally
+    FLock.Leave;
+  end;
 end;
 
 procedure TTask.Update(Arg1, Arg2, Arg3, Arg4: IntPtr);
@@ -213,10 +245,10 @@ label
   Restart;
 begin
 Restart:
-  while FStatus in [tsReady, tsErrored] do
+  while GetStatus in [tsReady, tsErrored] do
     Sleep(1);
   try
-    if FStatus = tsRunning then
+    if GetStatus = tsRunning then
     begin
       if HasProc then
       begin
@@ -225,7 +257,7 @@ Restart:
         else
           RunProc;
       end;
-      FStatus := tsReady;
+      SetStatus(tsReady);
     end;
   except
     on E: Exception do
@@ -234,10 +266,10 @@ Restart:
         FErrorMsg := E.Message
       else
         FErrorMsg := 'Unknown error';
-      FStatus := tsErrored;
+      SetStatus(tsErrored);
     end;
   end;
-  if FStatus <> tsTerminated then
+  if GetStatus <> tsTerminated then
     goto Restart;
 end;
 
@@ -248,21 +280,24 @@ begin
     FStarted := True;
     inherited Start;
   end;
-  FStatus := tsRunning;
+  SetStatus(tsRunning);
 end;
 
 procedure TTask.Wait;
 begin
-  while FStatus = tsRunning do
+  while GetStatus = tsRunning do
     Sleep(1);
 end;
 
 procedure TTask.RaiseLastError;
+var
+  Msg: string;
 begin
   if FErrorMsg <> '' then
   begin
-    raise EThreadException.Create(FErrorMsg);
+    Msg := FErrorMsg;
     FErrorMsg := '';
+    raise EThreadException.Create(Msg);
   end;
 end;
 
