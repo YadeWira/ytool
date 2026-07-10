@@ -39,6 +39,28 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 EOF
 
+# ── zlib1.dll — required at process startup, not optional ─────────────────────
+# Unlike every other plugin here (loaded lazily via LoadLibrary, tolerant of being
+# missing), zlib1.dll ends up as a hard load-time dependency of the exe (mORMot's
+# SynZip.pas links against an external zlib on Win64 -- see its USEEXTZLIB
+# conditional-compilation block); without a real zlib1.dll next to the binary the
+# process fails to start at all (STATUS_DLL_NOT_FOUND). Previously this was a
+# manually-provided DLL of undocumented origin (didn't match either mingw-w64
+# host copy's size) -- built from source here instead, so it's reproducible.
+# Confirmed drop-in compatible: exports a superset of what's actually used
+# (inflate/inflateEnd/inflateInit2_/inflateReset/crc32/deflate/compress/uncompress
+# etc.), verified with a real round-trip on the Windows VM.
+echo "==> zlib1.dll (from source, zlib 1.3.1)"
+[ -d "$CSRC/zlib" ] || git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git "$CSRC/zlib"
+if [ -d "$CSRC/zlib" ]; then
+  ( cd "$CSRC/zlib" && rm -f *.o && "$CC" -c -O2 -DZLIB_DLL adler32.c compress.c crc32.c deflate.c \
+      gzclose.c gzlib.c gzread.c gzwrite.c infback.c inffast.c inflate.c inftrees.c trees.c \
+      uncompr.c zutil.c && \
+    "$CC" -shared -O2 -o "$ROOT/zlib1.dll" *.o win32/zlib.def \
+      -Wl,--out-implib,libzlib1.a -static-libgcc ) \
+    && echo "   OK -> zlib1.dll" || echo "   (zlib1.dll fallo)"
+fi
+
 # ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
 # srep's threading API (Compression/LZMA2/C/ThreadsUnix.h) is the same one from
 # 7-Zip's LZMA SDK (Igor Pavlov, public domain); the Windows side (ThreadsWin32.*)
