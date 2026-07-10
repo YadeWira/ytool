@@ -20,8 +20,28 @@ mkdir -p "$CSRC"
 CXX="$(command -v clang++ || command -v g++)"
 
 # ── srep (dedup -d / StoreDD) ────────────────────────────────────────────────
+# Patches two inline-asm register-clobber bugs before building (hashes.cpp's
+# CRC32 helper, vmac.c's nh_16_func/poly_step_func -- see
+# contrib/build-plugins-windows-x86.sh's comment on the same step for the full
+# story). Neither is known to actually misbehave on this build/toolchain
+# (verified byte-identical output with/without the fix), but both are real,
+# independently-confirmed bugs upstream (see the sibling omega-srep fork,
+# github.com/YadeWira/omega-srep commit 22bbe43) so it costs nothing to apply
+# them everywhere rather than only where they were forced to compile at all.
 echo "==> srep"
 [ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
+if [ -d "$CSRC/srep" ]; then
+  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    # Handles both a fresh clone ("rm", unpatched) and one patched by an
+    # earlier version of this script that only did "rm"->"qm" without the
+    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+  fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
+fi
 ( cd "$CSRC/srep" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
   && echo "   OK -> srep64" || echo "   (srep fallo)"
 

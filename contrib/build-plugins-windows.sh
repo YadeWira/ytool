@@ -72,12 +72,27 @@ fi
 # headless helper but still needs linking), and a case shim
 # for <ShObjIdl.h> (mingw-w64 ships "shobjidl.h"; only matters on a case-sensitive FS
 # like Linux, on real Windows it was never a problem).
+# Also patches two inline-asm register-clobber bugs (hashes.cpp's CRC32 helper,
+# vmac.c's nh_16_func/poly_step_func) that only strictly matter on i386 (see
+# build-plugins-windows-x86.sh's own comment for the full story) but are applied
+# here too for consistency/safety -- verified byte-identical x86_64 output
+# before/after.
 echo "==> srep (srep.exe)"
 [ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
 if [ -d "$CSRC/srep" ]; then
   cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
     "$CSRC/srep/Compression/LZMA2/C/"
   cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
+  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    # Handles both a fresh clone ("rm", unpatched) and one patched by an
+    # earlier version of this script that only did "rm"->"qm" without the
+    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+  fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
   ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \

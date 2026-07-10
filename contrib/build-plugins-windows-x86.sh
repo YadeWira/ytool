@@ -65,9 +65,17 @@ fi
 # eax/ebx/ecx/edx have legacy 8-bit sub-registers (esi/edi/ebp/esp don't);
 # GCC's i386 codegen fails with "unsupported size for integer register"
 # (reported at the enclosing function due to inlining, not the true line).
-# Fixed by narrowing the constraint to "qm" (byte-addressable registers
-# only), applied as an idempotent sed patch below (checks before patching,
-# safe to re-run).
+# Fixed by narrowing the constraint to "qm" (byte-addressable registers only)
+# plus a defensive "cc" clobber, applied as an idempotent sed patch below
+# (checks before patching, safe to re-run). Also patches vmac.c's
+# nh_16_func/poly_step_func: same missing-register-clobber bug class (a
+# genuine architecture-dependent SHA256 divergence was measured between
+# builds compiled with "qm" vs "rm" for the CRC32 helper -- investigated as
+# a possible cause of ytool's own `-mzlib -dd1` cross-arch bug, ruled out by
+# direct A/B test: a patched build produces byte-identical output to an
+# unpatched one under this mingw-w64 toolchain, so whatever the real second
+# factor is, it isn't this -- but the register-clobber bug is real
+# independent of that, see patch_srep_vmac.py's own comment).
 echo "==> srep (srep-x86.exe)"
 [ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
 if [ -d "$CSRC/srep" ]; then
@@ -75,9 +83,15 @@ if [ -d "$CSRC/srep" ]; then
     "$CSRC/srep/Compression/LZMA2/C/"
   cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
   HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if grep -q '\[value\] "rm" (value)' "$HASHES" 2>/dev/null; then
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value)/' "$HASHES"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    # Handles both a fresh clone ("rm", unpatched) and one patched by an
+    # earlier version of this script that only did "rm"->"qm" without the
+    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
   fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
   ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
