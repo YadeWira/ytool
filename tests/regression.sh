@@ -68,6 +68,7 @@ if [ "${NO_BUILD:-0}" != "1" ]; then
   echo "-- building ytool (linux) --"
   NATIVE_LOG="$(bash contrib/build-native-linux.sh 2>&1)" \
     || { echo "native build FAILED:"; echo "$NATIVE_LOG"; exit 3; }
+  mkdir -p .fpcout
   FPC_LOG="$(fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
     -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \

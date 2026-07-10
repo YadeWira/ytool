@@ -38,9 +38,13 @@ jobs:
         run: choco install -y lazarus --no-progress
 
       # Only the static objects already committed in the repo (zstd/lz4
-      # .o/.obj, inherited from the original Delphi project) -- no mingw-w64
-      # cross-compiled plugin DLLs here, that stays the manual VM flow's job
-      # (see contrib/build-plugins-windows.sh, tests/regression-windows.ps1).
+      # .o/.obj inherited from the original Delphi project, plus
+      # lzmadelphi.win64.x64.o force-added the same way -- it's normally
+      # rebuilt by contrib/build-native-windows.sh, which needs mingw-w64
+      # cross-compiling FROM Linux, not available on a native windows-latest
+      # runner) -- no mingw-w64 cross-compiled plugin DLLs here, that stays
+      # the manual VM flow's job (see contrib/build-plugins-windows.sh,
+      # tests/regression-windows.ps1).
       # regression.sh already tolerates missing plugin DLLs gracefully (those
       # codecs just run over 0 streams, trivially reversible) -- same
       # degradation this job accepts on purpose, for a fast core-logic
@@ -49,6 +53,7 @@ jobs:
         shell: pwsh
         run: |
           $fpc = "C:\lazarus\fpc\3.2.2\bin\x86_64-win64\fpc.exe"
+          New-Item -ItemType Directory -Force -Path .fpcout | Out-Null
           & $fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio `
             -Fuimports -Fusources -Fucontrib\mORMot -Fucontrib\LZ4Delphi -Fucontrib\ZSTD4Delphi `
             -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi `
