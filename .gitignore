@@ -1,5 +1,6 @@
 .fpcout/
 *.o
+*.O
 *.ppu
 *.compiled
 contrib/.csrc/

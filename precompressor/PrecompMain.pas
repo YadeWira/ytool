@@ -20,7 +20,7 @@ uses
 const
   YTOOL_PRECOMP = $304C5458;
   YTOOL_BSIZE = 4194304;
-{$IFDEF CPU64BITS}
+{$IFDEF CPU64}
   YTOOL_MEMLIMIT = Int64.MaxValue;
 {$ELSE}
   YTOOL_MEMLIMIT = $60000000;
@@ -377,7 +377,7 @@ begin
         end;
       Inc(I);
     end;
-{$IFDEF CPU64BITS}
+{$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     S := ReplaceText(S, 'KB', '* 1024^1');
     S := ReplaceText(S, 'MB', '* 1024^2');
@@ -474,7 +474,7 @@ begin
     if B then
       Options.DedupSysMem := -Options.DedupSysMem;
     SrepCfg := ArgParse.AsString('-sp', 0, '').ToLower;
-{$IFDEF CPU64BITS}
+{$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     S := ReplaceText(S, 'KB', '* 1024^1');
     S := ReplaceText(S, 'MB', '* 1024^2');
@@ -3544,7 +3544,7 @@ PrecompFunctions.Transfer := PrecompTransfer;
 PrecompFunctions.Storage := PrecompStorage;
 PrecompFunctions.AddResourceEx := PrecompAddResourceEx;
 
-{$IFDEF CPU64BITS}
+{$IFDEF CPU64}
 if FileExists(ExpandPath(PluginsPath + SREPEXE64, True)) then
   SREPEXE := SREPEXE64;
 {$ENDIF}

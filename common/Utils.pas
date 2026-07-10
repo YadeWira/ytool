@@ -743,10 +743,34 @@ begin
   Result := InterLockedIncrement(Target);
 end;
 
+{$IFNDEF CPU64}
+{ FPC's System unit has no InterLocked*64 on i386 at all, and the MSVC-style
+  names (InterlockedIncrement64 etc.) aren't real kernel32 exports either --
+  only InterlockedCompareExchange64 genuinely is (confirmed: links AND runs;
+  the others link but the process fails to start, STATUS_DLL_NOT_FOUND,
+  since they're MSVC compiler intrinsics, not actual DLL symbols). Every
+  Int64 atomic op below is built as a compare-and-swap retry loop on top of
+  that one real primitive. }
+function Win32InterlockedCompareExchange64(var Destination: Int64;
+  Exchange, Comparand: Int64): Int64; stdcall;
+  external 'kernel32' name 'InterlockedCompareExchange64';
+{$ENDIF}
+
 function AtomicIncrement(var Target: Int64): Int64;
+{$IFDEF CPU64}
 begin
   Result := InterLockedIncrement64(Target);
 end;
+{$ELSE}
+var
+  OldVal: Int64;
+begin
+  repeat
+    OldVal := Target;
+    Result := OldVal + 1;
+  until Win32InterlockedCompareExchange64(Target, Result, OldVal) = OldVal;
+end;
+{$ENDIF}
 
 function AtomicIncrement(var Target: longint; const Value: longint): longint;
 begin
@@ -754,9 +778,20 @@ begin
 end;
 
 function AtomicIncrement(var Target: Int64; const Value: Int64): Int64;
+{$IFDEF CPU64}
 begin
   Result := InterLockedExchangeAdd64(Target, Value) + Value;
 end;
+{$ELSE}
+var
+  OldVal: Int64;
+begin
+  repeat
+    OldVal := Target;
+    Result := OldVal + Value;
+  until Win32InterlockedCompareExchange64(Target, Result, OldVal) = OldVal;
+end;
+{$ENDIF}
 
 function AtomicDecrement(var Target: longint): longint;
 begin
@@ -764,9 +799,20 @@ begin
 end;
 
 function AtomicDecrement(var Target: Int64): Int64;
+{$IFDEF CPU64}
 begin
   Result := InterLockedDecrement64(Target);
 end;
+{$ELSE}
+var
+  OldVal: Int64;
+begin
+  repeat
+    OldVal := Target;
+    Result := OldVal - 1;
+  until Win32InterlockedCompareExchange64(Target, Result, OldVal) = OldVal;
+end;
+{$ENDIF}
 
 function AtomicDecrement(var Target: longint; const Value: longint): longint;
 begin
@@ -774,9 +820,20 @@ begin
 end;
 
 function AtomicDecrement(var Target: Int64; const Value: Int64): Int64;
+{$IFDEF CPU64}
 begin
   Result := InterLockedExchangeAdd64(Target, -Value) - Value;
 end;
+{$ELSE}
+var
+  OldVal: Int64;
+begin
+  repeat
+    OldVal := Target;
+    Result := OldVal - Value;
+  until Win32InterlockedCompareExchange64(Target, Result, OldVal) = OldVal;
+end;
+{$ENDIF}
 
 function AtomicExchange(var Target: longint; const Value: longint): longint;
 begin
@@ -784,9 +841,20 @@ begin
 end;
 
 function AtomicExchange(var Target: Int64; const Value: Int64): Int64;
+{$IFDEF CPU64}
 begin
   Result := InterLockedExchange64(Target, Value);
 end;
+{$ELSE}
+var
+  OldVal: Int64;
+begin
+  repeat
+    OldVal := Target;
+  until Win32InterlockedCompareExchange64(Target, Value, OldVal) = OldVal;
+  Result := OldVal;
+end;
+{$ENDIF}
 
 procedure ShowMessage(Msg: string; Caption: string = '');
 begin

@@ -50,6 +50,7 @@ uses
   LibImport in 'common\LibImport.pas',
   Threading in 'common\Threading.pas',
   Utils in 'common\Utils.pas',
+  WinLibcShim in 'contrib\WinLibcShim\WinLibcShim.pas',
   lz4lib in 'contrib\LZ4Delphi\lz4lib.pas',
   SynCommons in 'contrib\mORMot\SynCommons.pas',
   SynCrypto in 'contrib\mORMot\SynCrypto.pas',

@@ -12,7 +12,12 @@ uses xxhashlib;
 const
   {$IF Defined(WIN32)}
   liblz4 = '';
-  _PU = '_';
+  // FPC's i386-win32 target auto-prepends "_" to every cdecl external symbol
+  // (verified: an explicit "_"-prefixed name gets double-prefixed, see
+  // build-native-windows-x86.sh comments), so unlike Delphi this must be
+  // empty here, not '_' -- the object files already carry a single leading
+  // underscore (standard cdecl decoration) that FPC supplies on its own.
+  _PU = '';
   {$ELSEIF Defined(WIN64)}
   liblz4 = '';
   _PU = '';

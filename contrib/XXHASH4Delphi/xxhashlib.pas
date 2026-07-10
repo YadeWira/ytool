@@ -56,37 +56,37 @@ type
 
   function XXH_versionNumber:Cardinal;
   {$IFDEF WIN32}inline; function _XXH_versionNumber:Cardinal;
-  {$ENDIF}cdecl; external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl; external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH_versionNumber';
 
   //XXH_PUBLIC_API XXH32_hash_t XXH32(const void* input, size_t length, XXH32_hash_t seed);
   function XXH32(input : Pointer; length : NativeInt; seed : XXH32_hash_t):
     XXH32_hash_t;
   {$IFDEF WIN32}inline; function _XXH32(input : Pointer; length : NativeInt; seed : XXH32_hash_t):
     XXH32_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32';
 
 
   //XXH_PUBLIC_API XXH32_state_t* XXH32_createState(void);
   function XXH32_createState : PXXH32_state_t;
   {$IFDEF WIN32}inline; function _XXH32_createState : PXXH32_state_t;
-  {$ENDIF} cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF} cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_createState';
 
   //XXH_PUBLIC_API XXH_errorcode  XXH32_freeState(XXH32_state_t* statePtr);
   function XXH32_freeState(statePtr : PXXH32_state_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH32_freeState(statePtr : PXXH32_state_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_freeState';
 
 
   //XXH_PUBLIC_API void XXH32_copyState(XXH32_state_t* dst_state, const XXH32_state_t* src_state);
   procedure XXH32_copyState(dst_state,src_state:PXXH32_state_t); cdecl;
   {$IFDEF WIN32}inline; procedure _XXH32_copyState(dst_state,src_state:PXXH32_state_t);
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_copyState';
 
 
   //XXH_PUBLIC_API XXH_errorcode XXH32_reset  (XXH32_state_t* statePtr, XXH32_hash_t seed);
   function XXH32_reset(var state:XXH32_state_t; seed:XXH32_hash_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH32_reset(var state:XXH32_state_t; seed:XXH32_hash_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_reset';
 
 
   //XXH_PUBLIC_API XXH_errorcode XXH32_update (XXH32_state_t* statePtr, const void* input, size_t length);
@@ -94,173 +94,173 @@ type
     : XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH32_update(var state:XXH32_state_t;input:Pointer;length:NativeInt)
     : XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_update';
 
 
   //XXH_PUBLIC_API XXH32_hash_t  XXH32_digest (const XXH32_state_t* statePtr);
   function XXH32_digest(var state:XXH32_state_t):XXH32_hash_t;
   {$IFDEF WIN32}inline; function _XXH32_digest(var state:XXH32_state_t):XXH32_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_digest';
 
 
   //XXH_PUBLIC_API void XXH32_canonicalFromHash(XXH32_canonical_t* dst, XXH32_hash_t hash);
   procedure XXH32_canonicalFromHash(var dst:XXH32_canonical_t; hash:XXH32_hash_t);
   {$IFDEF WIN32}inline; procedure _XXH32_canonicalFromHash(var dst:XXH32_canonical_t; hash:XXH32_hash_t);
-  {$ENDIF}cdecl; external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl; external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_canonicalFromHash';
 
 
   //XXH_PUBLIC_API XXH32_hash_t XXH32_hashFromCanonical(const XXH32_canonical_t* src);
   function XXH32_hashFromCanonical(var src: XXH32_canonical_t): XXH32_hash_t;
   {$IFDEF WIN32}inline; function _XXH32_hashFromCanonical(var src: XXH32_canonical_t): XXH32_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH32_hashFromCanonical';
 
   //XXH_PUBLIC_API XXH64_hash_t XXH64(const void* input, size_t length, XXH64_hash_t seed);
   function XXH64(input : Pointer; length : NativeInt; seed : XXH64_hash_t):
     XXH64_hash_t;
   {$IFDEF WIN32}inline; function _XXH64(input : Pointer; length : NativeInt; seed : XXH64_hash_t):
     XXH64_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64';
 
 
   //XXH_PUBLIC_API XXH64_state_t* XXH64_createState(void);
   function XXH64_createState : PXXH64_state_t;
   {$IFDEF WIN32}inline; function _XXH64_createState : PXXH64_state_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_createState';
 
   //XXH_PUBLIC_API XXH_errorcode  XXH64_freeState(XXH64_state_t* statePtr);
   function XXH64_freeState(statePtr : PXXH64_state_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH64_freeState(statePtr : PXXH64_state_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_freeState';
 
   //XXH_PUBLIC_API void XXH64_copyState(XXH64_state_t* dst_state, const XXH64_state_t* src_state);
   procedure XXH64_copyState(dst_state,src_state:PXXH64_state_t);
   {$IFDEF WIN32}inline; procedure _XXH64_copyState(dst_state,src_state:PXXH64_state_t);
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_copyState';
 
   //XXH_PUBLIC_API XXH_errorcode XXH64_reset  (XXH64_state_t* statePtr, XXH64_hash_t seed);
   function XXH64_reset(var state:XXH64_state_t; seed:XXH64_hash_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH64_reset(var state:XXH64_state_t; seed:XXH64_hash_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_reset';
 
   //XXH_PUBLIC_API XXH_errorcode XXH64_update (XXH64_state_t* statePtr, const void* input, size_t length);
   function XXH64_update(var state:XXH64_state_t;input:Pointer;length:NativeInt)
     : XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH64_update(var state:XXH64_state_t;input:Pointer;length:NativeInt)
     : XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_update';
 
   //XXH_PUBLIC_API XXH64_hash_t  XXH64_digest (const XXH64_state_t* statePtr);
   function XXH64_digest(var state:XXH64_state_t):XXH64_hash_t;
   {$IFDEF WIN32}inline; function _XXH64_digest(var state:XXH64_state_t):XXH64_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_digest';
 
   //XXH_PUBLIC_API void XXH64_canonicalFromHash(XXH64_canonical_t* dst, XXH64_hash_t hash);
   procedure XXH64_canonicalFromHash(var dst:XXH64_canonical_t; hash:XXH64_hash_t);
   {$IFDEF WIN32}inline; procedure _XXH64_canonicalFromHash(var dst:XXH64_canonical_t; hash:XXH64_hash_t);
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_canonicalFromHash';
 
   //XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src);
   function XXH64_hashFromCanonical(var src: XXH64_canonical_t): XXH64_hash_t;
   {$IFDEF WIN32}inline; function _XXH64_hashFromCanonical(var src: XXH64_canonical_t): XXH64_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH64_hashFromCanonical';
 
   //XXH_PUBLIC_API XXH64_hash_t XXH3_64bits(const void* data, size_t len);
   function XXH3_64bits(data : Pointer; len : NativeInt):XXH64_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_64bits(data : Pointer; len : NativeInt):XXH64_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_64bits';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH3_128bits(const void* data, size_t len);
   function XXH3_128bits(data : Pointer; len : NativeInt):XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_128bits(data : Pointer; len : NativeInt):XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH3_128bits_withSeed(const void* data, size_t len, XXH64_hash_t seed);
   function XXH3_128bits_withSeed(data : Pointer; len : NativeInt; seed :
     XXH64_hash_t):XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_128bits_withSeed(data : Pointer; len : NativeInt; seed :
     XXH64_hash_t):XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_withSeed';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH3_128bits_withSecret(const void* data, size_t len, const void* secret, size_t secretSize);
   function XXH3_128bits_withSecret(data : Pointer; len : NativeInt; secret :
     Pointer; secretSize: NativeInt):XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_128bits_withSecret(data : Pointer; len : NativeInt; secret :
     Pointer; secretSize: NativeInt):XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_withSecret';
 
   //XXH_PUBLIC_API XXH_errorcode XXH3_128bits_reset(XXH3_state_t* statePtr);
   function XXH3_128bits_reset(var state : XXH3_state_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_128bits_reset(var state : XXH3_state_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_reset';
 
   //XXH_PUBLIC_API XXH_errorcode XXH3_128bits_reset_withSeed(XXH3_state_t* statePtr, XXH64_hash_t seed);
   function XXH3_128bits_reset_withSeed(var state : XXH3_state_t; seed :
     XXH64_hash_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_128bits_reset_withSeed(var state : XXH3_state_t; seed :
     XXH64_hash_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_reset_withSeed';
 
   //XXH_PUBLIC_API XXH_errorcode XXH3_128bits_reset_withSecret(XXH3_state_t* statePtr, const void* secret, size_t secretSize);
   function XXH3_128bits_reset_withSecret(var state : XXH3_state_t; secret :
     Pointer; secretSize:NativeInt):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_128bits_reset_withSecret(var state : XXH3_state_t; secret :
     Pointer; secretSize:NativeInt):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_reset_withSecret';
 
   //XXH_PUBLIC_API XXH_errorcode XXH3_128bits_update (XXH3_state_t* statePtr, const void* input, size_t length);
   function XXH3_128bits_update(var state : XXH3_state_t; input : Pointer; length
     : NativeInt):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_128bits_update(var state : XXH3_state_t; input : Pointer; length
     : NativeInt):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_update';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH3_128bits_digest (const XXH3_state_t* statePtr);
   function XXH3_128bits_digest(var state : XXH3_state_t):XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_128bits_digest(var state : XXH3_state_t):XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_digest';
 
   //XXH_PUBLIC_API int XXH128_isEqual(XXH128_hash_t h1, XXH128_hash_t h2);
   function XXH128_isEqual(h1,h2 : XXH128_hash_t):integer;
   {$IFDEF WIN32}inline; function _XXH128_isEqual(h1,h2 : XXH128_hash_t):integer;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH128_isEqual';
 
   //XXH_PUBLIC_API int XXH128_cmp(const void* h128_1, const void* h128_2);
   function XXH128_cmp(h1,h2 : Pointer):integer;
   {$IFDEF WIN32}inline; function _XXH128_cmp(h1,h2 : Pointer):integer;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH128_cmp';
 
   //XXH_PUBLIC_API void XXH128_canonicalFromHash(XXH128_canonical_t* dst, XXH128_hash_t hash);
   procedure XXH128_canonicalFromHash(var dst:XXH128_canonical_t; hash :
     XXH128_hash_t);
   {$IFDEF WIN32}inline; procedure _XXH128_canonicalFromHash(var dst:XXH128_canonical_t; hash :
     XXH128_hash_t);
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH128_canonicalFromHash';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH128_hashFromCanonical(const XXH128_canonical_t* src);
   function XXH128_hashFromCanonical(var src:XXH128_canonical_t):XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH128_hashFromCanonical(var src:XXH128_canonical_t):XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH128_hashFromCanonical';
 
   //XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t seed);
   function XXH128(data : Pointer; len : NativeInt; seed : XXH64_hash_t):
     XXH128_hash_t;
   {$IFDEF WIN32}inline; function _XXH128(data : Pointer; len : NativeInt; seed : XXH64_hash_t):
     XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH128';
 
   //XXH_PUBLIC_API XXH_errorcode XXH3_generateSecret(void* secretBuffer, size_t secretSize, const void* customSeed, size_t customSeedSize);
   function XXH3_generateSecret(secretBuffer:Pointer; secretSize : NativeInt;
     customSeed : Pointer; customSeedSize : NativeInt):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_generateSecret(secretBuffer:Pointer; secretSize : NativeInt;
     customSeed : Pointer; customSeedSize : NativeInt):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_generateSecret';
 
   //XXH_PUBLIC_API void XXH3_generateSecret_fromSeed(void* secretBuffer, XXH64_hash_t seed);
   procedure XXH3_generateSecret_fromSeed(secretBuffer : Pointer; seed :
     XXH64_hash_t);
   {$IFDEF WIN32}inline; procedure _XXH3_generateSecret_fromSeed(secretBuffer : Pointer; seed :
     XXH64_hash_t);
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_generateSecret_fromSeed';
 
   //XXH_PUBLIC_API XXH64_hash_t
   //XXH3_64bits_withSecretandSeed(const void* data, size_t len,
@@ -270,7 +270,7 @@ type
     : Pointer; secretSize : NativeInt; seed : XXH64_hash_t):XXH64_hash_t;
   {$IFDEF WIN32}inline; function _XXH3_64bits_withSecretandSeed(data : Pointer; len : NativeInt; secret
     : Pointer; secretSize : NativeInt; seed : XXH64_hash_t):XXH64_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_64bits_withSecretandSeed';
 
   //XXH_PUBLIC_API XXH128_hash_t
   //XXH3_128bits_withSecretandSeed(const void* data, size_t len,
@@ -282,7 +282,7 @@ type
   {$IFDEF WIN32}inline; function _XXH3_128bits_withSecretandSeed(data : Pointer; len : NativeInt;
     secret : Pointer; secretSize : NativeInt; seed : XXH64_hash_t):
     XXH128_hash_t;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_withSecretandSeed';
 
   //XXH_PUBLIC_API XXH_errorcode
   //XXH3_64bits_reset_withSecretandSeed(XXH3_state_t* statePtr,
@@ -292,7 +292,7 @@ type
     : Pointer; secretSize : NativeInt; seed64 : XXH64_hash_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_64bits_reset_withSecretandSeed(var state : XXH3_state_t; secret
     : Pointer; secretSize : NativeInt; seed64 : XXH64_hash_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_64bits_reset_withSecretandSeed';
 
   //XXH_PUBLIC_API XXH_errorcode
   //XXH3_128bits_reset_withSecretandSeed(XXH3_state_t* statePtr,
@@ -302,7 +302,7 @@ type
     : Pointer; secretSize : NativeInt; seed64 : XXH64_hash_t):XXH_errorcode;
   {$IFDEF WIN32}inline; function _XXH3_128bits_reset_withSecretandSeed(var state : XXH3_state_t; secret
     : Pointer; secretSize : NativeInt; seed64 : XXH64_hash_t):XXH_errorcode;
-  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF};
+  {$ENDIF}cdecl;external{$IFDEF POSIX} 'libxxhash.a'{$ENDIF} name 'XXH3_128bits_reset_withSecretandSeed';
 
 procedure XXH3_INITSTATE(var XXH3_state : XXH3_state_t); inline;
 

@@ -12,7 +12,7 @@ uses
 
 const
   OODLELZ_SCRATCH_MEM_NO_BOUND = NativeUInt(-1);
-{$IFDEF CPU64BITS}
+{$IFDEF CPU64}
   OODLELZ_ARCH = '_win64.dll';
 {$ELSE}
   OODLELZ_ARCH = '_win32.dll';
