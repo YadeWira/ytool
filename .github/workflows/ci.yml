@@ -24,3 +24,47 @@ jobs:
       # first CI pass.
       - name: Run regression suite (builds native objs + fpc + round-trips)
         run: bash tests/regression.sh
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Chocolatey has no standalone FPC package for win64 -- Lazarus bundles
+      # FPC 3.2.2 and installs to a predictable path (C:\lazarus), same
+      # compiler contrib/winbuild.ps1 already targets for the manual Windows
+      # build/verify flow.
+      - name: Install FPC (via Lazarus)
+        run: choco install -y lazarus --no-progress
+
+      # Only the static objects already committed in the repo (zstd/lz4
+      # .o/.obj, inherited from the original Delphi project) -- no mingw-w64
+      # cross-compiled plugin DLLs here, that stays the manual VM flow's job
+      # (see contrib/build-plugins-windows.sh, tests/regression-windows.ps1).
+      # regression.sh already tolerates missing plugin DLLs gracefully (those
+      # codecs just run over 0 streams, trivially reversible) -- same
+      # degradation this job accepts on purpose, for a fast core-logic
+      # smoke-test on every push.
+      - name: Build ytool.exe
+        shell: pwsh
+        run: |
+          $fpc = "C:\lazarus\fpc\3.2.2\bin\x86_64-win64\fpc.exe"
+          & $fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio `
+            -Fuimports -Fusources -Fucontrib\mORMot -Fucontrib\LZ4Delphi -Fucontrib\ZSTD4Delphi `
+            -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi `
+            -oytool.exe ytool.dpr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # FPC on Windows sometimes drops the .exe extension from -o.
+          if ((Test-Path .\ytool) -and (-not (Test-Path .\ytool.exe))) {
+            Rename-Item .\ytool .\ytool.exe
+          }
+
+      # tests/regression.sh is bash; windows-latest runners bundle Git Bash.
+      # NO_BUILD=1 skips its own (Linux-flavored) build step -- we just built
+      # ytool.exe above.
+      - name: Run regression suite
+        shell: bash
+        env:
+          NO_BUILD: 1
+          XTOOL: ytool.exe
+        run: bash tests/regression.sh

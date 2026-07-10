@@ -6,12 +6,14 @@
 #   tests/regression.sh                 # build + synthetic corpus
 #   NO_BUILD=1 tests/regression.sh      # use the already-built ./ytool binary
 #   FULL=1 tests/regression.sh          # also, slice of test-files2.tar if present
+#   XTOOL=path/to/ytool.exe tests/regression.sh   # override the binary path
+#                                        # (e.g. Windows CI, where it's ytool.exe)
 #
 # Exits with code !=0 if ANY round-trip is not bit-exact.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
-XTOOL="$ROOT/ytool"
+XTOOL="${XTOOL:-$ROOT/ytool}"
 WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
 trap 'rm -rf "$WORK"' EXIT
