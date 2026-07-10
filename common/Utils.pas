@@ -1567,13 +1567,10 @@ var
   LCount: LongInt;
   LSize: Int64;
 begin
+  Result := 0;
   if Count <= 0 then
-  begin
-    FPosition := 0;
-    LSize := FSize;
-  end
-  else
-    LSize := Count;
+    exit;
+  LSize := Count;
   while LSize > 0 do
     if FPosition >= 0 then
     begin
@@ -1589,8 +1586,11 @@ begin
       Inc(FPosition, LCount);
       if FPosition > FSize then
         FSize := FPosition;
+      Inc(Result, LCount);
       Dec(LSize, LCount);
-    end;
+    end
+    else
+      break;
 end;
 
 procedure TFileStreamEx.Update;
