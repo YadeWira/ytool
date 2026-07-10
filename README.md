@@ -106,10 +106,14 @@ Found and fixed while building/testing this port, not from any xtool release not
   across `common/Utils.pas`, `precompressor/PrecompMain.pas`, `imports/OodleDLL.pas`.
 - `ytool` also builds and runs natively on **Windows x86 (32-bit, i386-win32)**, all 11 codecs included —
   verified under WOW64 on Windows 7 SP1 x64 with a real bit-exact round-trip against the 64-bit build (encode
-  on 64-bit, decode on 32-bit) for 10 of them, genuinely compressing (not just reversible) in every case. The
-  one exception, `-mflac`, doesn't compress on this build at all — its encoder fails internally and ytool's
-  own fallback logic silently stores the stream literally every time (still reversible, no real coverage) —
-  see [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mflac-on-32-bit-windows-the-encoder-silently-never-runs-not-just-a-cross-arch-decode-bug).
+  on 64-bit, decode on 32-bit) for every codec, genuinely compressing (not just reversible) in every case.
+  (`-mflac` initially shipped broken on 32-bit — its DLL depended on a mingw runtime DLL not present on stock
+  Windows, so `LoadLibrary` failed and the encoder never ran — fixed with `-static-libgcc`; see
+  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written).)
+  One real limitation remains: `-mzlib -dd1` (external dedup via `srep`) has a confirmed bug inside `srep`
+  itself on cross-architecture round-trips — don't mix 64-bit-encoded and 32-bit-decoded (or vice versa)
+  `.pmp` files using that option; see
+  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mzlib--dd1-external-dedup-via-srep-cross-architecture-failures-newly-found).
   Prebuilt binary on the [Releases page](https://github.com/YadeWira/ytool/releases); see
   `contrib/winbuild-x86.ps1` and
   [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
