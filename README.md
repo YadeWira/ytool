@@ -106,12 +106,19 @@ Found and fixed while building/testing this port, not from any xtool release not
   across `common/Utils.pas`, `precompressor/PrecompMain.pas`, `imports/OodleDLL.pas`.
 - `ytool` also builds and runs natively on **Windows x86 (32-bit, i386-win32)**, all 11 codecs included —
   verified under WOW64 on Windows 7 SP1 x64 with a real bit-exact round-trip against the 64-bit build (encode
-  on 64-bit, decode on 32-bit) for 10 of them. The one exception, `-mflac`, has a narrow one-directional
-  cross-architecture limitation (same-architecture round-trips always work) — see
-  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mflac-one-directional-32-bit64-bit-cross-architecture-incompatibility).
+  on 64-bit, decode on 32-bit) for 10 of them, genuinely compressing (not just reversible) in every case. The
+  one exception, `-mflac`, doesn't compress on this build at all — its encoder fails internally and ytool's
+  own fallback logic silently stores the stream literally every time (still reversible, no real coverage) —
+  see [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mflac-on-32-bit-windows-the-encoder-silently-never-runs-not-just-a-cross-arch-decode-bug).
   Prebuilt binary on the [Releases page](https://github.com/YadeWira/ytool/releases); see
   `contrib/winbuild-x86.ps1` and
   [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
+- Also fixed: `common/Threading.pas`'s `TTask.FStatus` had no synchronization at all between the main thread
+  and worker threads (plus a dead-code bug that meant a worker's error message never actually got cleared),
+  and `find`/`erase`/`replace` swallowed worker errors instead of propagating them — the likely cause of a
+  previously-reported bug where `replace` returned inconsistent exit codes with no error message. Fixed with a
+  real `TCriticalSection` and by letting the exception reach `ytool.dpr`'s top-level handler, which is the only
+  place that sets `ExitCode`.
 
 ### Known limitation, not deeply verified
 
