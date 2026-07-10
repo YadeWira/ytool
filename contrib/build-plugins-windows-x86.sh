@@ -145,20 +145,29 @@ echo "==> packmp3 (packmp3_dll-x86.dll)"
 # -DWITH_ASM=OFF: disables libFLAC's legacy hand-written i386 asm routines
 # (FLAC__CPU_IA32-gated), untested by upstream in years against a modern
 # mingw toolchain -- a reasonable safety default for a first-time 32-bit
-# build. NOTE this does NOT fix the one known limitation of this codec: a
-# stream encoded by the WIN64 build fails to decode on win32 ("Error in the
-# method 'flac'"), even though win32-encoded streams decode fine on win64,
-# and same-architecture round-trips (32<->32, 64<->64) always work. Tried and
-# ruled out: WITH_ASM=OFF on either side, and forcing -mfpmath=sse -msse2 on
-# the win32 build to match x86-64's default FP precision -- neither changed
-# the outcome. Root cause not identified; kept WITH_ASM=OFF anyway since it
-# removes one class of legacy-asm risk even though it wasn't the cause here.
-# See Known-Issues-and-Limitations wiki page.
+# build.
+#
+# -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc" is the REAL fix for what was
+# originally logged as a mysterious cross-architecture decode failure: the
+# resulting libFLAC.dll dynamically linked against libgcc_s_dw2-1.dll (i686's
+# DW2 unwinder, needed for GCC's exception-handling runtime) -- a DLL that
+# ships with mingw-w64 itself but isn't part of any stock Windows install and
+# wasn't bundled alongside the codec DLL. LoadLibrary failed with
+# ERROR_MOD_NOT_FOUND (126), so FLACDLL.DLLLoaded was silently False on every
+# 32-bit run -- ytool's own codec-unavailable fallback (store literally)
+# masked this in same-architecture testing (looks reversible, just never
+# really invokes FLAC at all), and only surfaced as a hard decode exception
+# when asked to decode a stream a WORKING encoder (64-bit, whose mingw build
+# happens not to need this DLL -- x86_64 uses Windows' native SEH instead of
+# DW2) had genuinely FLAC-compressed. x86_64 was never affected (confirmed:
+# libFLAC_dynamic.dll only imports KERNEL32/msvcrt, no libgcc_s_seh
+# dependency), so this flag isn't needed in build-plugins-windows.sh.
 echo "==> FLAC (libFLAC_dynamic-x86.dll)"
 [ -d "$CSRC/flac" ] || git clone --depth 1 https://github.com/xiph/flac.git "$CSRC/flac"
 if [ -d "$CSRC/flac" ] && command -v cmake >/dev/null; then
   ( cd "$CSRC/flac" && mkdir -p out-win-x86 && cd out-win-x86 && \
     cmake -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc" \
       -DBUILD_SHARED_LIBS=ON -DBUILD_CXXLIBS=OFF -DBUILD_PROGRAMS=OFF \
       -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DWITH_OGG=OFF \
       -DINSTALL_MANPAGES=OFF -DINSTALL_PKGCONFIG_MODULES=OFF \
