@@ -2,7 +2,30 @@
    exposing LzmaCompress/LzmaUncompress, compiled as a static object linked
    directly into ytool (same pattern as LZ4Delphi/ZSTD4Delphi). */
 #define _7ZIP_ST
+
+/* Alloc.c's g_Alloc (the only allocator any entry point below passes in) is
+   the plain malloc/free one, always available regardless of platform. Its
+   BigAlloc/MidAlloc/BigFree/MidFree (VirtualAlloc-based, gated only by
+   #ifdef _WIN32, no separate opt-out) are dead code here -- nothing in
+   LzFind.c/LzmaEnc.c calls them, only the ISzAlloc interface we point at
+   g_Alloc -- but still compiled in on Windows, pulling in a kernel32 import
+   FPC's {$L}-linked-object model can't resolve (undefined __imp_VirtualAlloc/
+   __imp_VirtualFree at final link). Redirecting them to malloc/free via
+   macros (rather than patching the vendored file, or undefining _WIN32,
+   which breaks mingw's own headers) drops that dependency entirely; they're
+   unreachable anyway, so the discarded extra arguments don't matter. */
+#ifdef _WIN32
+#include <windows.h>
+#include <stdlib.h>
+/* windows.h's own VirtualAlloc/VirtualFree prototypes are already parsed by
+   this point (its include guard makes Alloc.c's later #include a no-op),
+   so redefining them as macros here only rewrites the later CALL sites in
+   Alloc.c's function bodies, not any declaration. */
+#define VirtualAlloc(addr, size, alloctype, protect) malloc(size)
+#define VirtualFree(addr, size, freetype) free(addr)
+#endif
 #include "Alloc.c"
+
 #include "LzFind.c"
 #include "LzmaDec.c"
 #include "LzmaEnc.c"
