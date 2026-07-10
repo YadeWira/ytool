@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import zlib
+import lzma
 import struct
 
 SEED = 0xC0FFEE
@@ -87,6 +88,14 @@ def make_lz4f(seed):
         return None
     text = (b'lz4 frame payload %d ' % seed) * 4000
     return lz4.frame.compress(text)
+
+
+def make_lzma_alone(seed):
+    """Real raw LZMA1 stream (FORMAT_ALONE, 13-byte header) via the stdlib
+    'lzma' module -- unknown-size/end-marker variant, same as what the "xz
+    --format=lzma" CLI produces by default, for -mlzma."""
+    text = (b'lzma alone stream payload %d, ' % seed) * 400
+    return lzma.compress(text, format=lzma.FORMAT_ALONE)
 
 
 def make_jpeg(seed):
@@ -236,6 +245,12 @@ def main():
     #     (packPNG/WebP-lossless) -- pure noise like make_png() doesn't
     #     work, no image codec wins over uncorrelated data ---
     write(d, '62_png_photo.bin', make_png_photo(48, 48, SEED))
+
+    # --- raw LZMA1 stream (stdlib 'lzma', always available): exercises
+    #     -mlzma, embedded between noise so it must be detected, not just
+    #     handed the whole file ---
+    write(d, '63_lzma_alone.bin', rng_bytes(64, SEED) + make_lzma_alone(SEED)
+          + rng_bytes(64, SEED + 1))
 
     # --- The following 3 are OPTIONAL: they require an external tool
     #     present on the machine generating the corpus (not at ytool runtime).

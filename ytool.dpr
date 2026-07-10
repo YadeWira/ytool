@@ -86,6 +86,7 @@ uses
   PrecompZSTD in 'precompressor\PrecompZSTD.pas',
   PrecompMedia in 'precompressor\PrecompMedia.pas',
   PrecompPackPNG in 'precompressor\PrecompPackPNG.pas',
+  PrecompLZMA in 'precompressor\PrecompLZMA.pas',
   PrecompAnalyze in 'precompressor\PrecompAnalyze.pas',
   PrecompOodle in 'precompressor\PrecompOodle.pas',
   PrecompINI in 'precompressor\PrecompINI.pas',

@@ -49,10 +49,14 @@ trap 'rm -rf "$WORK"' EXIT
 # PENDING (not covered here): "-mlz4"/"-mlz4hc" (raw LZ4 block, token byte heuristic
 # $F0-$F4 in PrecompLZ4.pas) would need a dedicated generator like
 # tests/lzo_gen.c, not a simple frame -> left out of this coverage pass.
+# "-mlzma" exercises the new raw-LZMA1 codec (PrecompLZMA.pas, statically-linked LZMA
+# SDK) on 63_lzma_alone.bin (stdlib 'lzma', always available -- no optional-tool
+# caveat). Covers both header variants: known uncompressed size, and the
+# unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
   "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
-  "-mpackmp3")
+  "-mpackmp3" "-mlzma")
 
 fail=0; pass=0
 echo "== ytool regression =="
@@ -63,7 +67,8 @@ if [ "${NO_BUILD:-0}" != "1" ]; then
   bash contrib/build-native-linux.sh >/dev/null 2>&1 || { echo "native build FAILED"; exit 3; }
   fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -oytool ytool.dpr >/dev/null 2>&1 \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \
+    -oytool ytool.dpr >/dev/null 2>&1 \
     || { echo "fpc compilation FAILED"; exit 3; }
 fi
 [ -x "$XTOOL" ] || { echo "binary does not exist $XTOOL"; exit 3; }

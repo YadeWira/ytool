@@ -45,6 +45,7 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | LZ4 | liblz4 | ✅ | ✅ (built into the binary) |
 | Zstandard | libzstd | ✅ | ✅ (built into the binary) |
 | LZO | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ | ✅ |
+| raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
 | fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
 | dedup, external (`-dd<N>`) | [Intensity/srep](https://github.com/Intensity/srep) | ✅ | ✅ |
