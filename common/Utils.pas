@@ -505,7 +505,8 @@ type
   end;
 
   PExecOutput = ^TExecOutput;
-  TExecOutput = procedure(const Buffer: Pointer; Size: Integer);
+  TExecOutput = procedure(Instance: IntPtr; const Buffer: Pointer;
+    Size: Integer);
   { FPC 3.2.2 doesn't have function references (TFunc); the only non-nil
     callback used is a method (TCacheReadStream.FCallback), hence "of object". }
   TCopyCallback = function(ASize: Int64): Boolean of object;
@@ -607,12 +608,12 @@ function ExecStdin(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
   InSize: Integer): Boolean overload;
 function ExecStdin(Executable, CommandLine, WorkDir: string; InStream: TStream)
   : Boolean overload;
-function ExecStdout(Executable, CommandLine, WorkDir: string;
+function ExecStdout(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
   Output: TExecOutput): Boolean;
-function ExecStdio(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
-  InSize: Integer; Output: TExecOutput): Boolean overload;
-function ExecStdio(Executable, CommandLine, WorkDir: string; InStream: TStream;
-  Output: TExecOutput): Boolean overload;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InBuff: Pointer; InSize: Integer; Output: TExecOutput): Boolean overload;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InStream: TStream; Output: TExecOutput): Boolean overload;
 function GetCmdStr(CommandLine: String; Index: Integer;
   KeepQuotes: Boolean = False): string;
 function GetCmdCount(CommandLine: String): Integer;
@@ -4709,7 +4710,7 @@ begin
   end;
 end;
 
-function ExecStdout(Executable, CommandLine, WorkDir: string;
+function ExecStdout(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
   Output: TExecOutput): Boolean;
 const
   PipeSecurityAttributes: TSecurityAttributes =
@@ -4747,7 +4748,7 @@ begin
     try
       while ReadFile(hstdoutr, LBuffer, LBufferSize, BytesRead, nil) and
         (BytesRead > 0) do
-        Output(@LBuffer[0], BytesRead);
+        Output(Instance, @LBuffer[0], BytesRead);
     finally
       CloseHandleEx(hstdoutr);
     end;
@@ -4764,7 +4765,7 @@ begin
   end;
 end;
 
-procedure ExecReadTask(Handle, Stream, Done: IntPtr);
+procedure ExecReadTask(Handle, Instance, Stream, Done: IntPtr);
 const
   LBufferSize = 65536;
 var
@@ -4774,12 +4775,12 @@ begin
   PBoolean(Pointer(Done))^ := False;
   while ReadFile(Handle, LBuffer[0], LBufferSize, BytesRead, nil) and
     (BytesRead > 0) do
-    PExecOutput(Pointer(Stream))^(@LBuffer[0], BytesRead);
+    PExecOutput(Pointer(Stream))^(Instance, @LBuffer[0], BytesRead);
   PBoolean(Pointer(Done))^ := BytesRead = 0;
 end;
 
-function ExecStdio(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
-  InSize: Integer; Output: TExecOutput): Boolean;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InBuff: Pointer; InSize: Integer; Output: TExecOutput): Boolean;
 const
   PipeSecurityAttributes: TSecurityAttributes =
     (nLength: sizeof(PipeSecurityAttributes); bInheritHandle: True);
@@ -4816,7 +4817,8 @@ begin
     CloseHandleEx(ProcessInfo.hThread);
     CloseHandleEx(hstdinr);
     CloseHandleEx(hstdoutw);
-    LTask := TTask.Create(hstdoutr, NativeInt(@Output), NativeInt(@LDone));
+    LTask := TTask.Create(hstdoutr, Instance, NativeInt(@@Output),
+      NativeInt(@LDone));
     LTask.Perform(ExecReadTask);
     LTask.Start;
     try
@@ -4853,8 +4855,8 @@ begin
   end;
 end;
 
-function ExecStdio(Executable, CommandLine, WorkDir: string; InStream: TStream;
-  Output: TExecOutput): Boolean;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InStream: TStream; Output: TExecOutput): Boolean;
 const
   PipeSecurityAttributes: TSecurityAttributes =
     (nLength: sizeof(PipeSecurityAttributes); bInheritHandle: True);
@@ -4894,7 +4896,8 @@ begin
     CloseHandleEx(ProcessInfo.hThread);
     CloseHandleEx(hstdinr);
     CloseHandleEx(hstdoutw);
-    LTask := TTask.Create(hstdoutr, NativeInt(@Output), NativeInt(@LDone));
+    LTask := TTask.Create(hstdoutr, Instance, NativeInt(@@Output),
+      NativeInt(@LDone));
     LTask.Perform(ExecReadTask);
     LTask.Start;
     try
@@ -4936,48 +4939,250 @@ begin
   end;
 end;
 {$ELSE}
-{ TODO Linux: reimplement the Exec* family on top of TProcess/TProcessStream
-  (support for external executable codecs/plugins). For now they raise an
-  exception; precompression with the internal codecs doesn't use them. }
-function Exec(Executable, CommandLine, WorkDir: string): Boolean;
+{ Linux: same pipe/thread architecture as the Windows implementations above,
+  built on FPC's TProcess instead of CreateProcess. CommandLine is a single
+  pre-built string (Windows CreateProcess convention); routed through
+  "/bin/sh -c" like TProcessStream's own Linux branch already does, since
+  there is no argv to split on this side of the API. Any stdout/stderr the
+  child produces that the caller doesn't want is still drained in the
+  background so a chatty child can't deadlock on a full pipe. }
+procedure ExecPrepareProcess(Proc: TProcess; Executable, CommandLine,
+  WorkDir: string);
 begin
-  Result := False;
-  raise Exception.Create('Exec: external process support not yet implemented on Linux');
+  Proc.Executable := '/bin/sh';
+  Proc.Parameters.Add('-c');
+  Proc.Parameters.Add('"' + Executable + '" ' + CommandLine);
+  if WorkDir <> '' then
+    Proc.CurrentDirectory := WorkDir
+  else
+    Proc.CurrentDirectory := GetCurrentDir;
+  Proc.Options := [poUsePipes];
+end;
+
+procedure ExecDrainDiscard(StreamPtr: IntPtr);
+const
+  LBufferSize = 65536;
+var
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  repeat
+    BytesRead := TStream(Pointer(StreamPtr)).Read(LBuffer[0], LBufferSize);
+  until BytesRead <= 0;
+end;
+
+procedure ExecReadCallbackTask(StreamPtr, Instance, OutputPtr, Done: IntPtr);
+const
+  LBufferSize = 65536;
+var
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  PBoolean(Pointer(Done))^ := False;
+  repeat
+    BytesRead := TStream(Pointer(StreamPtr)).Read(LBuffer[0], LBufferSize);
+    if BytesRead > 0 then
+      PExecOutput(Pointer(OutputPtr))^(Instance, @LBuffer[0], BytesRead);
+  until BytesRead <= 0;
+  PBoolean(Pointer(Done))^ := True;
+end;
+
+procedure ExecWaitTask(Task: TTask);
+begin
+  Task.Wait;
+  try
+    Task.RaiseLastError;
+  finally
+    Task.Free;
+  end;
+end;
+
+function Exec(Executable, CommandLine, WorkDir: string): Boolean;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
+begin
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    Proc.CloseInput;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
+    LTaskOut.Perform(ExecDrainDiscard);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    ExecWaitTask(LTaskOut);
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
 function ExecStdin(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
   InSize: Integer): Boolean;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
 begin
-  Result := False;
-  raise Exception.Create('ExecStdin: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
+    LTaskOut.Perform(ExecDrainDiscard);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    if InSize > 0 then
+      Proc.Input.WriteBuffer(InBuff^, InSize);
+    Proc.CloseInput;
+    ExecWaitTask(LTaskOut);
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
 function ExecStdin(Executable, CommandLine, WorkDir: string;
   InStream: TStream): Boolean;
+const
+  LBufferSize = 65536;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  LReadBytes: Integer;
 begin
-  Result := False;
-  raise Exception.Create('ExecStdin: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
+    LTaskOut.Perform(ExecDrainDiscard);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    LReadBytes := InStream.Read(LBuffer[0], LBufferSize);
+    while LReadBytes > 0 do
+    begin
+      Proc.Input.WriteBuffer(LBuffer[0], LReadBytes);
+      LReadBytes := InStream.Read(LBuffer[0], LBufferSize);
+    end;
+    Proc.CloseInput;
+    ExecWaitTask(LTaskOut);
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
-function ExecStdout(Executable, CommandLine, WorkDir: string;
+function ExecStdout(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
   Output: TExecOutput): Boolean;
+const
+  LBufferSize = 65536;
+var
+  Proc: TProcess;
+  LTaskErr: TTask;
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
 begin
-  Result := False;
-  raise Exception.Create('ExecStdout: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    Proc.CloseInput;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    repeat
+      BytesRead := Proc.Output.Read(LBuffer[0], LBufferSize);
+      if BytesRead > 0 then
+        Output(Instance, @LBuffer[0], BytesRead);
+    until BytesRead <= 0;
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
-function ExecStdio(Executable, CommandLine, WorkDir: string; InBuff: Pointer;
-  InSize: Integer; Output: TExecOutput): Boolean;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InBuff: Pointer; InSize: Integer; Output: TExecOutput): Boolean;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
+  LDone: Boolean;
 begin
-  Result := False;
-  raise Exception.Create('ExecStdio: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)), Instance,
+      IntPtr(@@Output), IntPtr(@LDone));
+    LTaskOut.Perform(ExecReadCallbackTask);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    if InSize > 0 then
+      Proc.Input.WriteBuffer(InBuff^, InSize);
+    Proc.CloseInput;
+    ExecWaitTask(LTaskOut);
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
-function ExecStdio(Executable, CommandLine, WorkDir: string; InStream: TStream;
-  Output: TExecOutput): Boolean;
+function ExecStdio(Instance: IntPtr; Executable, CommandLine, WorkDir: string;
+  InStream: TStream; Output: TExecOutput): Boolean;
+const
+  LBufferSize = 65536;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
+  LDone: Boolean;
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  LReadBytes: Integer;
 begin
-  Result := False;
-  raise Exception.Create('ExecStdio: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)), Instance,
+      IntPtr(@@Output), IntPtr(@LDone));
+    LTaskOut.Perform(ExecReadCallbackTask);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(ExecDrainDiscard);
+    LTaskErr.Start;
+    LReadBytes := InStream.Read(LBuffer[0], LBufferSize);
+    while LReadBytes > 0 do
+    begin
+      Proc.Input.WriteBuffer(LBuffer[0], LReadBytes);
+      LReadBytes := InStream.Read(LBuffer[0], LBufferSize);
+    end;
+    Proc.CloseInput;
+    ExecWaitTask(LTaskOut);
+    ExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 {$ENDIF}
 

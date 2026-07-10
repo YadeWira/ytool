@@ -7,6 +7,8 @@ uses
   Utils, Threading, XXHASHLIB, ZSTDLib,
 {$IFDEF MSWINDOWS}
   Windows,
+{$ELSE}
+  Process,
 {$ENDIF}
   SysUtils, Classes, StrUtils, Types, Math,
   Generics.Defaults, Generics.Collections;
@@ -1526,8 +1528,13 @@ begin
   end;
 end;
 {$ELSE}
-{ TODO Linux: reimplementar PrecompExec* sobre TProcess/TProcessStream (codecs
-  ejecutables externos). Por ahora lanzan excepcion; los codecs internos no las usan. }
+{ Linux: mirrors the Windows implementations above via FPC's TProcess, same
+  "/bin/sh -c" routing as Utils.pas's own Exec* family (CommandLine is a
+  single pre-built string, no argv to split on this side of the plugin ABI).
+  PrecompExecStdout/PrecompExecStdio stay sequential (write then read, or
+  read-only) exactly like their Windows counterparts above; only
+  PrecompExecStdioSync overlaps read/write via a background task, same
+  distinction the Windows code already makes. }
 function PrecompExec(Executable, CommandLine, WorkDir: PChar): Boolean;
 begin
   Result := Exec(Executable, CommandLine, WorkDir);
@@ -1539,27 +1546,153 @@ begin
   Result := ExecStdin(Executable, CommandLine, WorkDir, InBuff, InSize);
 end;
 
+procedure PrecompExecDrainDiscard(StreamPtr: IntPtr);
+const
+  LBufferSize = 65536;
+var
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  repeat
+    BytesRead := TStream(Pointer(StreamPtr)).Read(LBuffer[0], LBufferSize);
+  until BytesRead <= 0;
+end;
+
+procedure PrecompExecReadCallbackTask(StreamPtr, InstancePtr, OutputPtr,
+  Done: IntPtr);
+const
+  LBufferSize = 65536;
+var
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  PBoolean(Pointer(Done))^ := False;
+  repeat
+    BytesRead := TStream(Pointer(StreamPtr)).Read(LBuffer[0], LBufferSize);
+    if BytesRead > 0 then
+      PExecOutput(Pointer(OutputPtr))^(Integer(InstancePtr), @LBuffer[0],
+        BytesRead);
+  until BytesRead <= 0;
+  PBoolean(Pointer(Done))^ := True;
+end;
+
+procedure PrecompExecPrepareProcess(Proc: TProcess;
+  Executable, CommandLine, WorkDir: string);
+begin
+  Proc.Executable := '/bin/sh';
+  Proc.Parameters.Add('-c');
+  Proc.Parameters.Add('"' + Executable + '" ' + CommandLine);
+  if WorkDir <> '' then
+    Proc.CurrentDirectory := WorkDir
+  else
+    Proc.CurrentDirectory := GetCurrentDir;
+  Proc.Options := [poUsePipes];
+end;
+
+procedure PrecompExecWaitTask(Task: TTask);
+begin
+  Task.Wait;
+  try
+    Task.RaiseLastError;
+  finally
+    Task.Free;
+  end;
+end;
+
 function PrecompExecStdout(Instance: Integer;
   Executable, CommandLine, WorkDir: PChar; Output: _ExecOutput): Boolean;
+const
+  LBufferSize = 65536;
+var
+  Proc: TProcess;
+  LTaskErr: TTask;
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
 begin
-  Result := False;
-  raise Exception.Create('PrecompExecStdout: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    PrecompExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    Proc.CloseInput;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(PrecompExecDrainDiscard);
+    LTaskErr.Start;
+    repeat
+      BytesRead := Proc.Output.Read(LBuffer[0], LBufferSize);
+      if BytesRead > 0 then
+        Output(Instance, @LBuffer[0], BytesRead);
+    until BytesRead <= 0;
+    PrecompExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
 function PrecompExecStdio(Instance: Integer;
   Executable, CommandLine, WorkDir: PChar; InBuff: Pointer; InSize: Integer;
   Output: _ExecOutput): Boolean;
+const
+  LBufferSize = 65536;
+var
+  Proc: TProcess;
+  LTaskErr: TTask;
+  LBuffer: array [0 .. LBufferSize - 1] of Byte;
+  BytesRead: LongInt;
 begin
-  Result := False;
-  raise Exception.Create('PrecompExecStdio: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    PrecompExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(PrecompExecDrainDiscard);
+    LTaskErr.Start;
+    if InSize > 0 then
+      Proc.Input.WriteBuffer(InBuff^, InSize);
+    Proc.CloseInput;
+    repeat
+      BytesRead := Proc.Output.Read(LBuffer[0], LBufferSize);
+      if BytesRead > 0 then
+        Output(Instance, @LBuffer[0], BytesRead);
+    until BytesRead <= 0;
+    PrecompExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 
 function PrecompExecStdioSync(Instance: Integer;
   Executable, CommandLine, WorkDir: PChar; InBuff: Pointer; InSize: Integer;
   Output: _ExecOutput): Boolean;
+var
+  Proc: TProcess;
+  LTaskOut, LTaskErr: TTask;
+  LDone: Boolean;
 begin
-  Result := False;
-  raise Exception.Create('PrecompExecStdioSync: not yet implemented on Linux');
+  Proc := TProcess.Create(nil);
+  try
+    PrecompExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
+    Proc.Execute;
+    LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)), IntPtr(Instance),
+      IntPtr(@@Output), IntPtr(@LDone));
+    LTaskOut.Perform(PrecompExecReadCallbackTask);
+    LTaskOut.Start;
+    LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+    LTaskErr.Perform(PrecompExecDrainDiscard);
+    LTaskErr.Start;
+    if InSize > 0 then
+      Proc.Input.WriteBuffer(InBuff^, InSize);
+    Proc.CloseInput;
+    PrecompExecWaitTask(LTaskOut);
+    PrecompExecWaitTask(LTaskErr);
+    Proc.WaitOnExit;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
 end;
 {$ENDIF}
 

@@ -142,8 +142,8 @@ begin
   begin
     Exec := '';
     Param := '';
-    InFile := '';
-    OutFile := '';
+    InFile := FILE_IN;
+    OutFile := FILE_OUT;
     Mode := 0;
     for I := Low(ParamArg) to High(ParamArg) do
     begin
@@ -205,11 +205,18 @@ begin
   end;
 end;
 
-threadvar TFS: TFileStreamEx;
+{ TFS used to be a threadvar, but ExecStdio's internal background reader
+  thread calls Callback from a DIFFERENT OS thread than the one that set it,
+  so the threadvar slot it saw was always nil there (STDIO_MODE only -- the
+  other modes don't spawn a background reader). Indexing by worker id (the
+  same Instance value ExecStdout/ExecStdio now thread through to Output)
+  works from any thread, same pattern PrecompEXE.pas already uses. }
+var
+  TFSArr: array of TFileStreamEx;
 
-procedure Callback(const Buffer: Pointer; Size: Integer);
+procedure Callback(Instance: IntPtr; const Buffer: Pointer; Size: Integer);
 begin
-  TFS.WriteBuffer(Buffer^, Size);
+  TFSArr[Instance].WriteBuffer(Buffer^, Size);
 end;
 
 procedure ExecThread(X, Ctx, WorkDir, State: IntPtr);
@@ -236,25 +243,26 @@ begin
             end;
           STDOUT_MODE:
             begin
-              TFS := TFileStreamEx.Create
+              TFSArr[X] := TFileStreamEx.Create
                 (IncludeTrailingPathDelimiter(PString(WorkDir)^) + OutFile);
               try
-                Res := ExecStdout(Exec, Param, PString(WorkDir)^, Callback);
+                Res := ExecStdout(X, Exec, Param, PString(WorkDir)^, Callback);
               finally
-                TFS.Free;
+                TFSArr[X].Free;
               end;
             end;
           STDIO_MODE:
             begin
               SS := TFileStreamEx.Create
                 (IncludeTrailingPathDelimiter(PString(WorkDir)^) + InFile);
-              TFS := TFileStreamEx.Create
+              TFSArr[X] := TFileStreamEx.Create
                 (IncludeTrailingPathDelimiter(PString(WorkDir)^) + OutFile);
               try
-                Res := ExecStdio(Exec, Param, PString(WorkDir)^, SS, Callback);
+                Res := ExecStdio(X, Exec, Param, PString(WorkDir)^, SS,
+                  Callback);
               finally
                 SS.Free;
-                TFS.Free;
+                TFSArr[X].Free;
               end;
             end;
         end;
@@ -315,6 +323,7 @@ begin
   SetLength(WorkDir, Options.Threads);
   SetLength(Tasks, Options.Threads);
   SetLength(State, Options.Threads);
+  SetLength(TFSArr, Options.Threads);
   for I := Low(Tasks) to High(Tasks) do
   begin
     WorkDir[I] := IncludeTrailingPathDelimiter(GetCurrentDir) +
@@ -431,6 +440,7 @@ begin
   SetLength(WorkDir, Options.Threads);
   SetLength(Tasks, Options.Threads);
   SetLength(State, Options.Threads);
+  SetLength(TFSArr, Options.Threads);
   for I := Low(Tasks) to High(Tasks) do
   begin
     WorkDir[I] := IncludeTrailingPathDelimiter(GetCurrentDir) +

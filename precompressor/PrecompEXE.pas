@@ -9,6 +9,8 @@ uses
   PrecompUtils,
 {$IFDEF MSWINDOWS}
   Windows,
+{$ELSE}
+  Process,
 {$ENDIF}
   SysUtils, Classes, StrUtils,
   Types, Math, IOUtils, IniFiles;
@@ -65,6 +67,8 @@ type
 {$IFDEF MSWINDOWS}
     StartupInfo: TStartupInfo;
     ProcessInfo: TProcessInformation;
+{$ELSE}
+    Proc: TProcess;
 {$ENDIF}
     FTask, MTask: TTask;
   end;
@@ -245,38 +249,170 @@ begin
   end;
 end;
 {$ELSE}
-{ Linux: codecs ejecutables externos diferidos (TODO: TProcess). Los stubs
-  permiten compilar; ExecStdioProcess falla en runtime si se usa un codec exe. }
-procedure ExecReadTask(Instance, Handle, Stream: IntPtr);
+{ Linux: same TProcess/TTask architecture as PrecompUtils.pas's
+  PrecompExecStdioSync above. FLib=True codecs ("<library>"/"[library]" in
+  the plugin .ini) keep ONE process alive across every ExecStdioProcess call
+  (request/response framed by a raw Int32 length prefix, matching
+  ProcessLib's protocol below); all other STDIO_MODE codecs spawn a fresh
+  process per call, same as Windows. }
+procedure ExecDrainDiscard(StreamPtr: IntPtr);
+const
+  BufferSize = 65536;
+var
+  Buffer: array [0 .. BufferSize - 1] of Byte;
+  BytesRead: LongInt;
 begin
+  repeat
+    BytesRead := TStream(Pointer(StreamPtr)).Read(Buffer[0], BufferSize);
+  until BytesRead <= 0;
+end;
+
+procedure ExecReadTask(Instance, Handle, Stream: IntPtr);
+const
+  BufferSize = 65536;
+var
+  Buffer: array [0 .. BufferSize - 1] of Byte;
+  BytesRead: LongInt;
+begin
+  repeat
+    BytesRead := TStream(Pointer(Handle)).Read(Buffer[0], BufferSize);
+    if BytesRead > 0 then
+      PExecOutput(Pointer(Stream))^(Instance, @Buffer[0], BytesRead);
+  until BytesRead <= 0;
 end;
 
 procedure ExecMonTask(Process, Stdin, Stdout: IntPtr);
 begin
 end;
 
+procedure ExecWaitTaskChecked(Task: TTask);
+begin
+  Task.Wait;
+  try
+    Task.RaiseLastError;
+  finally
+    Task.Free;
+  end;
+end;
+
 function ExecStdioInit(Instance: Integer; Executable, CommandLine,
   WorkDir: PChar; IsLib: Boolean): PExecCtx;
 begin
   New(Result);
-  Result^.FInstance := Instance;
-  Result^.FLib := IsLib;
-  Result^.FExecutable := Executable;
-  Result^.FCommandLine := CommandLine;
-  Result^.FTask := nil;
-  Result^.MTask := nil;
+  with Result^ do
+  begin
+    FInstance := Instance;
+    FLib := IsLib;
+    FExecutable := Executable;
+    FCommandLine := CommandLine;
+    if WorkDir <> '' then
+      FWorkDir := WorkDir
+    else
+      FWorkDir := GetCurrentDir;
+    Proc := nil;
+    FTask := nil;
+    MTask := nil;
+  end;
 end;
 
 procedure ExecStdioFree(Ctx: PExecCtx);
 begin
-  if Assigned(Ctx) then
-    Dispose(Ctx);
+  with Ctx^ do
+  begin
+    if Assigned(Proc) then
+    begin
+      if Proc.Running then
+        Proc.Terminate(0);
+      Proc.Free;
+    end;
+  end;
+  Dispose(Ctx);
 end;
 
 function ExecStdioProcess(Ctx: PExecCtx; InBuff: Pointer;
   InSize, OutSize: Integer; Output: _ExecOutput): Boolean;
+
+  function ProcessLib(Instance: Integer; Proc: TProcess): Boolean;
+  const
+    BufferSize = 65536;
+  var
+    Buffer: array [0 .. BufferSize - 1] of Byte;
+    BytesRead: LongInt;
+    X: Integer;
+    LOutSize: Integer;
+  begin
+    Result := False;
+    LOutSize := OutSize;
+    try
+      Proc.Input.WriteBuffer(InSize, SizeOf(InSize));
+      Proc.Input.WriteBuffer(LOutSize, SizeOf(LOutSize));
+      Proc.Input.WriteBuffer(InBuff^, InSize);
+      Proc.Output.ReadBuffer(LOutSize, SizeOf(LOutSize));
+      if LOutSize <= 0 then
+        exit
+      else
+      begin
+        X := LOutSize;
+        while X > 0 do
+        begin
+          BytesRead := Min(X, Length(Buffer));
+          Proc.Output.ReadBuffer(Buffer[0], BytesRead);
+          Output(Instance, @Buffer[0], BytesRead);
+          Dec(X, BytesRead);
+        end;
+        Result := True;
+      end;
+    except
+    end;
+    if not Result and Proc.Running then
+      Proc.Terminate(0);
+  end;
+
+var
+  LTaskErr: TTask;
 begin
   Result := False;
+  with Ctx^ do
+  begin
+    if FLib and Assigned(Proc) and Proc.Running then
+      Result := ProcessLib(FInstance, Proc)
+    else
+    begin
+      if Assigned(Proc) then
+        Proc.Free;
+      Proc := TProcess.Create(nil);
+      Proc.Executable := '/bin/sh';
+      Proc.Parameters.Add('-c');
+      Proc.Parameters.Add('"' + FExecutable + '" ' + FCommandLine);
+      Proc.CurrentDirectory := FWorkDir;
+      Proc.Options := [poUsePipes];
+      Proc.Execute;
+      if FLib then
+        Result := ProcessLib(FInstance, Proc)
+      else
+      begin
+        if not Assigned(FTask) then
+          FTask := TTask.Create;
+        FTask.Update(IntPtr(Pointer(Proc.Output)), FInstance,
+          IntPtr(@@Output));
+        FTask.Perform(ExecReadTask);
+        FTask.Start;
+        LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
+        LTaskErr.Perform(ExecDrainDiscard);
+        LTaskErr.Start;
+        try
+          Proc.Input.WriteBuffer(InBuff^, InSize);
+        finally
+          Proc.CloseInput;
+          ExecWaitTaskChecked(FTask);
+          FTask := nil;
+          ExecWaitTaskChecked(LTaskErr);
+          Proc.WaitOnExit;
+        end;
+        Result := Proc.ExitStatus = 0;
+      end;
+    end;
+  end;
 end;
 {$ENDIF}
 
