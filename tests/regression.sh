@@ -66,12 +66,13 @@ echo "== ytool regression =="
 # 1) build (unless NO_BUILD) -------------------------------------------------
 if [ "${NO_BUILD:-0}" != "1" ]; then
   echo "-- building ytool (linux) --"
-  bash contrib/build-native-linux.sh >/dev/null 2>&1 || { echo "native build FAILED"; exit 3; }
-  fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
+  NATIVE_LOG="$(bash contrib/build-native-linux.sh 2>&1)" \
+    || { echo "native build FAILED:"; echo "$NATIVE_LOG"; exit 3; }
+  FPC_LOG="$(fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
     -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \
-    -oytool ytool.dpr >/dev/null 2>&1 \
-    || { echo "fpc compilation FAILED"; exit 3; }
+    -oytool ytool.dpr 2>&1)" \
+    || { echo "fpc compilation FAILED:"; echo "$FPC_LOG"; exit 3; }
 fi
 [ -x "$XTOOL" ] || { echo "binary does not exist $XTOOL"; exit 3; }
 
