@@ -57,8 +57,8 @@ reverse-engineered decoder) and `jojpeg` (no known public source at all). Oodle'
 included; if you legally have an `oo2core`/`oo2ext` DLL/.so, drop it next to the binary or point `-oodle<path>`
 at it and the codec activates.
 
-Prebuilt binaries (Linux tarball + Windows zip, both with every buildable plugin library included) are on the
-[Releases page](https://github.com/YadeWira/ytool/releases).
+Prebuilt binaries (Linux x64 tarball, Windows x64 zip, Windows x86 zip — all three with every
+buildable plugin library included) are on the [Releases page](https://github.com/YadeWira/ytool/releases).
 
 ### Changelog coverage — inherited/recreated from xtool's own published notes (post-0.7.9, up to 0.9.7)
 
@@ -104,9 +104,13 @@ Found and fixed while building/testing this port, not from any xtool release not
   the whole life of this port: the memory limit was capped at 1.5GB instead of the intended 64-bit ceiling,
   the `-p` I/O-cache option was force-disabled, and `srep64` was never selected over the fallback path. Fixed
   across `common/Utils.pas`, `precompressor/PrecompMain.pas`, `imports/OodleDLL.pas`.
-- `ytool` also builds and runs natively on **Windows x86 (32-bit, i386-win32)** — verified under WOW64 on
-  Windows 7 SP1 x64 with a bit-exact round-trip against the 64-bit build. No prebuilt binary yet (needs a
-  32-bit `zlib1.dll` packaging decision first); see `contrib/winbuild-x86.ps1` and
+- `ytool` also builds and runs natively on **Windows x86 (32-bit, i386-win32)**, all 11 codecs included —
+  verified under WOW64 on Windows 7 SP1 x64 with a real bit-exact round-trip against the 64-bit build (encode
+  on 64-bit, decode on 32-bit) for 10 of them. The one exception, `-mflac`, has a narrow one-directional
+  cross-architecture limitation (same-architecture round-trips always work) — see
+  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mflac-one-directional-32-bit64-bit-cross-architecture-incompatibility).
+  Prebuilt binary on the [Releases page](https://github.com/YadeWira/ytool/releases); see
+  `contrib/winbuild-x86.ps1` and
   [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
 
 ### Known limitation, not deeply verified
