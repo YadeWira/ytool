@@ -71,5 +71,5 @@ jobs:
         shell: bash
         env:
           NO_BUILD: 1
-          XTOOL: ytool.exe
+          XTOOL: ./ytool.exe
         run: bash tests/regression.sh
