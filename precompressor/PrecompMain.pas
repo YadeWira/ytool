@@ -133,6 +133,7 @@ var
   UseDB: Boolean = False;
   StoreDD: Integer = -2;
   VERBOSE: Boolean = False;
+  SHOWPROGRESS: Boolean = False;
   EXTRACT: Boolean = False;
   EXTRACT_UNPROCESSED: Boolean = False;
   NOVERIFY: Boolean = False;
@@ -184,6 +185,10 @@ begin
   WriteLine('  -lm  - low memory mode');
   WriteLine('  -s   - skip stream verification');
   WriteLine('  -v   - enables verbose mode');
+  WriteLine(
+    '  -bar - emit machine-parseable "PROGRESS done total" lines to stderr,');
+  WriteLine(
+    '               flushed per-line (bytes for precomp, streams for decode)');
   WriteLine('  -df# - set patching threshold to accept streams [5p]');
   WriteLine('               l# - patch compression level (1-22) [1]');
   WriteLine('  -x#  - extract streams to directory path');
@@ -411,6 +416,7 @@ begin
       end;
     end;
     VERBOSE := ArgParse.AsBoolean('-v') and (IsLibrary = False);
+    SHOWPROGRESS := ArgParse.AsBoolean('-bar') and (IsLibrary = False);
     OPTIMISE_DEC := ArgParse.AsBoolean('-o');
     FULLSCAN := ArgParse.AsBoolean('-f');
     Options.ExtractDir := ArgParse.AsString('-x');
@@ -494,6 +500,7 @@ begin
     CACHE := 0;
 {$ENDIF}
     VERBOSE := ArgParse.AsBoolean('-v') and (IsLibrary = False);
+    SHOWPROGRESS := ArgParse.AsBoolean('-bar') and (IsLibrary = False);
     EXTCOMP := ArgParse.AsString('-e');
   finally
     ArgParse.Free;
@@ -3148,6 +3155,12 @@ var
     I64: Int64;
     CovStr: string;
   begin
+    // stderr (not stdout): "-" as input/output means real stdin/stdout piping
+    // of the actual payload -- stdout must stay clean for that. Bytes, not
+    // stream count: a wrapping tool spawning one process per file can sum
+    // done/total across processes for a global percentage.
+    if SHOWPROGRESS then
+      WriteLine(Format('PROGRESS %d %d', [EncInfo.CovSize, EncInfo.InSize]));
 {$IFDEF MSWINDOWS}
     GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
       UserTime);
@@ -3259,6 +3272,13 @@ var
     TT: TSystemTime;
 {$ENDIF}
   begin
+    // Stream count, not bytes: unlike encode's EncInfo.InSize (the whole input
+    // file's size, known upfront), decode reads the .pmp in sequential blocks
+    // (required to stay pipe/stdin-friendly, no seeking) -- a byte-accurate
+    // total isn't available before the last block is reached. stderr, same
+    // reasoning as encode's Update: stdout must stay clean for "-" piping.
+    if SHOWPROGRESS then
+      WriteLine(Format('PROGRESS %d %d', [EncInfo.Processed, EncInfo.Count]));
 {$IFDEF MSWINDOWS}
     GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
       UserTime);
