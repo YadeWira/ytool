@@ -56,49 +56,30 @@ if [ -d "$CSRC/zlib" ]; then
     || echo "   (zlib1-x86.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
-# Same source/threading-shim setup as the win64 build (contrib/srep-win32/,
-# see build-plugins-windows.sh's own comment for the why). i386-SPECIFIC BUG:
-# Compression/SREP/hashes.cpp's CRC32 helper uses inline asm with a "rm"
-# (register-or-memory) constraint on a uint8 operand -- safe on x86_64 (every
-# GPR has a REX byte-addressable form) but not on i386, where only
-# eax/ebx/ecx/edx have legacy 8-bit sub-registers (esi/edi/ebp/esp don't);
-# GCC's i386 codegen fails with "unsupported size for integer register"
-# (reported at the enclosing function due to inlining, not the true line).
-# Fixed by narrowing the constraint to "qm" (byte-addressable registers only)
-# plus a defensive "cc" clobber, applied as an idempotent sed patch below
-# (checks before patching, safe to re-run). Also patches vmac.c's
-# nh_16_func/poly_step_func: same missing-register-clobber bug class (a
-# genuine architecture-dependent SHA256 divergence was measured between
-# builds compiled with "qm" vs "rm" for the CRC32 helper -- investigated as
-# a possible cause of ytool's own `-mzlib -dd1` cross-arch bug, ruled out by
-# direct A/B test: a patched build produces byte-identical output to an
-# unpatched one under this mingw-w64 toolchain, so whatever the real second
-# factor is, it isn't this -- but the register-clobber bug is real
-# independent of that, see patch_srep_vmac.py's own comment).
+# ── srep (external dedup -dd<N>) — omega-srep, github.com/YadeWira/omega-srep ──
+# Was Intensity/srep -- migrated after a real cross-architecture bug in
+# upstream (win64-encoded `-dd1` streams failed their own checksum on win32
+# decode). The bug survived the initial migration too, but was root-caused
+# via live cross-AI collaboration to a GCC strict-aliasing miscompile of
+# VMAC's 32-bit ADD128/PMUL64 fallback, fixed upstream and released as
+# v1.0a-beta.7 (pinned below). See build-plugins-linux.sh's srep comment for
+# the full story. omega-srep already ships its own Windows threading backend
+# and properly gates out the
+# LZMA-SDK Handle.h stub for MinGW builds, so neither shim from
+# contrib/srep-win32/ is needed anymore -- only the <ShObjIdl.h> case shim
+# (mingw-w64 ships lowercase "shobjidl.h") still applies, same as every other
+# cmake/mingw build in this script. CLI unchanged for what ytool sends
+# (`-m<N>f`, `-d`, stdin/stdout piping via "-").
 echo "==> srep (srep-x86.exe)"
-[ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
-if [ -d "$CSRC/srep" ]; then
-  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
-    "$CSRC/srep/Compression/LZMA2/C/"
-  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
-  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
-    # Handles both a fresh clone ("rm", unpatched) and one patched by an
-    # earlier version of this script that only did "rm"->"qm" without the
-    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
-    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
-  fi
-  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
-  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
-  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+if [ -d "$CSRC/omega-srep" ]; then
+  ( cd "$CSRC/omega-srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep-x86.exe" ) \
+    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/srep-x86.exe" ) \
     && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
 fi
 

@@ -19,30 +19,35 @@ CSRC="$ROOT/contrib/.csrc"
 mkdir -p "$CSRC"
 CXX="$(command -v clang++ || command -v g++)"
 
-# ── srep (dedup -d / StoreDD) ────────────────────────────────────────────────
-# Patches two inline-asm register-clobber bugs before building (hashes.cpp's
-# CRC32 helper, vmac.c's nh_16_func/poly_step_func -- see
-# contrib/build-plugins-windows-x86.sh's comment on the same step for the full
-# story). Neither is known to actually misbehave on this build/toolchain
-# (verified byte-identical output with/without the fix), but both are real,
-# independently-confirmed bugs upstream (see the sibling omega-srep fork,
-# github.com/YadeWira/omega-srep commit 22bbe43) so it costs nothing to apply
-# them everywhere rather than only where they were forced to compile at all.
-echo "==> srep"
-[ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
-if [ -d "$CSRC/srep" ]; then
-  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
-    # Handles both a fresh clone ("rm", unpatched) and one patched by an
-    # earlier version of this script that only did "rm"->"qm" without the
-    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
-    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
-  fi
-  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
-  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
-fi
-( cd "$CSRC/srep" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
+# ── srep (dedup -d / StoreDD) — omega-srep, github.com/YadeWira/omega-srep ──
+# Was Intensity/srep (upstream, frozen since 2014) until a real cross-arch
+# bug surfaced (win64-encoded `-dd1` streams failed their own checksum when
+# decoded by the win32 build). Migrated to omega-srep instead of debugging
+# dead upstream code -- actively maintained by the same author. An initial
+# 6/6 cross-arch round-trip gate passed before migrating, but a later, more
+# targeted repro (zero-LZ-match content, `-m1f`) found the bug survived the
+# migration too. Root-caused via live cross-AI collaboration (see the wiki's
+# Known-Issues-and-Limitations page for the full history, including the 4
+# earlier candidates ruled out along the way): vmac.c's __i386__ branch never
+# defines its own ADD128/MUL64/PMUL64, so the 32-bit build fell through to
+# the generic portable-C fallback, which GCC's -O2+ strict-aliasing
+# optimizations miscompiled. Fixed upstream in omega-srep (targeted
+# #pragma GCC optimize("no-strict-aliasing"), no perf cost elsewhere),
+# released as v1.0a-beta.7 -- pinned to that tag, not a moving branch.
+# Verified: the full cross-arch regression matrix (357/357) now passes with
+# zero -dd1 failures.
+#
+# BREAKING: omega-srep's on-disk format is a deliberate clean break from
+# upstream (magic bytes "SREP"->"OSRP", extension .srep->.osr) -- any
+# existing .pmp made with `-mzlib -dd1` before this migration can no longer
+# be decoded (the embedded srep sub-stream starts with the old magic).
+#
+# CLI is unchanged for what ytool actually sends (`-m<N>f`, `-d`, stdin/
+# stdout piping via "-") -- confirmed by reading srep.cpp's argument parser,
+# byte-for-byte identical to upstream there. No Pascal-side flag changes.
+echo "==> srep (osrep)"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/srep64" ) \
   && echo "   OK -> srep64" || echo "   (srep fallo)"
 
 # ── packjpg (JPEG media codec) — user's fork v4.0e ──────────────────────

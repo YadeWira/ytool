@@ -48,7 +48,7 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
 | fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
-| dedup, external (`-dd<N>`) | [Intensity/srep](https://github.com/Intensity/srep) | ✅ | ✅ |
+| dedup, external (`-dd<N>`) | [omega-srep](https://github.com/YadeWira/omega-srep) | ✅ | ✅ |
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
 **Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
@@ -90,7 +90,9 @@ Found and fixed while building/testing this port, not from any xtool release not
   target*, 0.8.6 — we built it as a first-class codec instead, since no open TAK encoder exists to pair with it).
 - Ported `srep` (external dedup, `-dd<N>`) to Windows: its Win32 threading backend was missing from the
   [Intensity/srep](https://github.com/Intensity/srep) fork (only Unix was kept); adapted from the public-domain
-  LZMA SDK (Igor Pavlov), same underlying API. See `contrib/srep-win32/`.
+  LZMA SDK (Igor Pavlov), same underlying API. (Superseded — see the
+  [omega-srep migration](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mzlib--dd1-external-dedup-via-srep-cross-architecture-failures-newly-found)
+  below; the port itself is no longer needed since the new dependency ships its own Windows backend.)
 - New codec `-mpackpng` (PNG/APNG/JNG/MNG via [packPNG](https://github.com/YadeWira/packPNG), preflate +
   WebP-lossless) — coexists with the classic zlib-based PNG codec, ~45% smaller on real-world images since it
   models pixels instead of just re-encoding the deflate stream. MNG (which ends at `MEND`, not `IEND`) is
@@ -110,13 +112,23 @@ Found and fixed while building/testing this port, not from any xtool release not
   (`-mflac` initially shipped broken on 32-bit — its DLL depended on a mingw runtime DLL not present on stock
   Windows, so `LoadLibrary` failed and the encoder never ran — fixed with `-static-libgcc`; see
   [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written).)
-  One real limitation remains: `-mzlib -dd1` (external dedup via `srep`) has a confirmed bug inside `srep`
-  itself on cross-architecture round-trips — don't mix 64-bit-encoded and 32-bit-decoded (or vice versa)
-  `.pmp` files using that option; see
-  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#-mzlib--dd1-external-dedup-via-srep-cross-architecture-failures-newly-found).
   Prebuilt binary on the [Releases page](https://github.com/YadeWira/ytool/releases); see
   `contrib/winbuild-x86.ps1` and
   [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
+- External dedup (`-mzlib -dd1`) migrated from [Intensity/srep](https://github.com/Intensity/srep) (frozen
+  upstream, unmaintained since 2014) to [omega-srep](https://github.com/YadeWira/omega-srep): actively
+  maintained by the same author, with 3 real bugs already found and fixed upstream during this migration.
+  **Breaking change**: omega-srep's on-disk format is a deliberate clean break (`.osr` extension,
+  `OSRP` magic bytes instead of `SREP`) — any `.pmp` made with `-dd1` before this migration can no longer be
+  decoded.
+  **The cross-architecture bug is now genuinely fixed**, in omega-srep itself: isolated to a minimal repro
+  entirely outside ytool (a win32 `srep`/omega-srep build rejecting valid win64-encoded content with its own
+  internal checksum-mismatch error), root-caused to a GCC strict-aliasing miscompile of VMAC's generic 128-bit
+  `ADD128`/`PMUL64` fallback on i686 (fixed with a targeted `#pragma GCC optimize("no-strict-aliasing")`, no
+  performance cost on other paths). Verified end-to-end: the original failing case now round-trips bit-exact,
+  and the full cross-architecture regression matrix (357/357) passes with no `-dd1` failures anywhere. See
+  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written)
+  for the full investigation history.
 - Also fixed: `common/Threading.pas`'s `TTask.FStatus` had no synchronization at all between the main thread
   and worker threads (plus a dead-code bug that meant a worker's error message never actually got cleared),
   and `find`/`erase`/`replace` swallowed worker errors instead of propagating them — the likely cause of a

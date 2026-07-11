@@ -61,45 +61,39 @@ if [ -d "$CSRC/zlib" ]; then
     && echo "   OK -> zlib1.dll" || echo "   (zlib1.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
-# srep's threading API (Compression/LZMA2/C/ThreadsUnix.h) is the same one from
-# 7-Zip's LZMA SDK (Igor Pavlov, public domain); the Windows side (ThreadsWin32.*)
-# wasn't included in this fork (it kept only the Unix one), so it's added, adapted from
-# the official LZMA SDK (contrib/srep-win32/). Handle.h is a stub: Synchronization.h
-# includes it under #ifdef _WIN32 but no class in that file uses a "Handle" type.
-# Also: -DUNICODE/-D_UNICODE (Common.h assumes TCHAR=wchar_t), -lole32 -luuid (COM,
-# for the Windows 7 taskbar progress indicator, a feature irrelevant for a
-# headless helper but still needs linking), and a case shim
-# for <ShObjIdl.h> (mingw-w64 ships "shobjidl.h"; only matters on a case-sensitive FS
-# like Linux, on real Windows it was never a problem).
-# Also patches two inline-asm register-clobber bugs (hashes.cpp's CRC32 helper,
-# vmac.c's nh_16_func/poly_step_func) that only strictly matter on i386 (see
-# build-plugins-windows-x86.sh's own comment for the full story) but are applied
-# here too for consistency/safety -- verified byte-identical x86_64 output
-# before/after.
+# ── srep (external dedup -dd<N>) — omega-srep, github.com/YadeWira/omega-srep ──
+# Was Intensity/srep until a real cross-architecture bug surfaced (win64-
+# encoded `-dd1` streams failed their own checksum decoded on win32). Migrated
+# after ruling out 4 candidate causes (see build-plugins-linux.sh's srep
+# comment, and the wiki's Known-Issues-and-Limitations page, for the full
+# history) -- omega-srep is actively maintained by the same author. The bug
+# survived the initial migration too, but was root-caused via live cross-AI
+# collaboration to a GCC strict-aliasing miscompile of VMAC's 32-bit ADD128/
+# PMUL64 fallback, fixed upstream and released as v1.0a-beta.7. Pinned to
+# that tag, not a moving branch. Verified: the full cross-arch regression
+# matrix (357/357) now passes with zero -dd1 failures. BREAKING: on-disk
+# format changed (magic bytes, extension) -- old `.pmp` using `-dd1` from
+# before this migration can't be decoded anymore. Already ships its own
+# Windows threading backend
+# (Compression/LZMA2/C/ThreadsWin32.*) and properly gates out the LZMA-SDK
+# Handle.h stub for MinGW builds -- neither shim from contrib/srep-win32/ is
+# needed anymore. Still needs -DUNICODE/-D_UNICODE (Common.h assumes
+# TCHAR=wchar_t), -lole32 -luuid -lshell32 -ladvapi32 (COM, for the Windows 7
+# taskbar progress indicator), and the case shim for <ShObjIdl.h> (mingw-w64
+# ships lowercase "shobjidl.h"; only matters on a case-sensitive FS like
+# Linux). CLI unchanged for what ytool sends (`-m<N>f`, `-d`, stdin/stdout
+# piping via "-") -- confirmed reading srep.cpp's parser, byte-for-byte
+# identical to upstream there.
 echo "==> srep (srep.exe)"
-[ -d "$CSRC/srep" ] || git clone --depth 1 https://github.com/Intensity/srep "$CSRC/srep"
-if [ -d "$CSRC/srep" ]; then
-  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
-    "$CSRC/srep/Compression/LZMA2/C/"
-  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
-  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
-    # Handles both a fresh clone ("rm", unpatched) and one patched by an
-    # earlier version of this script that only did "rm"->"qm" without the
-    # "cc" clobber -- whichever pattern isn't present is simply a no-op.
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
-    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
-  fi
-  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
-  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
-  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+if [ -d "$CSRC/omega-srep" ]; then
+  ( cd "$CSRC/omega-srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep.exe" ) \
+    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/srep.exe" ) \
     && echo "   OK -> srep.exe" || echo "   (srep fallo)"
 fi
 
