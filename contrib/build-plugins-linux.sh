@@ -33,7 +33,7 @@ CXX="$(command -v clang++ || command -v g++)"
 # the generic portable-C fallback, which GCC's -O2+ strict-aliasing
 # optimizations miscompiled. Fixed upstream in omega-srep (targeted
 # #pragma GCC optimize("no-strict-aliasing"), no perf cost elsewhere),
-# released as v1.0a-beta.7 -- pinned to that tag, not a moving branch.
+# released as v1.0.0 -- pinned to that tag, not a moving branch.
 # Verified: the full cross-arch regression matrix (357/357) now passes with
 # zero -dd1 failures.
 #
@@ -51,7 +51,7 @@ CXX="$(command -v clang++ || command -v g++)"
 # own binary is genuinely named `osrep` (its Makefile installs it as such) --
 # renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
 echo "==> osrep"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.0 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 

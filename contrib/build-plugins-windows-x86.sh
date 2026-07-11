@@ -62,7 +62,7 @@ fi
 # decode). The bug survived the initial migration too, but was root-caused
 # via live cross-AI collaboration to a GCC strict-aliasing miscompile of
 # VMAC's 32-bit ADD128/PMUL64 fallback, fixed upstream and released as
-# v1.0a-beta.7 (pinned below). See build-plugins-linux.sh's srep comment for
+# v1.0.0 (pinned below). See build-plugins-linux.sh's srep comment for
 # the full story. omega-srep already ships its own Windows threading backend
 # and properly gates out the
 # LZMA-SDK Handle.h stub for MinGW builds, so neither shim from
@@ -76,7 +76,7 @@ fi
 # genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
 # constant to match.
 echo "==> osrep (osrep-x86.exe)"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.0 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
