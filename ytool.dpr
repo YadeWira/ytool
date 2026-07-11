@@ -120,6 +120,7 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
+  YTOOL_VERSION = '0.9.7';
 
 procedure ProgramInfo;
 begin
@@ -403,6 +404,12 @@ begin
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   FormatSettings.ThousandSeparator := ',';
+  if (ParamCount = 1) and ((ParamStr(1) = '--version') or (ParamStr(1) = '-version'))
+  then
+  begin
+    WriteLine(YTOOL_VERSION);
+    exit;
+  end;
   ProgramInfo;
   try
     if ParamCount = 0 then
@@ -563,6 +570,9 @@ begin
                   Output.Free;
                 end;
               end;
+          else
+            raise Exception.CreateFmt(
+              'Unrecognized .pmp format (bad magic: $%.8x)', [I]);
           end;
         finally
           Input.Free;
