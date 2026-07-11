@@ -407,7 +407,11 @@ begin
   if (ParamCount = 1) and ((ParamStr(1) = '--version') or (ParamStr(1) = '-version'))
   then
   begin
-    WriteLine(YTOOL_VERSION);
+    // Deliberately System.Output (stdout), not WriteLine (stderr, by design --
+    // see WriteLine's own comment): unlike every other status message, a
+    // version flag's whole point is to be captured by scripts/tooling, e.g.
+    // `x=$(ytool --version)`, which expects stdout by convention.
+    WriteLn(System.Output, YTOOL_VERSION);
     exit;
   end;
   ProgramInfo;
