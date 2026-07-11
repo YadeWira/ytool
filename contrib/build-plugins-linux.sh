@@ -50,9 +50,13 @@ echo "==> srep (osrep)"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/srep64" ) \
   && echo "   OK -> srep64" || echo "   (srep fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v4.0e ──────────────────────
+# ── packjpg (JPEG media codec) — user's fork v4.0f ──────────────────────
+# v4.0f adds native arithmetic-coded JPEG support (SOF C9/CA) alongside the
+# existing Huffman path -- purely additive, same format_version_current (40),
+# Huffman .pjg output stays byte-compatible with v4.0e. No build recipe changes
+# needed (same 3 source files), just a fresh clone to pick up the new code.
 echo "==> packjpg (libpackjpg.so)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v4.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
   -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \

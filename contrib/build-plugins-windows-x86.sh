@@ -93,9 +93,9 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2-x86.dll" ) \
   && echo "   OK -> lzo2-x86.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v4.0e ──────────────────────
+# ── packjpg (JPEG media codec) — user's fork v4.0f (adds arithmetic-coded JPEG) ──
 echo "==> packjpg (packjpg_dll-x86.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v4.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll-x86.dll" ) \
