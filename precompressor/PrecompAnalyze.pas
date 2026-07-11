@@ -44,7 +44,7 @@ type
   end;
 
 function RunTrial(const SelfExe, InputPath, Method,
-  OutputPath: String): TTrialResult;
+  OutputPath, ThreadsArg: String): TTrialResult;
 const
   BufSize = 65536;
 var
@@ -61,6 +61,8 @@ begin
     Proc.Executable := SelfExe;
     Proc.Parameters.Add('precomp');
     Proc.Parameters.Add('-m' + Method);
+    if ThreadsArg <> '' then
+      Proc.Parameters.Add(ThreadsArg);
     Proc.Parameters.Add(InputPath);
     Proc.Parameters.Add(OutputPath);
     Proc.Options := [poUsePipes];
@@ -104,6 +106,24 @@ begin
     end;
 end;
 
+// Returns the raw token (e.g. "-t4p") if the user passed a flag with this
+// prefix to `analyze`, so it can be forwarded as-is to each trial's `precomp`
+// subprocess -- the same ArgParser there parses it identically. Used for
+// `-t#` (thread count), which `analyze`'s subprocess trials previously always
+// ran with precomp's own default instead of what the user actually asked for.
+function GetFlagValue(const Flags: TArray<String>; const Prefix: String): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := Low(Flags) to High(Flags) do
+    if Flags[I].StartsWith(Prefix, False) then
+    begin
+      Result := Flags[I];
+      exit;
+    end;
+end;
+
 // Copies the first Count bytes of Src to a new temp file; returns
 // the temp file's path. The caller is responsible for deleting it.
 function MakeSample(const Src: String; Count: Int64): String;
@@ -131,9 +151,10 @@ var
   I: Integer;
   Trial, Combined, BestSingle: TTrialResult;
   Winners: TStringList;
-  CombinedMethod, SelfExe, TmpOut, AnalyzeInput, SamplePath: String;
+  CombinedMethod, SelfExe, TmpOut, AnalyzeInput, SamplePath, ThreadsArg: String;
   Sampled: Boolean;
 begin
+  ThreadsArg := GetFlagValue(Flags, '-t');
   if not FileExists(InputPath) then
   begin
     WriteLine(Format('File not found: %s', [InputPath]));
@@ -176,7 +197,7 @@ begin
     try
       for I := Low(Candidates) to High(Candidates) do
       begin
-        Trial := RunTrial(SelfExe, AnalyzeInput, Candidates[I], TmpOut);
+        Trial := RunTrial(SelfExe, AnalyzeInput, Candidates[I], TmpOut, ThreadsArg);
         if not Trial.Ran then
         begin
           WriteLine(Format('  (%s failed)', [Candidates[I]]));
@@ -200,7 +221,7 @@ begin
       CombinedMethod := Winners[0];
       for I := 1 to Winners.Count - 1 do
         CombinedMethod := CombinedMethod + '+' + Winners[I];
-      Combined := RunTrial(SelfExe, AnalyzeInput, CombinedMethod, TmpOut);
+      Combined := RunTrial(SelfExe, AnalyzeInput, CombinedMethod, TmpOut, ThreadsArg);
       // Codecs competing for the same stream type (e.g. packjpg vs brunsli,
       // both JPEG) don't always do better combined than the best individual
       // one alone -- compare and recommend whichever actually wins.
@@ -237,8 +258,11 @@ begin
   WriteLine('          so cost scales with file size) -- pass -full to analyze');
   WriteLine('          the whole file instead (much slower on large files).');
   WriteLine('');
+  WriteLine('          -t# forwards a thread-count override (same syntax as');
+  WriteLine('          precomp''s own -t#) to every trial subprocess.');
+  WriteLine('');
   WriteLine('Usage:');
-  WriteLine('  ytool analyze [-full] input');
+  WriteLine('  ytool analyze [-full] [-t#] input');
 end;
 
 end.
