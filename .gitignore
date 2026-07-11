@@ -8,9 +8,9 @@ link*.res
 # Nota: contrib/*/*.linux.x64.o se regeneran con contrib/build-native-linux.sh
 /ytool
 /ytool.exe
-srep64
-srep.exe
-srep-x86.exe
+osrep64
+osrep.exe
+osrep-x86.exe
 libpackjpg.so
 libpreflate.so
 libfast-lzma2.so

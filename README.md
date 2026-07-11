@@ -174,7 +174,7 @@ Windows (FPC/Lazarus has no Linux→Windows cross-compiler for this codebase's d
 ```bash
 # on Linux:
 bash contrib/build-native-windows.sh    # native lz4/zstd/xxhash objects (mingw-w64)
-bash contrib/build-plugins-windows.sh   # 8 plugin DLLs + srep.exe (mingw-w64 + cmake)
+bash contrib/build-plugins-windows.sh   # 8 plugin DLLs + osrep.exe (mingw-w64 + cmake)
 # copy the source tree + the .dll files to a Windows machine with FPC/Lazarus 3.2.2, then:
 ```
 ```powershell

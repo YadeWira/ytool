@@ -45,10 +45,15 @@ CXX="$(command -v clang++ || command -v g++)"
 # CLI is unchanged for what ytool actually sends (`-m<N>f`, `-d`, stdin/
 # stdout piping via "-") -- confirmed by reading srep.cpp's argument parser,
 # byte-for-byte identical to upstream there. No Pascal-side flag changes.
-echo "==> srep (osrep)"
+#
+# Kept the plain `srep64`/`srep.exe` filename convention (inherited from the
+# old Intensity/srep dependency) until it was pointed out that omega-srep's
+# own binary is genuinely named `osrep` (its Makefile installs it as such) --
+# renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
+echo "==> osrep"
 [ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
-( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/srep64" ) \
-  && echo "   OK -> srep64" || echo "   (srep fallo)"
+( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
+  && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 
 # ── packjpg (JPEG media codec) — user's fork v4.0f ──────────────────────
 # v4.0f adds native arithmetic-coded JPEG support (SOF C9/CA) alongside the

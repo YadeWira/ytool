@@ -70,7 +70,12 @@ fi
 # (mingw-w64 ships lowercase "shobjidl.h") still applies, same as every other
 # cmake/mingw build in this script. CLI unchanged for what ytool sends
 # (`-m<N>f`, `-d`, stdin/stdout piping via "-").
-echo "==> srep (srep-x86.exe)"
+#
+# Kept the plain `srep-x86.exe` filename (inherited from the old Intensity/srep
+# dependency) until it was pointed out that omega-srep's own binary is
+# genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
+# constant to match.
+echo "==> osrep (osrep-x86.exe)"
 [ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -std=c++17 \
@@ -79,8 +84,8 @@ if [ -d "$CSRC/omega-srep" ]; then
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/srep-x86.exe" ) \
-    && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
+    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/osrep-x86.exe" ) \
+    && echo "   OK -> osrep-x86.exe" || echo "   (osrep fallo)"
 fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
@@ -229,7 +234,7 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. srep-x86.exe + plugins -x86.dll en la raiz del repo (gitignored)."
+echo "Hecho. osrep-x86.exe + plugins -x86.dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
 echo "Al empaquetar: renombrar cada uno quitando el sufijo -x86 junto al ytool.exe"
 echo "de 32-bit (packpng-x86.dll -> packpng.dll, zlib1-x86.dll -> zlib1.dll, etc.),"

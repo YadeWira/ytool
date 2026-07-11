@@ -116,9 +116,9 @@ type
 
 const
 {$IFDEF MSWINDOWS}
-  SREPEXE64 = 'srep64.exe';
+  SREPEXE64 = 'osrep64.exe';
 {$ELSE}
-  SREPEXE64 = 'srep64';
+  SREPEXE64 = 'osrep64';
 {$ENDIF}
 
 var
@@ -140,7 +140,7 @@ var
   REASSIGN: String = '';
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
-  SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
+  SREPEXE: String = {$IFDEF MSWINDOWS}'osrep.exe'{$ELSE}'osrep'{$ENDIF};
   CACHE: Int64 = 0;
   NULLOUT: Boolean = False;
   DupSysMem: Int64 = 0;

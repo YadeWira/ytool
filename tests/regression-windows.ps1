@@ -5,7 +5,7 @@
 #
 # Unlike regression.sh, this doesn't build ytool itself -- point it at an
 # already-built .exe (and its directory, which must already have whatever
-# plugin DLLs/zlib1.dll/srep.exe are meant to be tested). Packaging those is
+# plugin DLLs/zlib1.dll/osrep.exe are meant to be tested). Packaging those is
 # contrib/build-plugins-windows.sh / build-plugins-windows-x86.sh's job.
 #
 # Usage:

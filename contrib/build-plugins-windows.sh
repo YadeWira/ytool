@@ -84,7 +84,12 @@ fi
 # Linux). CLI unchanged for what ytool sends (`-m<N>f`, `-d`, stdin/stdout
 # piping via "-") -- confirmed reading srep.cpp's parser, byte-for-byte
 # identical to upstream there.
-echo "==> srep (srep.exe)"
+#
+# Kept the plain `srep.exe` filename (inherited from the old Intensity/srep
+# dependency) until it was pointed out that omega-srep's own binary is
+# genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
+# constant to match.
+echo "==> osrep (osrep.exe)"
 [ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0a-beta.7 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -std=c++17 \
@@ -93,8 +98,8 @@ if [ -d "$CSRC/omega-srep" ]; then
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/srep.exe" ) \
-    && echo "   OK -> srep.exe" || echo "   (srep fallo)"
+    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/osrep.exe" ) \
+    && echo "   OK -> osrep.exe" || echo "   (osrep fallo)"
 fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
@@ -215,5 +220,5 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. srep.exe + plugins .dll en la raiz del repo (gitignored)."
+echo "Hecho. osrep.exe + plugins .dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
