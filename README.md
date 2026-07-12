@@ -41,7 +41,7 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | JPEG (alt) | [brunsli](https://github.com/google/brunsli) | ✅ | ✅ |
 | FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
 | WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
-| MP3 | [packJPG/packMP3](https://github.com/packjpg/packMP3) | ✅ | ✅ |
+| MP3 | [YadeWira/packMP3](https://github.com/YadeWira/packMP3) (successor fork, LGPLv3) | ✅ | ✅ |
 | LZ4 | liblz4 | ✅ | ✅ (built into the binary) |
 | Zstandard | libzstd | ✅ | ✅ (built into the binary) |
 | LZO | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ | ✅ |
