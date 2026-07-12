@@ -2042,7 +2042,8 @@ begin
         end;
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-          '-m' + StoreDD.ToString + T + ' - -', GetCurrentDir, nil, Output,
+          '-m' + StoreDD.ToString + T + ' -t' + Length(Tasks).ToString +
+          ' - -', GetCurrentDir, nil, Output,
           ErrStream), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
       end
@@ -2486,7 +2487,8 @@ begin
               T := T + ' -' + List[I];
           end;
           with TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-            '-m' + StoreDD.ToString + 'f' + T + ' ' + S + ' -', GetCurrentDir,
+            '-m' + StoreDD.ToString + 'f' + T + ' -t' +
+            Length(Tasks).ToString + ' ' + S + ' -', GetCurrentDir,
             nil, Output, ErrStream) do
             try
               if Execute then
