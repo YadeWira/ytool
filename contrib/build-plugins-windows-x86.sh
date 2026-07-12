@@ -134,9 +134,13 @@ echo "==> fast-lzma2 (fast-lzma2-x86.dll)"
 # by the *.c glob and are additionally guarded by 64-bit-only preprocessor
 # checks in the C sources -- they never enter this 32-bit build.)
 
-# ── packmp3 (MP3 media codec) — original packjpg/packMP3 v1.0g project ──────
+# ── packmp3 (MP3 media codec) — user's fork v2.0a (successor of packjpg/packMP3 v1.0g) ──
+# See build-plugins-linux.sh's packmp3 comment for the full story (full MP3
+# family support, threading, retuned entropy models -- BREAKING bitstream
+# change, old .pmp using -mpackmp3 can no longer be decoded; v2.0a fixes a
+# missing-includes build bug present in the initial v2.0 tag).
 echo "==> packmp3 (packmp3_dll-x86.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v2.0a https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
   -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll-x86.dll" ) \

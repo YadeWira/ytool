@@ -146,9 +146,17 @@ echo "==> fast-lzma2 (fast-lzma2.dll)"
   *.c -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
 
-# ── packmp3 (MP3 media codec) — original packjpg/packMP3 v1.0g project ──────
+# ── packmp3 (MP3 media codec) — user's fork v2.0a (successor of packjpg/packMP3 v1.0g) ──
+# Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
+# support (was MPEG-1 Layer III only), CBR/VBR, threading, retuned entropy
+# models. Same source files/macros/pmplib_* functions, no build recipe changes.
+# BREAKING: retuned entropy models mean the bitstream itself isn't compatible
+# across major versions -- old .pmp using -mpackmp3 can no longer be decoded.
+# v2.0 (initial tag) failed to build (missing <atomic>/<thread> includes);
+# v2.0a is the fix, cut upstream at our request -- see build-plugins-linux.sh's
+# packmp3 comment for the full story.
 echo "==> packmp3 (packmp3_dll.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v2.0a https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
   -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll.dll" ) \

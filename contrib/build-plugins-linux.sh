@@ -107,12 +107,27 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packmp3 (MP3 media codec) — original packjpg/packMP3 v1.0g project ──────
+# ── packmp3 (MP3 media codec) — user's fork v2.0a (successor of packjpg/packMP3 v1.0g) ──
+# Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
+# support (was MPEG-1 Layer III only), CBR/VBR, intra-file/-th batch threading,
+# retuned entropy models. Same 4 source files, same BUILD_LIB/BUILD_DLL macros,
+# same pmplib_* function set the Pascal binding already expects -- no API changes.
+# BREAKING: entropy models were retuned, so the compressed bitstream itself is
+# not compatible across major versions (their own release notes say so
+# explicitly) -- any .pmp made with -mpackmp3 before this migration can no
+# longer be decoded. Accepted given ytool is pre-1.0, same call as omega-srep.
+#
+# v2.0 (the initial tag) failed to build: source/packmp3.cpp uses std::atomic/
+# std::thread (new -k/-th chunking) without #include <atomic>/<thread> anywhere
+# in the tree -- reproduced with both clang++ and g++14, so a real upstream bug,
+# not a compiler-strictness artifact. Already fixed on their master along with a
+# proper extern "C" on the library headers (see below); v2.0a is that fix,
+# cut as a new tag at our request so this pins to something reproducible
+# instead of a moving branch. The old sed C-linkage patch for Linux .so builds
+# is no longer needed as of v2.0a (headers now declare extern "C" natively).
 echo "==> packmp3 (libpackmp3.so)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 https://github.com/packjpg/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v2.0a https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 if [ -d "$CSRC/packMP3" ]; then
-  # upstream only gives C-linkage for BUILD_DLL/Windows; patch for Linux .so
-  sed -i 's/#define EXPORT extern$/#define EXPORT extern "C"/' "$CSRC/packMP3/source/packmp3lib.h"
   ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
     source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
     -lpthread -o "$ROOT/libpackmp3.so" ) \
