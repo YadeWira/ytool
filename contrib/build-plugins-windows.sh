@@ -71,7 +71,7 @@ fi
 # collaboration to a GCC strict-aliasing miscompile of VMAC's 32-bit ADD128/
 # PMUL64 fallback, fixed upstream and released as v1.0.0. Verified: the full
 # cross-arch regression matrix (357/357) now passes with zero -dd1 failures.
-# Bumped to v1.0.1 afterwards (perf-only: LTO/PGO/thread-count tuning,
+# Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count tuning,
 # byte-for-byte identical output verified by upstream) -- added the same
 # -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own Makefile now
 # uses, since this script compiles directly rather than via `make`/cmake
@@ -95,7 +95,7 @@ fi
 # genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
 # constant to match.
 echo "==> osrep (osrep.exe)"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.1 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.3 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
@@ -214,8 +214,8 @@ fi
 # (cross-compile to x86_64-pc-windows-gnu) + cmake for kanzi-cpp -- instead the
 # already-built .dll is downloaded from a versioned packPNG release.
 echo "==> packpng (packpng.dll)"
-PACKPNG_VER="v2.0b"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-win64-lib.zip" \
+PACKPNG_VER="v2.0c"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0c-win64-lib.zip" \
   -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then
   ( cd "$CSRC" && unzip -oq packpng-lib.zip packpng.dll ) 2>/dev/null \
     && mv -f "$CSRC/packpng.dll" "$ROOT/packpng.dll" \

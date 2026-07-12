@@ -35,7 +35,7 @@ CXX="$(command -v clang++ || command -v g++)"
 # #pragma GCC optimize("no-strict-aliasing"), no perf cost elsewhere),
 # released as v1.0.0 -- pinned to a tag, not a moving branch.
 # Verified: the full cross-arch regression matrix (357/357) now passes with
-# zero -dd1 failures. Bumped to v1.0.1 afterwards (perf-only: LTO/PGO/thread-
+# zero -dd1 failures. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-
 # count tuning, byte-for-byte identical output verified by upstream).
 #
 # BREAKING: omega-srep's on-disk format is a deliberate clean break from
@@ -52,7 +52,7 @@ CXX="$(command -v clang++ || command -v g++)"
 # own binary is genuinely named `osrep` (its Makefile installs it as such) --
 # renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
 echo "==> osrep"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.1 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.3 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 
@@ -125,8 +125,8 @@ fi
 # the already-built .so is downloaded from a versioned packPNG release
 # (same author, not an unknown third party) -- reproducible without a new toolchain.
 echo "==> packpng (libpackpng.so)"
-PACKPNG_VER="v2.0b"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-linux-x64-lib.tar.gz" \
+PACKPNG_VER="v2.0c"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0c-linux-x64-lib.tar.gz" \
   -o "$CSRC/packpng-lib.tar.gz" 2>/dev/null && [ -s "$CSRC/packpng-lib.tar.gz" ]; then
   tar -xzf "$CSRC/packpng-lib.tar.gz" -C "$CSRC" libpackpng.so 2>/dev/null \
     && mv -f "$CSRC/libpackpng.so" "$ROOT/libpackpng.so" \

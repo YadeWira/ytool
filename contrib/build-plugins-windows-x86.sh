@@ -62,7 +62,7 @@ fi
 # decode). The bug survived the initial migration too, but was root-caused
 # via live cross-AI collaboration to a GCC strict-aliasing miscompile of
 # VMAC's 32-bit ADD128/PMUL64 fallback, fixed upstream and released as
-# v1.0.0. Bumped to v1.0.1 afterwards (perf-only: LTO/PGO/thread-count
+# v1.0.0. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count
 # tuning, byte-for-byte identical output verified by upstream) -- added the
 # same -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own
 # Makefile now uses, since this script compiles directly rather than via
@@ -80,7 +80,7 @@ fi
 # genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
 # constant to match.
 echo "==> osrep (osrep-x86.exe)"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.1 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.3 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
@@ -224,11 +224,12 @@ fi
 # ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
 # Confirmed real: YadeWira/packPNG's own Makefile has win-x86/lib-win-x86
 # targets (i686-w64-mingw32-g++, Rust i686-pc-windows-gnu for preflate-rs),
-# and the v2.0b release ships packPNG-2.0b-win32-lib.zip with a genuine PE32
-# (Intel i386) packpng-x86.dll -- verified with `file`, not a renamed x64 one.
+# and the packPNG release ships a packPNG-<ver>-win32-lib.zip with a genuine
+# PE32 (Intel i386) packpng-x86.dll -- verified with `file`, not a renamed
+# x64 one (confirmed again on v2.0c, wire format unchanged since v2.0a).
 echo "==> packpng (packpng-x86.dll)"
-PACKPNG_VER="v2.0b"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0b-win32-lib.zip" \
+PACKPNG_VER="v2.0c"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0c-win32-lib.zip" \
   -o "$CSRC/packpng-lib-x86.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib-x86.zip" ]; then
   ( cd "$CSRC" && unzip -oq packpng-lib-x86.zip packpng-x86.dll ) 2>/dev/null \
     && mv -f "$CSRC/packpng-x86.dll" "$ROOT/packpng-x86.dll" \
