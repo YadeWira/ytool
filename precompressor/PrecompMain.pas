@@ -226,6 +226,10 @@ begin
     '               (streams nested inside another compressed container are');
   WriteLine(
     '               not found without doing the real pass).');
+  WriteLine(
+    '               Needs -m<codecs> like a real precomp pass -- without');
+  WriteLine(
+    '               it, nothing is enabled to detect and it reports 0.');
   WriteLine('  -df# - set patching threshold to accept streams [5p]');
   WriteLine('               l# - patch compression level (1-22) [1]');
   WriteLine('  -x#  - extract streams to directory path');
