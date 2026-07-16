@@ -132,6 +132,14 @@ var
   ResCount: Integer;
   UseDB: Boolean = False;
   StoreDD: Integer = -2;
+  // Sampled (not locked) at each osrep spawn to divide the user's -t# budget
+  // across concurrently-active osrep subprocesses -- prevents each of
+  // ytool's own N stream-workers from independently requesting the full N
+  // threads from osrep when several hit a -dd<N> stream at once (would ask
+  // for up to N^2 threads). A stale sample just means a slightly-off split,
+  // never wrong output -- osrep's own -t is a performance hint, not
+  // load-bearing for correctness.
+  OsrepActive: Integer = 0;
   VERBOSE: Boolean = False;
   SHOWPROGRESS: Boolean = False;
   EXTRACT: Boolean = False;
@@ -2042,7 +2050,8 @@ begin
         end;
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-          '-m' + StoreDD.ToString + T + ' -t' + Length(Tasks).ToString +
+          '-m' + StoreDD.ToString + T + ' -t' +
+          Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
           ' - -', GetCurrentDir, nil, Output,
           ErrStream), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
@@ -2467,6 +2476,7 @@ begin
             .WriteBuffer(StoreDD, 0);
           TProcessStream(TBufferedStream(LOutput).Instance).Wait;
           TProcessStream(TBufferedStream(LOutput).Instance).Done;
+          AtomicDecrement(OsrepActive);
           UpdateInfo;
           LOutput.Free;
         end;
@@ -2488,7 +2498,8 @@ begin
           end;
           with TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
             '-m' + StoreDD.ToString + 'f' + T + ' -t' +
-            Length(Tasks).ToString + ' ' + S + ' -', GetCurrentDir,
+            Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
+            ' ' + S + ' -', GetCurrentDir,
             nil, Output, ErrStream) do
             try
               if Execute then
@@ -2502,6 +2513,7 @@ begin
                 EncInfo.SrepSize := OutSize;
               end;
             finally
+              AtomicDecrement(OsrepActive);
               Free;
             end;
         end
