@@ -442,8 +442,17 @@ begin
       begin
         Input := TBufferedStream.Create(GetInStream(ParamArgSafe(1, 0)), True,
           BufferSize);
-        Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)),
-          False, BufferSize);
+        // -scan (detect-only, no output) is checked here, raw, before
+        // GetOutStream: that call's fmCreate truncates whatever real path
+        // the caller passed immediately on open, before Encode ever runs --
+        // opening a real file at all (even one that ends up unwritten)
+        // would already have destroyed its previous contents.
+        if MatchStr('-scan', ParamArg[0]) then
+          Output := TBufferedStream.Create(TNullStream.Create, False,
+            BufferSize)
+        else
+          Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)),
+            False, BufferSize);
         try
           PrecompMain.Parse(ParamArg[0], PrecompEnc);
           PrecompMain.Encode(Input, Output, PrecompEnc);

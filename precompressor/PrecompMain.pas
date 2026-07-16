@@ -140,6 +140,23 @@ var
   // never wrong output -- osrep's own -t is a performance hint, not
   // load-bearing for correctness.
   OsrepActive: Integer = 0;
+  // Cheap detection-only mode (-scan): counts what the detection phase
+  // (Scan1/Scan2 -- the same magic/structural checks that run before any
+  // codec is ever actually invoked to recompress) already finds, then skips
+  // Process (the expensive part) entirely. Tallied at the exact 2 places
+  // that already increment EncInfo.Count for a real stream (PrecompAddStream's
+  // immediate-accept branch, and its Scan2-confirmed-future-stream
+  // equivalent) rather than in PrecompLogScan1/2's -v display text, which
+  // looked like the right hook but isn't (see PrecompLogScan1's comment).
+  // Per-codec-type breakdown was tried and dropped: the sub-type name for a
+  // given Option bit-field is only resolvable inside each codec unit's own
+  // private array (Names, the exported per-TPrecompressor list, is
+  // enabled-codecs-only and not reliably index-aligned with it) -- doing
+  // this properly needs a small accessor added to every codec unit, not
+  // attempted here. A total count is what's needed to gate a full precomp
+  // pass either way.
+  SCANONLY: Boolean = False;
+  ScanCount: Integer = 0;
   VERBOSE: Boolean = False;
   SHOWPROGRESS: Boolean = False;
   EXTRACT: Boolean = False;
@@ -197,6 +214,18 @@ begin
     '  -bar - emit machine-parseable "PROGRESS done total" lines to stderr,');
   WriteLine(
     '               flushed per-line (bytes for precomp, streams for decode)');
+  WriteLine(
+    '  -scan - detect only, no output: prints "SCAN n streams" to stderr');
+  WriteLine(
+    '               and exits. Cheaper than a real precomp pass --');
+  WriteLine(
+    '               skips every codec''s actual recompression, just the');
+  WriteLine(
+    '               magic/structural scan that finds candidates. Depth-0 only');
+  WriteLine(
+    '               (streams nested inside another compressed container are');
+  WriteLine(
+    '               not found without doing the real pass).');
   WriteLine('  -df# - set patching threshold to accept streams [5p]');
   WriteLine('               l# - patch compression level (1-22) [1]');
   WriteLine('  -x#  - extract streams to directory path');
@@ -390,6 +419,7 @@ begin
         end;
       Inc(I);
     end;
+    SCANONLY := ArgParse.AsBoolean('-scan');
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     S := ReplaceText(S, 'KB', '* 1024^1');
@@ -881,6 +911,12 @@ begin
     then
     begin
       AtomicIncrement(EncInfo.Count);
+      // -scan's tally point: this branch is the real "a stream was just
+      // accepted" moment (see the comment by SCANONLY's declaration for why
+      // PrecompLogScan1's -v display text looked like the right hook, but
+      // isn't -- its Actual/Possible split doesn't reliably match this).
+      if SCANONLY then
+        AtomicIncrement(ScanCount);
       SetLength(SI1.DepthStreams, 0);
       FillChar(SI1, SizeOf(TEncodeSI), 0);
       SI1.ActualPosition := Info^.Position;
@@ -1278,6 +1314,11 @@ begin
                 (MemOutput1[Index].Position - CurPos1[Index] = SI1.NewSize) then
               begin
                 AtomicIncrement(EncInfo.Count);
+                // -scan's tally point for a deferred (chunk-boundary-crossing)
+                // stream, confirmed here after Scan2 -- see the equivalent
+                // comment at PrecompAddStream's immediate-accept branch.
+                if SCANONLY then
+                  AtomicIncrement(ScanCount);
                 SetLength(SI3.DepthStreams, 0);
                 FillChar(SI3, SizeOf(TEncodeSI), 0);
                 SI3.ActualPosition :=
@@ -1357,6 +1398,11 @@ var
 
 begin
   Result := False;
+  // -scan mode: detection (Scan1/Scan2, already tallied by the time Process
+  // is reached) is all that's wanted -- skip the actual codec call, DB
+  // lookup, and depth recursion, all of which only happen from here down.
+  if SCANONLY then
+    exit;
   // 0.9.1 (fixes reassign): DBBool is only assigned inside "if UseDB and (Codec>2)"
   // (~1431) but is read in "if not DBBool" (~1505); with UseDB and Codec<=2 (reachable when
   // reassigning/transferring to a low-index codec) it was read uninitialized -> AddDB was not
@@ -3237,6 +3283,10 @@ var
   end;
 
 begin
+  // -scan prints its own one-line report at the end (see Encode) instead of
+  // this periodic progress display.
+  if SCANONLY then
+    exit;
   FHandle := 0;
 {$IFDEF MSWINDOWS}
   FHandle := GetStdHandle(STD_ERROR_HANDLE);
@@ -3342,6 +3392,18 @@ begin
   SL.Free;
 end;
 
+// One line to stderr, machine-parseable like -bar's PROGRESS lines: the
+// motivating use case (a wrapping tool deciding whether a container blob is
+// worth a full precomp pass) wants this without scraping human-formatted
+// text. Total count only, not broken down by codec/type: that needs a
+// small accessor in every codec unit to resolve an Option bit-field to a
+// name correctly (the already-exported Names array is enabled-codecs-only,
+// not reliably aligned with the raw bit value) -- not attempted here.
+procedure PrintScanReport;
+begin
+  WriteLine(Format('SCAN %d streams', [ScanCount]));
+end;
+
 procedure Encode(Input, Output: TStream; Options: TEncodeOptions);
 var
   Compressed: Byte;
@@ -3367,6 +3429,11 @@ begin
   Insert(PrecompUtils.Codec, Codecs, Length(Codecs));
   if Output is TBufferedStream then
     NULLOUT := TBufferedStream(Output).Instance is TNullStream;
+  // NULLOUT should already be True here for -scan: the caller (ytool.dpr)
+  // is responsible for passing a real TNullStream as Output when -scan is
+  // set, precisely so this derivation needs no special-casing.
+  if SCANONLY then
+    ScanCount := 0;
   I64 := CACHE div IfThen(NULLOUT and (COMPRESS = 0), 1, 2);
   LCache := nil;
   if I64 > 0 then
@@ -3445,7 +3512,9 @@ begin
       Stopwatch.Stop;
     end;
   end;
-  if VERBOSE then
+  if SCANONLY then
+    PrintScanReport
+  else if VERBOSE then
     EncodeStats;
   ConTask.Wait;
   ConTask.Free;
