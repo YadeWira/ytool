@@ -36,7 +36,16 @@ CXX="$(command -v clang++ || command -v g++)"
 # released as v1.0.0 -- pinned to a tag, not a moving branch.
 # Verified: the full cross-arch regression matrix (357/357) now passes with
 # zero -dd1 failures. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-
-# count tuning, byte-for-byte identical output verified by upstream).
+# count tuning, byte-for-byte identical output verified by upstream). Bumped
+# again to v1.0.5: v1.0.4 fixed a real cross-arch bug in -m1/-m2 (CDC) --
+# PolynomialRollingHash<size_t> used a modulo that differs between 32-bit
+# (2^32) and 64-bit (2^64) builds, so a cross-arch archive silently
+# decompressed to garbage (no error). Fixed by pinning the hash to uint64.
+# Prompted by an external report of a Win7 x64 32-bit decode HANG on `-ddX`
+# (not the same symptom as the CDC bug -- that gave wrong bytes, not a hang
+# -- but garbage chunk-table data could plausibly loop the decoder); verified
+# on real Win7 x64 hardware (VM) with the 32-bit package: -dd1/-dd3, multiple
+# codecs, no hang, bit-exact.
 #
 # BREAKING: omega-srep's on-disk format is a deliberate clean break from
 # upstream (magic bytes "SREP"->"OSRP", extension .srep->.osr) -- any
@@ -52,7 +61,7 @@ CXX="$(command -v clang++ || command -v g++)"
 # own binary is genuinely named `osrep` (its Makefile installs it as such) --
 # renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
 echo "==> osrep"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.3 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.5 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 

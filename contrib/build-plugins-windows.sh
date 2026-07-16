@@ -75,7 +75,9 @@ fi
 # byte-for-byte identical output verified by upstream) -- added the same
 # -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own Makefile now
 # uses, since this script compiles directly rather than via `make`/cmake
-# (their platform detection doesn't cross-compile cleanly from Linux).
+# (their platform detection doesn't cross-compile cleanly from Linux). Bumped
+# again to v1.0.5, fixing a real -m1/-m2 cross-arch CDC bug -- see
+# build-plugins-linux.sh's srep comment for the full story.
 # BREAKING: on-disk
 # format changed (magic bytes, extension) -- old `.pmp` using `-dd1` from
 # before this migration can't be decoded anymore. Already ships its own
@@ -95,7 +97,7 @@ fi
 # genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
 # constant to match.
 echo "==> osrep (osrep.exe)"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.3 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.5 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
