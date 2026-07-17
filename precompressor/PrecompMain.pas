@@ -2202,6 +2202,23 @@ begin
         else if I <> Index then
           continue;
         LastIndex := 0;
+        // -t>1 non-determinism (real bug, found investigating a request from
+        // zpaq-std for thread-count-independent output): when Threads doesn't
+        // evenly divide the real chunk count, the last read round has "phantom"
+        // slots with zero real chunk bytes (TDataStore1.Done is keyed only on
+        // slot 0, so the round still runs for every slot -- see
+        // common/Utils.pas's Load/LoadEx). Without this guard, a phantom slot
+        // still runs the block below once (its InfoStore1[I] is empty, so the
+        // stream-walking loops inside are no-ops) and emits a fully valid but
+        // pointless 20-byte all-zero record (4B resource-diff count + 12B
+        // empty stream-count/blocksize header + 4B zero tail-literal count) --
+        // harmless to decode, but its presence (and how many phantom slots
+        // exist) depends on Threads, making output bytes vary with -t# even
+        // though nothing of substance differs. LastStream/LoadEx below stay
+        // unconditional: LastStream's update is already a no-op here (Size(I)
+        // is 0), and LoadEx's own internal FIndex advances once per I>0
+        // regardless of which I triggered it, not tied to this slot's content.
+        if (Depth > 0) or (TDataStore1(DataStore).Size(I) > 0) then
         repeat
           LastPos := LastStream;
           MemStream[I].Position := 0;
