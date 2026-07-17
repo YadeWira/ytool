@@ -250,6 +250,7 @@ begin
       SI.Position := Pos;
       SI.OldSize := LZOSI.CSize;
       SI.NewSize := LZOSI.DSize;
+      SI.Resource := 0;
       SI.Option := 0;
       SetBits(SI.Option, LZO1X_CODEC, 0, 3);
       SetBits(SI.Option, LZO1XVariant, 7, 12);

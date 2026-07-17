@@ -237,6 +237,7 @@ begin
             SI.Position := Pos;
             SI.OldSize := X;
             SI.NewSize := Y;
+            SI.Resource := 0;
             SI.Option := 0;
             if CodecEnabled[LZ4_CODEC] then
               SetBits(SI.Option, LZ4_CODEC, 0, 3)
@@ -265,6 +266,7 @@ begin
           SI.Position := Pos;
           SI.OldSize := X;
           SI.NewSize := Y;
+          SI.Resource := 0;
           SI.Option := 0;
           SetBits(SI.Option, LZ4F_CODEC, 0, 3);
           SetBits(SI.Option, LBlockDependency, 14, 1);

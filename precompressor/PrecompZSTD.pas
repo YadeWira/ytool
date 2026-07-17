@@ -179,6 +179,7 @@ begin
           SI.Position := Pos;
           SI.OldSize := X;
           SI.NewSize := Y;
+          SI.Resource := 0;
           SI.Option := 0;
           SetBits(SI.Option, ZFastMode, 8, 1);
           SetBits(SI.Option, ZWindowLog, 9, 5);

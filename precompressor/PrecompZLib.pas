@@ -118,6 +118,7 @@ begin
             SI.Position := Pos;
             SI.OldSize := CurPos;
             SI.NewSize := CurPos;
+            SI.Resource := 0;
             SI.Status := TStreamStatus.None;
             SI.Option := 0;
             SetBits(SI.Option, PNG_CODEC, 0, 3);
@@ -539,6 +540,7 @@ begin
           SI.Position := Pos;
           SI.OldSize := LastIn;
           SI.NewSize := LastOut;
+          SI.Resource := 0;
           SI.Option := 0;
           if Level >= 0 then
           begin

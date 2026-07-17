@@ -146,6 +146,10 @@ begin
       SI.Position := Pos;
       SI.OldSize := TotalSize;
       SI.NewSize := TotalSize;
+      // Uninitialized-stack-write fix (same class as PrecompMedia.pas's --
+      // this codec gives Resource no meaning either, but the field still
+      // flows into TStreamHeader.Resource and gets written to the .pmp).
+      SI.Resource := 0;
       SI.Option := 0;
       SI.Status := TStreamStatus.None;
       Funcs^.LogScan1(PackPNGName, SI.Position, SI.OldSize, -1);

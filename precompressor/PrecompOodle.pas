@@ -321,6 +321,7 @@ begin
       Output(Instance, Buffer, Result);
       SI.Position := Pos;
       SI.OldSize := StreamInfo^.CSize;
+      SI.Resource := 0;
       SI.Option := 0;
       SetBits(SI.Option, OTradeOff, 8, 11);
       SetBits(SI.Option, OBlockSize, 19, 13);
