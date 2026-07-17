@@ -882,6 +882,16 @@ begin
         SI.Position := Pos;
         SI.OldSize := Y;
         SI.NewSize := Z;
+        // Real non-determinism (found investigating a zpaq-std report,
+        // reproduced down to a single stream, confirmed deterministic
+        // outside ytool via an isolated brunsli test harness under valgrind
+        // memcheck): SI is a stack-local _StrInfo1 and its Resource field
+        // was never assigned here, unlike PrecompLZMA/PrecompSearch which
+        // give it real meaning -- this codec has none, but the field still
+        // flows into TStreamHeader.Resource and gets written to the output
+        // verbatim, so leftover stack garbage ended up embedded in the .pmp
+        // file, varying run-to-run with process/stack layout.
+        SI.Resource := 0;
         SI.Option := 0;
         if CodecEnabled[FLAC_CODEC] then
           SetBits(SI.Option, FLAC_CODEC, 0, 3)
@@ -910,6 +920,16 @@ begin
         SI.Position := Pos;
         SI.OldSize := Y;
         SI.NewSize := Z;
+        // Real non-determinism (found investigating a zpaq-std report,
+        // reproduced down to a single stream, confirmed deterministic
+        // outside ytool via an isolated brunsli test harness under valgrind
+        // memcheck): SI is a stack-local _StrInfo1 and its Resource field
+        // was never assigned here, unlike PrecompLZMA/PrecompSearch which
+        // give it real meaning -- this codec has none, but the field still
+        // flows into TStreamHeader.Resource and gets written to the output
+        // verbatim, so leftover stack garbage ended up embedded in the .pmp
+        // file, varying run-to-run with process/stack layout.
+        SI.Resource := 0;
         SI.Option := 0;
         if CodecEnabled[BRUNSLI_CODEC] then
           SetBits(SI.Option, BRUNSLI_CODEC, 0, 3)
@@ -941,6 +961,16 @@ begin
         SI.Position := Pos;
         SI.OldSize := Y;
         SI.NewSize := Z;
+        // Real non-determinism (found investigating a zpaq-std report,
+        // reproduced down to a single stream, confirmed deterministic
+        // outside ytool via an isolated brunsli test harness under valgrind
+        // memcheck): SI is a stack-local _StrInfo1 and its Resource field
+        // was never assigned here, unlike PrecompLZMA/PrecompSearch which
+        // give it real meaning -- this codec has none, but the field still
+        // flows into TStreamHeader.Resource and gets written to the output
+        // verbatim, so leftover stack garbage ended up embedded in the .pmp
+        // file, varying run-to-run with process/stack layout.
+        SI.Resource := 0;
         SI.Option := 0;
         SetBits(SI.Option, MP3_CODEC, 0, 3);
         SI.Status := TStreamStatus.None;
