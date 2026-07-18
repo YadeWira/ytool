@@ -136,6 +136,14 @@ echo "==> preflate (preflate_dll.dll)"
 [ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
 if [ -d "$CSRC/preflate" ]; then
   cp "$ROOT/contrib/preflate_wrap.cpp" "$CSRC/preflate/preflate_wrap.cpp"
+  # Unsynchronized check-then-init data race in upstream task_pool.h, patched
+  # the same way here as in build-plugins-linux.sh (see its comment for the
+  # full rationale) -- std::call_once instead of a lockless `if (_state ==
+  # INIT) _init();`.
+  grep -q "_onceInit" "$CSRC/preflate/support/task_pool.h" || perl -0777 -pi -e '
+    s/if \(_state == INIT\) \{\s*\n\s*_init\(\);\s*\n\s*\}/std::call_once(_onceInit, [this] { _init(); });/;
+    s/(std::queue<std::function<void\(\)>> _tasks;)/$1\n  std::once_flag _onceInit;/;
+  ' "$CSRC/preflate/support/task_pool.h"
   ( cd "$CSRC/preflate"
     SRCS=$(ls preflate_*.cpp | grep -vE "preflate_dumper|preflate_unpack|preflate_checker|preflate_wrap")
     SRCS="$SRCS $(ls support/*.cpp | grep -vE "support_tests|filestream")"

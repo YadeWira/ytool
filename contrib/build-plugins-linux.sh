@@ -89,6 +89,23 @@ echo "==> preflate (libpreflate.so)"
 [ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
 if [ -d "$CSRC/preflate" ]; then
   cp "$ROOT/contrib/preflate_wrap.cpp" "$CSRC/preflate/preflate_wrap.cpp"
+  # Upstream data race, patched here (not fixable upstream -- deus-libri/preflate
+  # isn't ours to patch): support/task_pool.h's TaskPool::addTask() checked
+  # `if (_state == INIT) _init();` with no lock at all. Two threads calling into
+  # preflate_decode concurrently for the first time in the process -- exactly
+  # what happens when ytool's own -t>1 dispatch hands off several streams big
+  # enough to engage preflate's internal thread pool at once -- can both
+  # observe INIT and both call _init(), racing to push worker threads into the
+  # same std::vector<std::thread> from two threads simultaneously: a genuine,
+  # unsynchronized data race on process-global state (found while chasing a
+  # rare Windows-only -mpreflate non-determinism report; the race window is
+  # too narrow to force a live repro, but it's unambiguous by inspection and
+  # free to close). Guarded with std::call_once instead (no new header needed,
+  # <mutex> already included by task_pool.h).
+  grep -q "_onceInit" "$CSRC/preflate/support/task_pool.h" || perl -0777 -pi -e '
+    s/if \(_state == INIT\) \{\s*\n\s*_init\(\);\s*\n\s*\}/std::call_once(_onceInit, [this] { _init(); });/;
+    s/(std::queue<std::function<void\(\)>> _tasks;)/$1\n  std::once_flag _onceInit;/;
+  ' "$CSRC/preflate/support/task_pool.h"
   ( cd "$CSRC/preflate"
     SRCS=$(ls preflate_*.cpp | grep -vE "preflate_dumper|preflate_unpack|preflate_checker|preflate_wrap")
     SRCS="$SRCS $(ls support/*.cpp | grep -vE "support_tests|filestream")"
