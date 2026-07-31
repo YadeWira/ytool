@@ -140,15 +140,17 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packmp3 (MP3 media codec) — user's fork v2.0a (successor of packjpg/packMP3 v1.0g) ──
+# ── packmp3 (MP3 media codec) — user's fork v3.0c (successor of packjpg/packMP3 v1.0g) ──
 # Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
 # support (was MPEG-1 Layer III only), CBR/VBR, intra-file/-th batch threading,
 # retuned entropy models. Same 4 source files, same BUILD_LIB/BUILD_DLL macros,
 # same pmplib_* function set the Pascal binding already expects -- no API changes.
-# BREAKING: entropy models were retuned, so the compressed bitstream itself is
-# not compatible across major versions (their own release notes say so
-# explicitly) -- any .pmp made with -mpackmp3 before this migration can no
+# BREAKING (v1.0g -> v2.0a only): entropy models were retuned there, so that
+# jump broke the compressed bitstream (their own release notes said so
+# explicitly) -- any .pmp made with -mpackmp3 before that migration can no
 # longer be decoded. Accepted given ytool is pre-1.0, same call as omega-srep.
+# v2.0a -> v3.0c is NOT another break: v3.0's own release notes state v2.0/v2.1
+# .pm3 archives still decode correctly (purely additive format, version-gated).
 #
 # v2.0 (the initial tag) failed to build: source/packmp3.cpp uses std::atomic/
 # std::thread (new -k/-th chunking) without #include <atomic>/<thread> anywhere
@@ -158,8 +160,24 @@ fi
 # cut as a new tag at our request so this pins to something reproducible
 # instead of a moving branch. The old sed C-linkage patch for Linux .so builds
 # is no longer needed as of v2.0a (headers now declare extern "C" natively).
+#
+# Bumped to v3.0c for 2 real detection-bug fixes (VBR MPEG-2/2.5 Layer III was
+# rejected outright -- a wrong frame_size_table entry double-counted the frame
+# size; and Layer I/II files with their first frame past an 8KB scan window
+# were misdetected as Layer III and refused). v3.0 added MP1/MP2 support (via
+# a new sibling packMP2 dependency) and ID3v2 cover-art recompression (via
+# packJPG/packPNG) -- both CLI-only, properly guarded behind
+# `#if !defined(BUILD_LIB) && !defined(BUILD_DLL)` in packmp3.cpp, so the
+# library/DLL build we use doesn't link either. The ONE new requirement that
+# does reach BUILD_LIB: packmp3.cpp unconditionally #includes packMP2's
+# header (not gated, unlike the packJPG/packPNG includes right below it --
+# confirmed empirically, not just by reading the guard) even though nothing
+# under BUILD_LIB actually calls into it, so only the header needs to be
+# present at compile time, not the built packMP2 library itself.
 echo "==> packmp3 (libpackmp3.so)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v2.0a https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0c https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
+  git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 if [ -d "$CSRC/packMP3" ]; then
   ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
     source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \

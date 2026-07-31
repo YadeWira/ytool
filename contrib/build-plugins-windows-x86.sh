@@ -147,13 +147,19 @@ echo "==> fast-lzma2 (fast-lzma2-x86.dll)"
 # by the *.c glob and are additionally guarded by 64-bit-only preprocessor
 # checks in the C sources -- they never enter this 32-bit build.)
 
-# ── packmp3 (MP3 media codec) — user's fork v2.0a (successor of packjpg/packMP3 v1.0g) ──
+# ── packmp3 (MP3 media codec) — user's fork v3.0c (successor of packjpg/packMP3 v1.0g) ──
 # See build-plugins-linux.sh's packmp3 comment for the full story (full MP3
 # family support, threading, retuned entropy models -- BREAKING bitstream
-# change, old .pmp using -mpackmp3 can no longer be decoded; v2.0a fixes a
-# missing-includes build bug present in the initial v2.0 tag).
+# change v1.0g->v2.0a only, old .pmp from before that can no longer be
+# decoded; v2.0a fixes a missing-includes build bug present in the initial
+# v2.0 tag; v3.0c fixes 2 real detection bugs (VBR MPEG-2/2.5 Layer III,
+# Layer I/II first-frame-past-8KB) and is NOT another bitstream break --
+# needs packMP2's header, not its built library, even for this BUILD_LIB
+# recipe).
 echo "==> packmp3 (packmp3_dll-x86.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v2.0a https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0c https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
+  git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
   -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll-x86.dll" ) \
