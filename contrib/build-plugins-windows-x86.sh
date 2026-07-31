@@ -110,9 +110,16 @@ fi
 # pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
 # no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
 # opt into here.
+#
+# MUST use the -posix compiler variant, not the bare $CXX (which resolves to
+# -win32 on this host): see build-plugins-windows.sh's packjpg comment for
+# the full story (THREAD_LOCAL non-trivial destructors + __cxa_thread_atexit
+# broken under the plain/win32 mingw model for LoadLibrary-loaded DLLs --
+# confirmed with PJPG, packJPG's own maintainer, after reproducing a real
+# EAccessViolation on both win-x64/x86 during -mpackjpg decode).
 echo "==> packjpg (packjpg_dll-x86.dll)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
-( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
+( cd "$CSRC/packJPG" && i686-w64-mingw32-g++-posix -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll-x86.dll" ) \
   && echo "   OK -> packjpg_dll-x86.dll" || echo "   (packjpg fallo)"

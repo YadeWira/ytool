@@ -126,9 +126,22 @@ fi
 # pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
 # no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
 # opt into here.
+#
+# MUST use the -posix compiler variant, not the bare $CXX (which resolves to
+# -win32 on this host via update-alternatives): packjpg.cpp's THREAD_LOCAL
+# globals include non-trivial types (std::unique_ptr, std::string), and the
+# plain/win32-model mingw's __cxa_thread_atexit is broken specifically for
+# DLLs loaded via LoadLibrary at runtime (exactly what ytool does, as
+# opposed to packJPG's own CLI, which is statically imported at process
+# launch and never hits this) -- confirmed with PJPG (packJPG's own
+# maintainer) after reproducing a real EAccessViolation on both win-x64/x86
+# during -mpackjpg decode (harmless: exit 0, decode output still bit-exact,
+# crash fires at DLL-unload teardown after the real work already
+# completed, per packJPG's own Makefile which refuses to build its `dll`
+# target with anything but the -posix compiler for exactly this reason).
 echo "==> packjpg (packjpg_dll.dll)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
-( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
+( cd "$CSRC/packJPG" && x86_64-w64-mingw32-g++-posix -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
   && echo "   OK -> packjpg_dll.dll" || echo "   (packjpg fallo)"
