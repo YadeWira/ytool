@@ -119,13 +119,15 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2.dll" ) \
   && echo "   OK -> lzo2.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0 (bomb-guard hardening) ──
+# ── packjpg (JPEG media codec) — user's fork v5.0c (bomb-guard hardening) ──
 # Format-stable bump (format_version_current unchanged, v4.0f-compatible) --
-# see build-plugins-linux.sh's packjpg comment for the full story. JPEG-LS
-# (new in v5.0) never reaches Windows anyway: no MinGW builds of its
-# libcharls/libjxl deps exist upstream, so nothing to opt into here.
+# see build-plugins-linux.sh's packjpg comment for the full story, including
+# why v5.0c is pure hygiene here (no active bug on x86/x86_64, identical
+# pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
+# no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
+# opt into here.
 echo "==> packjpg (packjpg_dll.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \

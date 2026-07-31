@@ -65,7 +65,7 @@ echo "==> osrep"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0 ──────────────────────
+# ── packjpg (JPEG media codec) — user's fork v5.0c ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
 # existing Huffman path. v5.0 is a support-policy/security bump, not a format
 # break: drops Windows XP, adds a 3-layer decompression-bomb defense
@@ -77,8 +77,18 @@ echo "==> osrep"
 # feature-gated behind -DHAVE_JPEGLS (auto no-op without the flag) -- skipped
 # to avoid adding 2 new hard build dependencies for a rare format; revisit if
 # JPEG-LS content shows up in practice.
+#
+# Bumped to v5.0c, pure hygiene -- no active bug for our targets. v5.0a's
+# `padbit` fix (bare `char` -> `signed char`, a real heap-buffer-overflow on
+# platforms where char is unsigned by default) never manifests on x86/x86_64
+# (char is signed there), the only platforms we ship. v5.0b/c's other fixes
+# (CI glibc pin, sourcelegacy removal, win-x86 posix-compiler requirement,
+# a JPEG-LS-only i686 exit crash) don't touch the 3 files we compile either.
+# Confirmed our exact build recipe still compiles clean and exports the
+# identical pjglib_* symbol set (nm -D, diffed against the previous v5.0
+# build, zero differences) -- drop-in, no other changes needed.
 echo "==> packjpg (libpackjpg.so)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0 https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
   -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
