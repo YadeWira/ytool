@@ -60,6 +60,11 @@ at it and the codec activates.
 Prebuilt binaries (Linux x64 tarball, Windows x64 zip, Windows x86 zip — all three with every
 buildable plugin library included) are on the [Releases page](https://github.com/YadeWira/ytool/releases).
 
+> **Windows x86 (32-bit) note**: upstream xtool's own author has reported repeated false-positive
+> malware flags from antivirus/Patreon scanners specifically on 32-bit Windows binaries (same for the
+> original xtool's `.cls` files). No functional issue is known — it's a false positive — but if you're
+> repackaging `ytool` for wider public distribution, prefer the Windows x64 build where possible.
+
 ### Changelog coverage — inherited/recreated from xtool's own published notes (post-0.7.9, up to 0.9.7)
 
 These recreate upstream Razor12911's *own announced* changes, not new design of ours:
