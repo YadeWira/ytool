@@ -241,8 +241,8 @@ fi
 # (cross-compile to x86_64-pc-windows-gnu) + cmake for kanzi-cpp -- instead the
 # already-built .dll is downloaded from a versioned packPNG release.
 echo "==> packpng (packpng.dll)"
-PACKPNG_VER="v2.0c"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0c-win64-lib.zip" \
+PACKPNG_VER="v2.0d"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0d-win64-lib.zip" \
   -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then
   ( cd "$CSRC" && unzip -oq packpng-lib.zip packpng.dll ) 2>/dev/null \
     && mv -f "$CSRC/packpng.dll" "$ROOT/packpng.dll" \

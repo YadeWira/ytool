@@ -251,8 +251,8 @@ fi
 # PE32 (Intel i386) packpng-x86.dll -- verified with `file`, not a renamed
 # x64 one (confirmed again on v2.0c, wire format unchanged since v2.0a).
 echo "==> packpng (packpng-x86.dll)"
-PACKPNG_VER="v2.0c"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0c-win32-lib.zip" \
+PACKPNG_VER="v2.0d"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0d-win32-lib.zip" \
   -o "$CSRC/packpng-lib-x86.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib-x86.zip" ]; then
   ( cd "$CSRC" && unzip -oq packpng-lib-x86.zip packpng-x86.dll ) 2>/dev/null \
     && mv -f "$CSRC/packpng-x86.dll" "$ROOT/packpng-x86.dll" \
