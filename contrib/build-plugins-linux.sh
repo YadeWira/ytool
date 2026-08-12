@@ -158,7 +158,7 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packmp3 (MP3 media codec) — user's fork v3.0c (successor of packjpg/packMP3 v1.0g) ──
+# ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
 # Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
 # support (was MPEG-1 Layer III only), CBR/VBR, intra-file/-th batch threading,
 # retuned entropy models. Same 4 source files, same BUILD_LIB/BUILD_DLL macros,
@@ -167,8 +167,9 @@ fi
 # jump broke the compressed bitstream (their own release notes said so
 # explicitly) -- any .pmp made with -mpackmp3 before that migration can no
 # longer be decoded. Accepted given ytool is pre-1.0, same call as omega-srep.
-# v2.0a -> v3.0c is NOT another break: v3.0's own release notes state v2.0/v2.1
-# .pm3 archives still decode correctly (purely additive format, version-gated).
+# v2.0a -> v3.0d is NOT another break: v3.0's own release notes state v2.0/v2.1
+# .pm3 archives still decode correctly (purely additive format, version-gated),
+# and v3.0d keeps the archive version stamp at 31 with .pm3 sizes identical.
 #
 # v2.0 (the initial tag) failed to build: source/packmp3.cpp uses std::atomic/
 # std::thread (new -k/-th chunking) without #include <atomic>/<thread> anywhere
@@ -179,7 +180,7 @@ fi
 # instead of a moving branch. The old sed C-linkage patch for Linux .so builds
 # is no longer needed as of v2.0a (headers now declare extern "C" natively).
 #
-# Bumped to v3.0c for 2 real detection-bug fixes (VBR MPEG-2/2.5 Layer III was
+# Bumped first to v3.0c for 2 real detection-bug fixes (VBR MPEG-2/2.5 Layer III was
 # rejected outright -- a wrong frame_size_table entry double-counted the frame
 # size; and Layer I/II files with their first frame past an 8KB scan window
 # were misdetected as Layer III and refused). v3.0 added MP1/MP2 support (via
@@ -193,7 +194,7 @@ fi
 # under BUILD_LIB actually calls into it, so only the header needs to be
 # present at compile time, not the built packMP2 library itself.
 echo "==> packmp3 (libpackmp3.so)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0c https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0d https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 [ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
   git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 if [ -d "$CSRC/packMP3" ]; then

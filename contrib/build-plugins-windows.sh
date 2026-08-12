@@ -206,7 +206,7 @@ echo "==> fast-lzma2 (fast-lzma2.dll)"
   *.c -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
 
-# ── packmp3 (MP3 media codec) — user's fork v3.0c (successor of packjpg/packMP3 v1.0g) ──
+# ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
 # Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
 # support (was MPEG-1 Layer III only), CBR/VBR, threading, retuned entropy
 # models. Same source files/macros/pmplib_* functions, no build recipe changes.
@@ -219,7 +219,7 @@ echo "==> fast-lzma2 (fast-lzma2.dll)"
 # packmp3 comment for the full story, including why v3.0c needs packMP2's
 # header (not its built library) even for this BUILD_LIB-only recipe.
 echo "==> packmp3 (packmp3_dll.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0c https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0d https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 [ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
   git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
