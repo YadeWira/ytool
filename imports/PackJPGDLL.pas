@@ -8,7 +8,7 @@ uses
 {$IFDEF MSWINDOWS}
   Windows,
 {$ENDIF}
-  Math, SysUtils, Classes;
+  Math, SyncObjs, SysUtils, Classes;
 
 const
   pjglib_file = 0;
@@ -31,6 +31,31 @@ var
   pjglib_set_intra_file_threads: procedure(n: Integer)cdecl;
 
   DLLLoaded: Boolean = False;
+
+  // Every pjglib_init_streams + pjglib_convert_* pair must be held under this
+  // lock. Two reasons, one of them measured the hard way:
+  //
+  // 1. The pair is stateful: init_streams arms the buffers that the following
+  //    convert consumes, so the two calls have to be atomic with respect to
+  //    each other or a second thread's init can land between them.
+  // 2. Upstream packMP3 serializes every pjglib_* call behind its own mutex
+  //    for the same reason, noting packJPG's thread-safety for concurrent
+  //    calls is unverified. Matching that is cheap insurance.
+  //
+  // What this lock does NOT fix, tested and stated so nobody re-tries it:
+  // a posix-thread-model build of the DLL still deadlocks ytool even with
+  // every call serialized here (~0% CPU, unkillable, keeps the .dll file
+  // locked until the machine restarts). So the win32-model build in
+  // contrib/build-plugins-windows.sh is not made redundant by this lock.
+  // That deadlock was narrowed with packJPG's own maintainer across Windows
+  // 10 and Windows 7: pure-C hosts drive the very same DLL from four
+  // concurrent raw CreateThread workers without hanging, and `ytool -t1` is
+  // fine, so the trigger is specifically FP RTL threads -- but serializing
+  // the codec entry points is evidently not where it lives.
+  //
+  // Cost is bounded: ytool parallelizes across streams, so this only
+  // serializes the packjpg codec itself, not the surrounding pipeline.
+  PJGLock: TCriticalSection;
 
 implementation
 
@@ -77,10 +102,12 @@ end;
 
 initialization
 
+PJGLock := TCriticalSection.Create;
 Init;
 
 finalization
 
 Deinit;
+PJGLock.Free;
 
 end.

@@ -1096,14 +1096,21 @@ begin
       begin
         Buffer := nil;
         Res := StreamInfo.OldSize;
-        pjglib_init_streams(OldInput, pjglib_memory, StreamInfo^.OldSize,
-          Buffer, pjglib_memory);
-        if pjglib_convert_stream2mem(@Buffer, @Res, nil) and
-          (Res < StreamInfo^.NewSize) then
-        begin
-          Move(Buffer^, NewInput^, Res);
-          StreamInfo^.NewSize := Res;
-          Result := True;
+        // init_streams + convert must be atomic, and concurrent entry from FP
+        // RTL threads deadlocks a posix-model DLL -- see PJGLock's comment.
+        PJGLock.Acquire;
+        try
+          pjglib_init_streams(OldInput, pjglib_memory, StreamInfo^.OldSize,
+            Buffer, pjglib_memory);
+          if pjglib_convert_stream2mem(@Buffer, @Res, nil) and
+            (Res < StreamInfo^.NewSize) then
+          begin
+            Move(Buffer^, NewInput^, Res);
+            StreamInfo^.NewSize := Res;
+            Result := True;
+          end;
+        finally
+          PJGLock.Release;
         end;
       end;
     BRUNSLI_CODEC:
@@ -1256,10 +1263,16 @@ begin
     PACKJPG_CODEC:
       begin
         Buffer := nil;
-        pjglib_init_streams(Input, pjglib_memory, StreamInfo.NewSize, Buffer,
-          pjglib_memory);
-        Res := StreamInfo.OldSize;
-        Result := pjglib_convert_stream2mem(@Buffer, @Res, nil);
+        // Same pairing/serialization requirement as the encode side above.
+        PJGLock.Acquire;
+        try
+          pjglib_init_streams(Input, pjglib_memory, StreamInfo.NewSize, Buffer,
+            pjglib_memory);
+          Res := StreamInfo.OldSize;
+          Result := pjglib_convert_stream2mem(@Buffer, @Res, nil);
+        finally
+          PJGLock.Release;
+        end;
         if Result then
           Output(Instance, Buffer, Res);
       end;
