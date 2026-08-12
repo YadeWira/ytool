@@ -201,10 +201,16 @@ fi
 # the already-built .so is downloaded from a versioned packPNG release
 # (same author, not an unknown third party) -- reproducible without a new toolchain.
 echo "==> packpng (libpackpng.so)"
-PACKPNG_VER="v2.0d"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0d-linux-x64-lib.tar.gz" \
+PACKPNG_VER="v2.0h"
+if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0h-linux-x64-lib.tar.gz" \
   -o "$CSRC/packpng-lib.tar.gz" 2>/dev/null && [ -s "$CSRC/packpng-lib.tar.gz" ]; then
-  tar -xzf "$CSRC/packpng-lib.tar.gz" -C "$CSRC" libpackpng.so 2>/dev/null \
+  # Wildcard match, not the bare member name: the tarball's internal layout is
+  # not stable across releases (<=v2.0d stored "libpackpng.so" at the root,
+  # v2.0h stores "./libpackpng.so"), and `tar x <exact-name>` silently extracts
+  # nothing when the stored name has the "./" prefix. --wildcards matches either
+  # form; --no-anchored keeps it matching regardless of leading path components.
+  tar -xzf "$CSRC/packpng-lib.tar.gz" -C "$CSRC" \
+      --wildcards --no-anchored --transform 's|.*/||' 'libpackpng.so' 2>/dev/null \
     && mv -f "$CSRC/libpackpng.so" "$ROOT/libpackpng.so" \
     && echo "   OK -> libpackpng.so (prebuilt $PACKPNG_VER)" \
     || echo "   (packpng: extraccion fallo)"
