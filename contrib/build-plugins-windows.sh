@@ -119,31 +119,62 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2.dll" ) \
   && echo "   OK -> lzo2.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0c (bomb-guard hardening) ──
+# ── packjpg (JPEG media codec) — user's fork v5.0d (bomb-guard hardening) ──
 # Format-stable bump (format_version_current unchanged, v4.0f-compatible) --
 # see build-plugins-linux.sh's packjpg comment for the full story, including
-# why v5.0c is pure hygiene here (no active bug on x86/x86_64, identical
+# why v5.0d is pure hygiene here (no active bug on x86/x86_64, identical
 # pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
 # no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
 # opt into here.
 #
-# MUST use the -posix compiler variant, not the bare $CXX (which resolves to
-# -win32 on this host via update-alternatives): packjpg.cpp's THREAD_LOCAL
-# globals include non-trivial types (std::unique_ptr, std::string), and the
-# plain/win32-model mingw's __cxa_thread_atexit is broken specifically for
-# DLLs loaded via LoadLibrary at runtime (exactly what ytool does, as
-# opposed to packJPG's own CLI, which is statically imported at process
-# launch and never hits this) -- confirmed with PJPG (packJPG's own
-# maintainer) after reproducing a real EAccessViolation on both win-x64/x86
-# during -mpackjpg decode (harmless: exit 0, decode output still bit-exact,
-# crash fires at DLL-unload teardown after the real work already
-# completed, per packJPG's own Makefile which refuses to build its `dll`
-# target with anything but the -posix compiler for exactly this reason).
+# Thread model: stays on the DEFAULT (win32-model) $CXX here, deliberately,
+# even though packJPG's own Makefile mandates -posix for its `dll` target.
+# That mandate is correct for their usage and wrong for ours, and the
+# difference was established by measuring all four combinations on real
+# Windows 10 (x64 and x86), with `precomp -mpackjpg` on a JPEG that Linux
+# compresses 2024 -> 246 bytes:
+#
+#   model  -static  LoadLibrary   codec runs   outcome
+#   win32  no       ok            yes (246)    EAccessViolation at teardown
+#   win32  yes      ok            yes (246)    EAccessViolation at teardown
+#   posix  no       FAILS (126)   no           silently stores literal
+#   posix  yes      ok            no           HANGS (~0% CPU, deadlock)
+#
+# So -posix is not a fix here, it is a downgrade: it trades a cosmetic
+# teardown crash for either a silently disabled codec or an unkillable
+# deadlock. The EAccessViolation is genuinely cosmetic -- it fires after
+# the work is done, exit code is 0, and the decoded output is bit-exact
+# (hash-verified) -- whereas the posix hang wedges the process hard enough
+# that Stop-Process cannot reap it and the DLL file stays locked until the
+# VM is restarted. packJPG's CLI never hits any of this because it links
+# the codec statically at process launch instead of LoadLibrary-ing it into
+# a non-C++ (FPC) host at runtime.
+#
+# `-static` is kept regardless of model: without it the posix driver imports
+# libwinpthread-1.dll, which ships with mingw-w64 and exists on NO stock
+# Windows install, so LoadLibrary fails with ERROR_MOD_NOT_FOUND (126),
+# DLLLoaded stays False, and ytool's codec-unavailable fallback silently
+# stores every JPEG stream literally -- round-trips still pass bit-exact
+# and the regression suite stays green, because the codec simply never
+# runs. That is exactly how one release shipped: the EAccessViolation
+# "went away" because the DLL had stopped loading at all. Same masking
+# pattern as the earlier -mflac 32-bit bug (libFLAC_dynamic.dll needing
+# libgcc_s_dw2-1.dll). -static makes the DLL self-contained under either
+# model, so that failure cannot recur.
+#
+# To verify, read the PE import table, NOT `strings`: the i686 build keeps a
+# literal "libgcc_s_dw2-1.dll" string inside statically-linked libgcc (a
+# fallback path that is never taken), so grepping strings reports a
+# dependency that does not exist. The import table of both DLLs must list
+# exactly KERNEL32.dll and msvcrt.dll.
+#
+# Never accept "the crash is gone" as evidence on its own: check that the
+# .pmp actually got smaller (codec ran) in the same test.
 echo "==> packjpg (packjpg_dll.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
-( cd "$CSRC/packJPG" && x86_64-w64-mingw32-g++-posix -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
-  -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
+  -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
   && echo "   OK -> packjpg_dll.dll" || echo "   (packjpg fallo)"
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─

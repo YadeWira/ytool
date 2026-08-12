@@ -65,7 +65,7 @@ echo "==> osrep"
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0c ─────────────────────
+# ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
 # existing Huffman path. v5.0 is a support-policy/security bump, not a format
 # break: drops Windows XP, adds a 3-layer decompression-bomb defense
@@ -78,17 +78,25 @@ echo "==> osrep"
 # to avoid adding 2 new hard build dependencies for a rare format; revisit if
 # JPEG-LS content shows up in practice.
 #
-# Bumped to v5.0c, pure hygiene -- no active bug for our targets. v5.0a's
+# Bumped to v5.0d, pure hygiene -- no active bug for our targets. v5.0a's
 # `padbit` fix (bare `char` -> `signed char`, a real heap-buffer-overflow on
 # platforms where char is unsigned by default) never manifests on x86/x86_64
 # (char is signed there), the only platforms we ship. v5.0b/c's other fixes
 # (CI glibc pin, sourcelegacy removal, win-x86 posix-compiler requirement,
 # a JPEG-LS-only i686 exit crash) don't touch the 3 files we compile either.
+# v5.0d likewise changes no code we build: .pjg output is byte-identical to
+# v5.0c, and its additions are a build guard on the `lib` target (we build
+# `dll`, which has had that guard since v4.0e), a `-dry` CLI summary line,
+# and header documentation -- including a correction we're already immune to
+# (packjpglib.h used to read as if "unlimited" were pjglib_set_max_output_size's
+# default; the real default is 256 MB and `0` disables the guard, so a consumer
+# "restoring the default" with 0 would silently turn the bomb guard off --
+# ytool never calls the setter at all, so it keeps the 256 MB default).
 # Confirmed our exact build recipe still compiles clean and exports the
 # identical pjglib_* symbol set (nm -D, diffed against the previous v5.0
 # build, zero differences) -- drop-in, no other changes needed.
 echo "==> packjpg (libpackjpg.so)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0c https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
   -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
