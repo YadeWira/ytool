@@ -32,29 +32,25 @@ var
 
   DLLLoaded: Boolean = False;
 
-  // Every pjglib_init_streams + pjglib_convert_* pair must be held under this
-  // lock. Two reasons, one of them measured the hard way:
+  // Serializes each pjglib_init_streams + pjglib_convert_* pair.
   //
-  // 1. The pair is stateful: init_streams arms the buffers that the following
-  //    convert consumes, so the two calls have to be atomic with respect to
-  //    each other or a second thread's init can land between them.
-  // 2. Upstream packMP3 serializes every pjglib_* call behind its own mutex
-  //    for the same reason, noting packJPG's thread-safety for concurrent
-  //    calls is unverified. Matching that is cheap insurance.
+  // NOT because packJPG's API requires it: str_in/str_out and the error state
+  // are `static thread_local` there (87 such variables), so each thread gets
+  // its own copy and concurrent init+convert is safe through the library --
+  // packJPG's maintainer corrected an earlier version of this comment that
+  // claimed otherwise, and a pure-C host driving 4 unsynchronized threads
+  // through the same DLL confirms it. The lock is here for ytool's own sake:
+  // it keeps the pair atomic with respect to the Buffer/Res locals and the
+  // Output() callback around it, and it matches what upstream packMP3 does
+  // with its own pjg_mutex.
   //
-  // What this lock does NOT fix, tested and stated so nobody re-tries it:
-  // a posix-thread-model build of the DLL still deadlocks ytool even with
-  // every call serialized here (~0% CPU, unkillable, keeps the .dll file
-  // locked until the machine restarts). So the win32-model build in
-  // contrib/build-plugins-windows.sh is not made redundant by this lock.
-  // That deadlock was narrowed with packJPG's own maintainer across Windows
-  // 10 and Windows 7: pure-C hosts drive the very same DLL from four
-  // concurrent raw CreateThread workers without hanging, and `ytool -t1` is
-  // fine, so the trigger is specifically FP RTL threads -- but serializing
-  // the codec entry points is evidently not where it lives.
-  //
-  // Cost is bounded: ytool parallelizes across streams, so this only
-  // serializes the packjpg codec itself, not the surrounding pipeline.
+  // What this lock does NOT fix, tested, so nobody re-tries it: a
+  // posix-thread-model build of the DLL still deadlocks ytool with every
+  // call serialized here. Root cause is unrelated to serialization -- see
+  // contrib/build-plugins-windows.sh's packjpg comment for the static-TLS
+  // ordering problem and why the win32-model build is not made redundant
+  // by this lock.
+
   PJGLock: TCriticalSection;
 
 implementation

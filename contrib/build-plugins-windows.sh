@@ -170,6 +170,31 @@ fi
 #
 # Never accept "the crash is gone" as evidence on its own: check that the
 # .pmp actually got smaller (codec ran) in the same test.
+#
+# ROOT CAUSE of the posix row, found with packJPG's maintainer and reproduced
+# in pure C (no FreePascal involved): it is thread-creation ORDER relative to
+# LoadLibrary, not concurrency. packjpg.cpp has 87 `static thread_local`
+# variables, and the built DLL carries a real static TLS directory (a .tls
+# section). Static TLS in a DLL loaded with LoadLibrary is the historically
+# broken case on Windows/mingw for threads that ALREADY EXISTED when the DLL
+# was loaded -- the loader does not service them the way it services threads
+# created afterwards. ytool's RTL worker pool is up before the codec DLL is
+# loaded, so its workers are exactly those pre-existing threads.
+#
+# Measured 2x2, same machine, same JPEG, 4 threads each:
+#
+#   DLL     threads created...     result
+#   win32   after LoadLibrary      exits clean
+#   win32   before LoadLibrary     exits clean
+#   posix   after LoadLibrary      exits clean
+#   posix   before LoadLibrary     work completes, then HANGS at teardown
+#
+# The hang is in TLS destructor teardown, not in the codec: all 4 threads
+# report ok=1 with correct output before it wedges. Under ytool it surfaces
+# mid-run instead of at exit, because a pool worker finishing its stream hits
+# the teardown while the pipeline is still going -- which is why no output
+# file ever appears. The win32-model build services pre-existing threads
+# correctly, which is the whole reason it stays.
 echo "==> packjpg (packjpg_dll.dll)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
