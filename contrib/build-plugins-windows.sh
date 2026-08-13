@@ -172,29 +172,36 @@ fi
 # .pmp actually got smaller (codec ran) in the same test.
 #
 # ROOT CAUSE of the posix row, found with packJPG's maintainer and reproduced
-# in pure C (no FreePascal involved): it is thread-creation ORDER relative to
+# in pure C (no FreePascal involved): thread-creation ORDER relative to
 # LoadLibrary, not concurrency. packjpg.cpp has 87 `static thread_local`
-# variables, and the built DLL carries a real static TLS directory (a .tls
-# section). Static TLS in a DLL loaded with LoadLibrary is the historically
-# broken case on Windows/mingw for threads that ALREADY EXISTED when the DLL
-# was loaded -- the loader does not service them the way it services threads
-# created afterwards. ytool's RTL worker pool is up before the codec DLL is
-# loaded, so its workers are exactly those pre-existing threads.
+# variables and the built DLL carries a real static TLS directory (a .tls
+# section). Threads that already existed when such a DLL is loaded are the
+# historically awkward case on Windows/mingw -- the loader does not service
+# them the way it services threads created afterwards. ytool's RTL worker
+# pool is up before the codec DLL loads, so its workers are exactly those.
 #
-# Measured 2x2, same machine, same JPEG, 4 threads each:
+# Measured on Windows 10 Enterprise LTSC 21H2, build 19044.7291 x64, threads
+# created BEFORE LoadLibrary, 6 runs per cell (4 and 8 threads both):
 #
-#   DLL     threads created...     result
-#   win32   after LoadLibrary      exits clean
-#   win32   before LoadLibrary     exits clean
-#   posix   after LoadLibrary      exits clean
-#   posix   before LoadLibrary     work completes, then HANGS at teardown
+#   win32-model build ....................... 0/6 hung
+#   posix, packJPG's published v5.0d DLL .... 6/6 hung
+#   posix, built here with -static .......... 5/6 hung
 #
-# The hang is in TLS destructor teardown, not in the codec: all 4 threads
-# report ok=1 with correct output before it wedges. Under ytool it surfaces
-# mid-run instead of at exit, because a pool worker finishing its stream hits
-# the teardown while the pipeline is still going -- which is why no output
-# file ever appears. The win32-model build services pre-existing threads
-# correctly, which is the whole reason it stays.
+# Threads created AFTER the load exit clean on every build. On Windows 7
+# SP1 x64 the same host and the same published DLL do NOT hang (~3 runs,
+# measured by packJPG's maintainer), so this is not a general property of
+# static TLS in dynamically loaded DLLs: on the evidence it needs the posix
+# model AND pre-existing threads AND (apparently) Windows 10. Do not
+# restate it more broadly than that.
+#
+# The hang is in thread_local destructor teardown, not the codec: every
+# thread reports success with correct output first. Under ytool it surfaces
+# mid-run rather than at exit, because a pool worker hits teardown while the
+# pipeline is still running, which is why no output file ever appeared.
+# The win32-model build is clean in both thread-order columns, which is the
+# whole reason it stays.
+#
+# Repro harness (4 C hosts, no dependencies): /home/forum/packjpg-dll-harness
 echo "==> packjpg (packjpg_dll.dll)"
 [ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \

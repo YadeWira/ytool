@@ -45,8 +45,9 @@ var
   // with its own pjg_mutex.
   //
   // What this lock does NOT fix, tested, so nobody re-tries it: a
-  // posix-thread-model build of the DLL still deadlocks ytool with every
-  // call serialized here. Root cause is unrelated to serialization -- see
+  // posix-thread-model build of the DLL still deadlocks ytool (on Windows 10
+  // 19044; not reproduced on Windows 7) with every call serialized here.
+  // Root cause is unrelated to serialization -- see
   // contrib/build-plugins-windows.sh's packjpg comment for the static-TLS
   // ordering problem and why the win32-model build is not made redundant
   // by this lock.
