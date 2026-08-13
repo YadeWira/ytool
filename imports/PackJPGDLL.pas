@@ -47,7 +47,9 @@ var
   // What this lock does NOT fix, tested, so nobody re-tries it: a
   // posix-thread-model build of the DLL still deadlocks ytool (on Windows 10
   // 19044; not reproduced on Windows 7) with every call serialized here.
-  // Root cause is unrelated to serialization -- see
+  // Cause still unidentified: ytool loads this DLL at unit initialization,
+  // before its TTask workers exist, so it is NOT the pre-existing-thread
+  // defect documented in the build script -- see
   // contrib/build-plugins-windows.sh's packjpg comment for the static-TLS
   // ordering problem and why the win32-model build is not made redundant
   // by this lock.

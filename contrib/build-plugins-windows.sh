@@ -177,8 +177,17 @@ fi
 # variables and the built DLL carries a real static TLS directory (a .tls
 # section). Threads that already existed when such a DLL is loaded are the
 # historically awkward case on Windows/mingw -- the loader does not service
-# them the way it services threads created afterwards. ytool's RTL worker
-# pool is up before the codec DLL loads, so its workers are exactly those.
+# them the way it services threads created afterwards.
+#
+# IMPORTANT: that C reproduction does NOT explain ytool's own hang, and an
+# earlier version of this comment wrongly claimed it did. ytool loads the
+# codec DLL from PackJPGDLL.pas's `initialization` block, which FPC runs at
+# program startup, while the TTask workers that call into it are created
+# later inside Encode (PrecompMain.pas). ytool's calling threads are
+# therefore POST-load -- the column that is clean in every C measurement --
+# yet ytool still deadlocks against a posix build. So ytool's hang has some
+# other, still-unidentified cause; only the pre-existing-thread defect below
+# is established.
 #
 # Measured on Windows 10 Enterprise LTSC 21H2, build 19044.7291 x64, threads
 # created BEFORE LoadLibrary, 6 runs per cell (4 and 8 threads both):
