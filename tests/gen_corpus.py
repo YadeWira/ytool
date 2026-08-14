@@ -90,6 +90,28 @@ def make_lz4f(seed):
     return lz4.frame.compress(text)
 
 
+def make_lz4f_crc(seed):
+    """LZ4 frame WITH a content checksum -- what the lz4 CLI writes by default.
+
+    Kept separate from make_lz4f because the python module's default is the
+    opposite of the CLI's: without this file the corpus only ever exercised
+    checksum-less frames, and -mlz4f silently fell back to storing every real
+    .lz4 file literally (it re-encoded without the checksum, the bytes did not
+    match, and a literal store is still perfectly reversible -- so the suite
+    stayed green). See PrecompLZ4.pas Option bits 28..30."""
+    try:
+        import lz4.frame
+    except ImportError:
+        return None
+    text = (b'lz4 crc frame payload %d ' % seed) * 4000
+    # block_size=7 (4MB, the lz4 CLI's own default) on purpose: the python
+    # module defaults to 64KB blocks, and 64KB frames hit a separate, older
+    # limitation of the level search that has nothing to do with checksums --
+    # this file exists to cover the checksum path, so it must not fail for an
+    # unrelated reason.
+    return lz4.frame.compress(text, content_checksum=True, block_size=7)
+
+
 def make_lzma_alone(seed):
     """Real raw LZMA1 stream (FORMAT_ALONE, 13-byte header) via the stdlib
     'lzma' module -- unknown-size/end-marker variant, same as what the "xz
@@ -264,6 +286,10 @@ def main():
     else:
         print('aviso: modulo python "lz4" no disponible, se omite 70_lz4f.bin '
               '(sin cobertura real de -mlz4f)', file=sys.stderr)
+
+    lz4fc = make_lz4f_crc(SEED)
+    if lz4fc is not None:
+        write(d, '73_lz4f_crc.bin', lz4fc)
 
     jpeg = make_jpeg(SEED)
     if jpeg is not None:

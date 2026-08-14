@@ -114,15 +114,21 @@ var
 
   DLLLoaded: Boolean = False;
 
+// frameFlags (optional) returns the parts of the frame descriptor that must be
+// reproduced byte-for-byte when the frame is re-encoded, packed as:
+//   bit 0 = contentChecksumFlag   bit 1 = blockChecksumFlag
+//   bit 2 = contentSize present   bit 3 = blockMode
+// Without these the re-encoder cannot rebuild a frame that used any of them --
+// notably the content checksum, which the lz4 CLI writes by default.
 function LZ4F_decompress_safe(source: Pointer; dest: Pointer;
   sourceSize: Integer; destSize: Integer; compressedSize: PInteger = nil;
-  blockSize: PInteger = nil): Integer;
+  blockSize: PInteger = nil; frameFlags: PInteger = nil): Integer;
 
 implementation
 
 function LZ4F_decompress_safe(source: Pointer; dest: Pointer;
   sourceSize: Integer; destSize: Integer; compressedSize: PInteger;
-  blockSize: PInteger): Integer;
+  blockSize: PInteger; frameFlags: PInteger): Integer;
 var
   ctx: LZ4F_dctx;
   fi: LZ4F_frameInfo_t;
@@ -133,6 +139,8 @@ begin
     compressedSize^ := 0;
   if Assigned(blockSize) then
     blockSize^ := 4;
+  if Assigned(frameFlags) then
+    frameFlags^ := 0;
   if NativeUInt(LZ4F_createDecompressionContext(ctx)) = 0 then
     try
       srcSizePtr := sourceSize;
@@ -148,6 +156,18 @@ begin
             compressedSize^ := srcSizePtr;
           if Assigned(blockSize) then
             blockSize^ := Max(4, Integer(fi.blockSizeID));
+          if Assigned(frameFlags) then
+          begin
+            frameFlags^ := 0;
+            if fi.contentChecksumFlag <> LZ4F_noContentChecksum then
+              frameFlags^ := frameFlags^ or 1;
+            if fi.blockChecksumFlag <> LZ4F_noBlockChecksum then
+              frameFlags^ := frameFlags^ or 2;
+            if fi.contentSize <> 0 then
+              frameFlags^ := frameFlags^ or 4;
+            if fi.blockMode <> LZ4F_blockLinked then
+              frameFlags^ := frameFlags^ or 8;
+          end;
           Result := dstSizePtr;
         end;
       finally

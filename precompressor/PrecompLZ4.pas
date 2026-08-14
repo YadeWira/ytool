@@ -208,6 +208,7 @@ var
   Buffer: PByte;
   Pos: NativeInt;
   X, Y, Z: Integer;
+  FF: Integer;
   SI: _StrInfo1;
 begin
   if BoolArray(CodecEnabled, False) then
@@ -259,7 +260,7 @@ begin
       if PCardinal(Input + Pos)^ = $184D2204 then
       begin
         Y := LZ4F_decompress_safe(Input + Pos, Buffer, SizeEx - Pos,
-          LMaxSize, @X, @Z);
+          LMaxSize, @X, @Z, @FF);
         if (X < Y) then
         begin
           Output(Instance, Buffer, Y);
@@ -269,8 +270,15 @@ begin
           SI.Resource := 0;
           SI.Option := 0;
           SetBits(SI.Option, LZ4F_CODEC, 0, 3);
-          SetBits(SI.Option, LBlockDependency, 14, 1);
+          // blockMode and the checksum/contentSize flags come from the frame
+          // that was actually found, not from the -d parse default: a frame
+          // using any of them cannot be rebuilt byte-identically unless the
+          // re-encoder is told to use them too. bits 28..30 were unused.
+          SetBits(SI.Option, Ord(FF and 8 <> 0), 14, 1);
           SetBits(SI.Option, Z - 4, 15, 13);
+          SetBits(SI.Option, Ord(FF and 1 <> 0), 28, 1);
+          SetBits(SI.Option, Ord(FF and 2 <> 0), 29, 1);
+          SetBits(SI.Option, Ord(FF and 4 <> 0), 30, 1);
           SI.Status := TStreamStatus.None;
           Funcs^.LogScan1(LZ4Codecs[GetBits(SI.Option, 0, 3)], SI.Position,
             SI.OldSize, SI.NewSize);
@@ -425,6 +433,16 @@ begin
             LZ4F_blockSizeID_t(GetBits(StreamInfo^.Option, 15, 13) + 4);
           LZ4FT.frameInfo.blockMode :=
             LZ4F_blockMode_t(GetBits(StreamInfo^.Option, 14, 1));
+          // Restore the rest of the frame descriptor (bits 28..30). Leaving
+          // these zeroed made every frame carrying a content checksum -- the
+          // lz4 CLI default -- re-encode to different bytes, fail CompareMem
+          // and silently fall back to storing the stream literally.
+          LZ4FT.frameInfo.contentChecksumFlag :=
+            LZ4F_contentChecksum_t(GetBits(StreamInfo^.Option, 28, 1));
+          LZ4FT.frameInfo.blockChecksumFlag :=
+            LZ4F_blockChecksum_t(GetBits(StreamInfo^.Option, 29, 1));
+          if GetBits(StreamInfo^.Option, 30, 1) = 1 then
+            LZ4FT.frameInfo.contentSize := StreamInfo^.NewSize;
           Params := 'l' + I.ToString + ':' + 'b' +
             (GetBits(StreamInfo^.Option, 15, 13) + 4).ToString + ':' + 'd' +
             GetBits(StreamInfo^.Option, 14, 1).ToString;
@@ -550,6 +568,15 @@ begin
           LZ4F_blockSizeID_t(GetBits(StreamInfo.Option, 15, 13) + 4);
         LZ4FT.frameInfo.blockMode :=
           LZ4F_blockMode_t(GetBits(StreamInfo.Option, 14, 1));
+        // Must mirror Process exactly, or decode rebuilds a different frame.
+        // Old .pmp files predate bits 28..30, which read back as 0 there and
+        // reproduce the previous no-checksum behaviour unchanged.
+        LZ4FT.frameInfo.contentChecksumFlag :=
+          LZ4F_contentChecksum_t(GetBits(StreamInfo.Option, 28, 1));
+        LZ4FT.frameInfo.blockChecksumFlag :=
+          LZ4F_blockChecksum_t(GetBits(StreamInfo.Option, 29, 1));
+        if GetBits(StreamInfo.Option, 30, 1) = 1 then
+          LZ4FT.frameInfo.contentSize := StreamInfo.NewSize;
         Params := 'l' + GetBits(StreamInfo.Option, 3, 4).ToString + ':' + 'b' +
           (GetBits(StreamInfo.Option, 15, 13) + 4).ToString + ':' + 'd' +
           GetBits(StreamInfo.Option, 14, 1).ToString;
