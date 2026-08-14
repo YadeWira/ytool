@@ -266,10 +266,13 @@ fi
 # PE32 (Intel i386) packpng-x86.dll -- verified with `file`, not a renamed
 # x64 one (confirmed again on v2.0c, wire format unchanged since v2.0a).
 echo "==> packpng (packpng-x86.dll)"
+# See build-plugins-windows.sh's packpng step for the rationale on -f, the
+# single-spelled version, and the quoted-wildcard extraction.
 PACKPNG_VER="v2.0h"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0h-win32-lib.zip" \
+PACKPNG_NUM="${PACKPNG_VER#v}"
+if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win32-lib.zip" \
   -o "$CSRC/packpng-lib-x86.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib-x86.zip" ]; then
-  ( cd "$CSRC" && unzip -oq packpng-lib-x86.zip packpng-x86.dll ) 2>/dev/null \
+  ( cd "$CSRC" && unzip -joq packpng-lib-x86.zip "*packpng-x86.dll" ) 2>/dev/null \
     && mv -f "$CSRC/packpng-x86.dll" "$ROOT/packpng-x86.dll" \
     && echo "   OK -> packpng-x86.dll (prebuilt $PACKPNG_VER, win32)" \
     || echo "   (packpng: extraccion fallo)"

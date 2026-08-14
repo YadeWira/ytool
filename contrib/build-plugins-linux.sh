@@ -210,8 +210,16 @@ fi
 # the already-built .so is downloaded from a versioned packPNG release
 # (same author, not an unknown third party) -- reproducible without a new toolchain.
 echo "==> packpng (libpackpng.so)"
+# Version appears once. It used to be spelled twice -- interpolated into the
+# URL path and hardcoded into the asset filename -- so bumping the variable
+# alone produced a 404 for an asset path that still named the OLD version.
 PACKPNG_VER="v2.0h"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0h-linux-x64-lib.tar.gz" \
+PACKPNG_NUM="${PACKPNG_VER#v}"
+# -f matters: without it curl treats a 404 as success and writes the 9-byte
+# body "Not Found" to the output file, which then passes the -s (non-empty)
+# guard below and fails later at extraction, silently leaving the previous
+# binary in place. With -f curl exits 22 and writes nothing.
+if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-linux-x64-lib.tar.gz" \
   -o "$CSRC/packpng-lib.tar.gz" 2>/dev/null && [ -s "$CSRC/packpng-lib.tar.gz" ]; then
   # Wildcard match, not the bare member name: the tarball's internal layout is
   # not stable across releases (<=v2.0d stored "libpackpng.so" at the root,

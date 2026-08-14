@@ -328,10 +328,18 @@ fi
 # (cross-compile to x86_64-pc-windows-gnu) + cmake for kanzi-cpp -- instead the
 # already-built .dll is downloaded from a versioned packPNG release.
 echo "==> packpng (packpng.dll)"
+# See build-plugins-linux.sh for why the version is spelled once and why curl
+# needs -f. The extraction uses a quoted wildcard with -j for the same reason
+# the Linux tar step does: a release whose zip stores "./packpng.dll" instead
+# of "packpng.dll" makes extract-by-exact-name match nothing and exit 11,
+# which 2>/dev/null then hides. Today's assets store plain names, so this is
+# insurance against a layout change, not a live failure -- but the tar side of
+# exactly this already bit us once when packPNG changed its tarball layout.
 PACKPNG_VER="v2.0h"
-if curl -sL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-2.0h-win64-lib.zip" \
+PACKPNG_NUM="${PACKPNG_VER#v}"
+if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win64-lib.zip" \
   -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then
-  ( cd "$CSRC" && unzip -oq packpng-lib.zip packpng.dll ) 2>/dev/null \
+  ( cd "$CSRC" && unzip -joq packpng-lib.zip "*packpng.dll" ) 2>/dev/null \
     && mv -f "$CSRC/packpng.dll" "$ROOT/packpng.dll" \
     && echo "   OK -> packpng.dll (prebuilt $PACKPNG_VER)" \
     || echo "   (packpng: extraccion fallo)"
