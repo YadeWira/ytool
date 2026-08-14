@@ -16,6 +16,9 @@ ROOT="$(pwd)"
 XTOOL="${XTOOL:-$ROOT/ytool}"
 WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
+# Failure artifacts must live OUTSIDE $WORK: the trap below wipes $WORK on exit,
+# which would delete the very evidence an intermittent failure needs.
+FAILDIR="${FAILDIR:-$ROOT/regression-failures}"
 trap 'rm -rf "$WORK"' EXIT
 
 # methods to test against EVERY file (reversibility must hold for all of them)
@@ -60,7 +63,7 @@ METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
   "-mpackmp3" "-mlzma")
 
-fail=0; pass=0
+fail=0; pass=0; err=0
 echo "== ytool regression =="
 
 # 1) build (unless NO_BUILD) -------------------------------------------------
@@ -100,13 +103,37 @@ for f in "$CORPUS"/*; do
   for m in "${METHODS[@]}"; do
     pmp="$WORK/out.pmp"; outf="$WORK/out.bin"
     rm -f "$pmp" "$outf"
-    "$XTOOL" precomp $m "$f" "$pmp" >/dev/null 2>&1
-    "$XTOOL" decode "$pmp" "$outf" >/dev/null 2>&1
+    # Exit codes are checked, not discarded. Without this a precomp or decode
+    # that ABORTS is indistinguishable from one that produced non-reversible
+    # output: both just fail the cmp below and get reported as "no reversible",
+    # sending you looking for a codec bug when the real event was the run dying.
+    # That ambiguity cost a full investigation once already (an intermittent
+    # "-mzlib -dd1" failure that could not be reproduced afterwards, with no
+    # record of whether either command had even succeeded).
+    "$XTOOL" precomp $m "$f" "$pmp" >"$WORK/precomp.log" 2>&1; prc=$?
+    "$XTOOL" decode "$pmp" "$outf" >"$WORK/decode.log" 2>&1; drc=$?
     pmpsz=$(stat -c%s "$pmp" 2>/dev/null || echo 0)
-    if cmp -s "$f" "$outf"; then
+    if [ "$prc" -ne 0 ] || [ "$drc" -ne 0 ]; then
+      res="*** ERROR precomp=$prc decode=$drc ***"; fail=$((fail+1)); err=$((err+1))
+    elif cmp -s "$f" "$outf"; then
       res="OK"; pass=$((pass+1))
     else
       res="*** FAIL ***"; fail=$((fail+1))
+    fi
+    # Preserve the exact artifacts of any failure. An intermittent one is only
+    # diagnosable if the .pmp that produced it still exists afterwards.
+    if [ "$res" != "OK" ]; then
+      fdir="$FAILDIR/$(printf '%s' "${bn}_${m:-literal}" | tr -c 'A-Za-z0-9._-' '_')"
+      mkdir -p "$fdir"
+      cp -f "$f" "$fdir/input.bin" 2>/dev/null
+      [ -s "$pmp" ] && cp -f "$pmp" "$fdir/out.pmp" 2>/dev/null
+      [ -s "$outf" ] && cp -f "$outf" "$fdir/decoded.bin" 2>/dev/null
+      cp -f "$WORK/precomp.log" "$WORK/decode.log" "$fdir/" 2>/dev/null
+      { echo "method: ${m:-<literal>}"; echo "precomp_rc: $prc"; echo "decode_rc: $drc"
+        echo "input_size: $insz"; echo "pmp_size: $pmpsz"
+        echo "date: $(date -Is)"; echo "loadavg: $(cat /proc/loadavg 2>/dev/null)"
+      } > "$fdir/context.txt" 2>/dev/null
+      echo "   [artefactos del fallo guardados -> $fdir]" >&2
     fi
     if [ "$insz" -gt 0 ] && [ "$pmpsz" -gt 0 ]; then
       ratio=$(awk "BEGIN{printf \"%.3f\", $pmpsz/$insz}")
@@ -117,6 +144,7 @@ for f in "$CORPUS"/*; do
   done
 done
 
-echo "-- resumen: $pass OK, $fail FAIL --"
+echo "-- resumen: $pass OK, $fail FAIL (de los cuales $err por exit code != 0) --"
+[ "$err" -gt 0 ] && echo "AVISO: $err caso(s) abortaron; eso NO es un fallo de reversibilidad. Artefactos en $FAILDIR/"
 [ "$fail" -eq 0 ] && { echo "REGRESION: PASS (reversibilidad bit-exacta en todo el corpus)"; exit 0; } \
                   || { echo "REGRESION: FALLO ($fail round-trips no reversibles)"; exit 1; }

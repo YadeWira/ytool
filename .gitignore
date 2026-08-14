@@ -25,3 +25,4 @@ CONEXION-IA.md
 ytool_base
 # DLLs Windows construidas localmente (contrib/build-plugins-windows.sh), regenerables
 *.dll
+/regression-failures/
