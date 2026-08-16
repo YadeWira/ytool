@@ -50,6 +50,26 @@ EOF
 # Confirmed drop-in compatible: exports a superset of what's actually used
 # (inflate/inflateEnd/inflateInit2_/inflateReset/crc32/deflate/compress/uncompress
 # etc.), verified with a real round-trip on the Windows VM.
+
+# ── liblz4.dll — sin esto los codecs -mlz4/-mlz4hc/-mlz4f estan MUERTOS en Windows ──
+# imports/LZ4DLL.pas carga PluginsPath + 'liblz4.dll' (en Unix cae a
+# liblz4.so.1 del sistema, por eso Linux nunca lo noto). Esa DLL no se
+# construia en ningun lado ni viajaba en el paquete, asi que LZ4DLL.DLLLoaded
+# era False y los tres codecs se reportaban no disponibles: ytool guardaba
+# cada stream LZ4 literal y el round-trip pasaba igual, que es exactamente
+# como se paso por alto. Verificado en Windows real: sin la DLL un .lz4 del
+# CLI da .pmp de 312810 bytes (literal, mas grande que la entrada); con ella
+# da 1599715 y round-trip bit-exacto, igual que Linux.
+# --export-all-symbols porque lz4 solo marca dllexport bajo LZ4_DLL_EXPORT,
+# que su propio build system define; compilando los .c sueltos no aplica.
+echo "==> liblz4.dll (x86-64)"
+[ -d "$CSRC/lz4" ] || git clone --depth 1 --branch v1.9.4 https://github.com/lz4/lz4 "$CSRC/lz4"
+if [ -d "$CSRC/lz4/lib" ]; then
+  ( cd "$CSRC/lz4/lib" && "$CC" -shared -O2 -Wl,--export-all-symbols \
+      lz4.c lz4hc.c lz4frame.c xxhash.c -static-libgcc -o "$ROOT/liblz4.dll" ) \
+    && echo "   OK -> liblz4.dll" || echo "   (liblz4 fallo)"
+fi
+
 echo "==> zlib1.dll (from source, zlib 1.3.1)"
 [ -d "$CSRC/zlib" ] || git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git "$CSRC/zlib"
 if [ -d "$CSRC/zlib" ]; then
