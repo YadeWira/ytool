@@ -142,6 +142,34 @@ if [ "$ALLOW_MISSING_CODECS" = "1" ]; then
   echo "       Esta corrida NO prueba que los codecs funcionen, solo reversibilidad."
 fi
 
+
+# Segunda señal: etapas del pipeline. CODEC_EXPECT de arriba solo ve la PRIMERA
+# etapa -- "Streams: X / Y" cuenta lo que hizo el detector de streams y nada
+# mas. Una etapa posterior que muera es invisible ahi: escondiendo osrep64,
+# "-mzlib -dd1" seguia reportando "Streams: 90 / 90", exit 0, sin una sola
+# linea de error, y el .pmp cambiaba 76 bytes. El assert de arriba daba verde
+# con el dedup externo muerto.
+#
+# La señal se encontro diferenciando una corrida sana contra una rota (metodo
+# general: no adivinar cual es la señal, romperlo y mirar el diff). La linea
+# de resumen de tamaños lleva una etapa por transformacion aplicada:
+#   -mzlib        Size: A >> B                 -> 1
+#   -mzlib -dd    Size: A >> B >> C            -> 2
+#   -mzlib -dd1   Size: A >> B >> C >> D       -> 3
+# Es independiente del contenido: da igual sobre datos aleatorios que sobre
+# streams reales, asi que la expectativa va por metodo, no por archivo.
+STAGE_EXPECT="
+-mzlib -dd|2
+-mzlib -dd1|3
+"
+
+expected_stages() {
+  [ "$ALLOW_MISSING_CODECS" = "1" ] && { echo 0; return; }
+  printf '%s\n' "$STAGE_EXPECT" | while IFS='|' read -r sm sn; do
+    [ "$sm" = "$1" ] && { echo "$sn"; return; }
+  done | head -1
+}
+
 # Devuelve el minimo de streams procesados exigido para (archivo, metodo), o 0.
 expected_streams() {
   [ "$ALLOW_MISSING_CODECS" = "1" ] && { echo 0; return; }
@@ -173,10 +201,18 @@ for f in "$CORPUS"/*; do
     proc="${proc:-0}"
     need=$(expected_streams "$bn" "$m")
     need="${need:-0}"
+    stg=$(grep -oE "Size:.*" "$WORK/precomp.log" 2>/dev/null | tail -1 | grep -o ">>" | wc -l)
+    stg="${stg:-0}"
+    needst=$(expected_stages "$m")
+    needst="${needst:-0}"
     if [ "$prc" -ne 0 ] || [ "$drc" -ne 0 ]; then
       res="*** ERROR precomp=$prc decode=$drc ***"; fail=$((fail+1)); err=$((err+1))
     elif ! cmp -s "$f" "$outf"; then
       res="*** FAIL ***"; fail=$((fail+1))
+    elif [ "$needst" -ge 1 ] && [ "$stg" -lt "$needst" ]; then
+      # Una etapa posterior (dedup) no corrio: el .pmp sale casi igual y el
+      # round-trip cierra igual, pero el trabajo no se hizo.
+      res="*** ETAPA MUERTA ($stg de $needst etapas) ***"; fail=$((fail+1)); dead=$((dead+1))
     elif [ "$need" -ge 1 ] && [ "$proc" -lt 1 ]; then
       # Reversible pero el codec no hizo nada: guardo todo literal. Es el modo
       # de falla que dejo pasar tres bugs reales.
