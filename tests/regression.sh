@@ -63,7 +63,7 @@ METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
   "-mpackmp3" "-mlzma")
 
-fail=0; pass=0; err=0
+fail=0; pass=0; err=0; dead=0
 echo "== ytool regression =="
 
 # 1) build (unless NO_BUILD) -------------------------------------------------
@@ -96,6 +96,60 @@ if [ "${FULL:-0}" = "1" ] && [ -f "$ROOT/test-files2.tar" ]; then
 fi
 
 # 3) round-trips ------------------------------------------------------------
+
+# ── Cobertura real de codecs ──────────────────────────────────────────────────
+# Pares (archivo, metodo) que TIENEN que procesar al menos un stream. Sin esto
+# la suite no prueba nada sobre los codecs: cuando un codec no esta disponible
+# o no logra recomprimir, ytool guarda el stream literal, y guardar literal es
+# perfectamente reversible -- asi que los 399 casos pasan igual. Medido: con
+# los 6 plugins .so borrados, la suite daba "399 OK, 0 FAIL, REGRESION: PASS".
+# Tres bugs reales se escaparon exactamente asi (packjpg que no cargaba, lz4f
+# que no re-encodeaba frames con checksum, y liblz4.dll que nunca se empaqueto
+# para Windows dejando -mlz4/-mlz4hc/-mlz4f muertos).
+#
+# Son MINIMOS (>=1), no igualdades: un bump de codec puede cambiar
+# legitimamente cuantos streams detecta, y un umbral exacto se rompe con una
+# mejora en vez de con una regresion. Los conteos medidos hoy estan al lado
+# como referencia, no como condicion.
+CODEC_EXPECT="
+20_zlib_streams.bin|-mzlib|6
+20_zlib_streams.bin|-mpreflate|6
+21_zlib_many.bin|-mzlib|199
+21_zlib_many.bin|-mpreflate|199
+22_raw_deflate.bin|-mzlib|1
+23_dup_streams.bin|-mzlib|90
+30_over_chunk_20m.bin|-mzlib|498
+60_wav_pcm.bin|-mwavpack|1
+60_wav_pcm.bin|-mflac|1
+61_png_min.bin|-mpng|1
+62_png_photo.bin|-mpng|1
+62_png_photo.bin|-mpackpng|1
+63_lzma_alone.bin|-mlzma|1
+70_lz4f.bin|-mlz4f|1
+73_lz4f_crc.bin|-mlz4f|1
+71_jpeg_min.bin|-mpackjpg|1
+71_jpeg_min.bin|-mbrunsli|1
+72_mp3_min.bin|-mpackmp3|1
+"
+
+# Escape valvula para la UNICA configuracion donde no tener codecs es
+# esperado: el job Windows de CI compila ytool.exe pero no cruza ninguna DLL
+# de plugin. Es opt-out explicito y ruidoso a proposito -- si algun dia se
+# activa por accidente, se ve en el log.
+: "${ALLOW_MISSING_CODECS:=0}"
+if [ "$ALLOW_MISSING_CODECS" = "1" ]; then
+  echo "AVISO: ALLOW_MISSING_CODECS=1 -- no se exige que ningun codec procese streams."
+  echo "       Esta corrida NO prueba que los codecs funcionen, solo reversibilidad."
+fi
+
+# Devuelve el minimo de streams procesados exigido para (archivo, metodo), o 0.
+expected_streams() {
+  [ "$ALLOW_MISSING_CODECS" = "1" ] && { echo 0; return; }
+  printf '%s\n' "$CODEC_EXPECT" | while IFS='|' read -r ef em en; do
+    [ "$ef" = "$1" ] && [ "$em" = "$2" ] && { echo 1; return; }
+  done | head -1
+}
+
 printf "%-26s %-14s %10s %10s %8s  %s\n" FILE METHOD IN PMP RATIO RESULT
 for f in "$CORPUS"/*; do
   bn="$(basename "$f")"
@@ -113,12 +167,22 @@ for f in "$CORPUS"/*; do
     "$XTOOL" precomp $m "$f" "$pmp" >"$WORK/precomp.log" 2>&1; prc=$?
     "$XTOOL" decode "$pmp" "$outf" >"$WORK/decode.log" 2>&1; drc=$?
     pmpsz=$(stat -c%s "$pmp" 2>/dev/null || echo 0)
+    # Cuantos streams proceso realmente el codec (no cuantos detecto).
+    # "Streams: X / Y" -> X procesados, Y detectados.
+    proc=$(grep -oE "Streams: [0-9]+ / [0-9]+" "$WORK/precomp.log" 2>/dev/null | tail -1 | awk '{print $2}')
+    proc="${proc:-0}"
+    need=$(expected_streams "$bn" "$m")
+    need="${need:-0}"
     if [ "$prc" -ne 0 ] || [ "$drc" -ne 0 ]; then
       res="*** ERROR precomp=$prc decode=$drc ***"; fail=$((fail+1)); err=$((err+1))
-    elif cmp -s "$f" "$outf"; then
-      res="OK"; pass=$((pass+1))
-    else
+    elif ! cmp -s "$f" "$outf"; then
       res="*** FAIL ***"; fail=$((fail+1))
+    elif [ "$need" -ge 1 ] && [ "$proc" -lt 1 ]; then
+      # Reversible pero el codec no hizo nada: guardo todo literal. Es el modo
+      # de falla que dejo pasar tres bugs reales.
+      res="*** CODEC MUERTO (0 streams procesados) ***"; fail=$((fail+1)); dead=$((dead+1))
+    else
+      res="OK"; pass=$((pass+1))
     fi
     # Preserve the exact artifacts of any failure. An intermittent one is only
     # diagnosable if the .pmp that produced it still exists afterwards.
@@ -144,7 +208,9 @@ for f in "$CORPUS"/*; do
   done
 done
 
-echo "-- resumen: $pass OK, $fail FAIL (de los cuales $err por exit code != 0) --"
+echo "-- resumen: $pass OK, $fail FAIL ($err por exit code != 0, $dead por codec muerto) --"
+[ "$dead" -gt 0 ] && echo "AVISO: $dead caso(s) fueron reversibles pero el codec no proceso NINGUN stream (guardo literal)."
 [ "$err" -gt 0 ] && echo "AVISO: $err caso(s) abortaron; eso NO es un fallo de reversibilidad. Artefactos en $FAILDIR/"
 [ "$fail" -eq 0 ] && { echo "REGRESION: PASS (reversibilidad bit-exacta en todo el corpus)"; exit 0; } \
-                  || { echo "REGRESION: FALLO ($fail round-trips no reversibles)"; exit 1; }
+                  || { rev=$((fail-err-dead))
+       echo "REGRESION: FALLO ($rev no reversibles, $err abortados, $dead con codec muerto)"; exit 1; }

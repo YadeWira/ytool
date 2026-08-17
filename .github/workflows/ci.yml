@@ -22,7 +22,17 @@ jobs:
       # cross-compile + Windows-VM verification flow (see contrib/build-native-
       # windows.sh, contrib/build-plugins-windows.sh), out of scope for this
       # first CI pass.
+      # ALLOW_MISSING_CODECS=1: este job NO construye los plugins (.so) --
+      # eso es contrib/build-plugins-linux.sh, que clona y compila brunsli con
+      # cmake y descarga packpng, demasiado pesado y dependiente de red para
+      # correr en cada push. Sin ese opt-out la suite fallaria con "codec
+      # muerto", que es su comportamiento correcto y deseado en el camino del
+      # release, no aca. El opt-out imprime un aviso en el log a proposito:
+      # esta corrida verifica reversibilidad y logica core, NO que los codecs
+      # funcionen. Eso se exige al empaquetar un release.
       - name: Run regression suite (builds native objs + fpc + round-trips)
+        env:
+          ALLOW_MISSING_CODECS: "1"
         run: bash tests/regression.sh
 
   windows:
@@ -72,4 +82,9 @@ jobs:
         env:
           NO_BUILD: 1
           XTOOL: ./ytool.exe
+        env:
+          # Mismo motivo que el job linux: este runner no cruza ninguna DLL de
+          # plugin (ver el comentario de arriba), asi que no se le puede exigir
+          # que los codecs procesen streams.
+          ALLOW_MISSING_CODECS: "1"
         run: bash tests/regression.sh
