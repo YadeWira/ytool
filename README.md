@@ -199,6 +199,30 @@ cmp input.bin restored.bin                           # always identical
 
 Run `./ytool precomp` with no arguments for the full flag reference.
 
+### On the `.pmp` extension
+
+`.pmp` is only a convention used in this README and in the test scripts —
+`ytool` does not hardcode, require or validate any extension, and writes
+whatever output path you give it. It detects its own containers by magic
+bytes, not by filename.
+
+Worth stating explicitly because the name is not unique: **packMP3 also wrote
+`.pmp` files, up to and including v1.x**. It renamed its own archives to
+`.pm3` in commit `f5cf864` (2026-06-25), first shipped in v2.0 — a rename
+only, the container magic was untouched. Traces of the old name survive all
+over packMP3 today: the `pmplib_*` library API that `ytool` calls, internal
+identifiers like `pmp_magic` / `pmp_ext` / `pmpfilename`, and runtime strings
+such as `Compressed to PMP in memory`. None of those refer to this format.
+
+So a `.pmp` on disk may be either a `ytool` container or a pre-2.0 packMP3
+archive, and the two are unrelated: a `ytool` container is a whole file's
+worth of precompressed streams plus the recipe to rebuild them, and it may
+itself *contain* MP3 streams that were processed through packMP3. Note also
+that packMP3 still accepts `.pmp` as an input extension for backward
+compatibility, so handing it a `ytool` container is accepted by name and then
+rejected by content. Confirmed against packMP3's git history with its
+maintainer.
+
 ## Testing
 
 ```bash
