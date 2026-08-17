@@ -217,10 +217,15 @@ such as `Compressed to PMP in memory`. None of those refer to this format.
 So a `.pmp` on disk may be either a `ytool` container or a pre-2.0 packMP3
 archive, and the two are unrelated: a `ytool` container is a whole file's
 worth of precompressed streams plus the recipe to rebuild them, and it may
-itself *contain* MP3 streams that were processed through packMP3. Note also
-that packMP3 still accepts `.pmp` as an input extension for backward
-compatibility, so handing it a `ytool` container is accepted by name and then
-rejected by content. Confirmed against packMP3's git history with its
+itself *contain* MP3 streams that were processed through packMP3.
+
+Nothing actually dispatches on the name, in either direction. packMP3 does
+still list `.pmp` among the extensions it accepts, but that list has a single
+caller -- the directory walker behind its `-r` recursion -- and it sits inside
+`#if !defined(BUILD_LIB)`, so it does not exist at all in the library build
+that `ytool` links against. A file named on the command line, and every call
+`ytool` makes through `pmplib_*`, is identified purely by content. Confirmed
+by reading packMP3's sources and its git history together with its
 maintainer.
 
 ## Testing
