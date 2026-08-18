@@ -30,8 +30,13 @@ CXX="$(command -v clang++ || command -v g++)"
 # Known-Issues-and-Limitations page for the full history, including the 4
 # earlier candidates ruled out along the way): vmac.c's __i386__ branch never
 # defines its own ADD128/MUL64/PMUL64, so the 32-bit build fell through to
-# the generic portable-C fallback, which GCC's -O2+ strict-aliasing
-# optimizations miscompiled. Fixed upstream in omega-srep (targeted
+# the generic portable-C fallback, whose type-punning GCC's -O2+ strict-aliasing
+# optimizations are entitled to break -- so the defect is in vmac.c, not in GCC,
+# which is also what the chosen fix implies (it changes how that source is
+# compiled, not the compiler). Measured by omega-srep's maintainer, not here:
+# an instrumented dump of the 128-bit accumulator (one 64-bit half off by
+# exactly one, a missed-carry signature) plus a flag bisect -- -O1 clean, -O3
+# broken, -O3 -fno-strict-aliasing clean. Fixed upstream in omega-srep (targeted
 # #pragma GCC optimize("no-strict-aliasing"), no perf cost elsewhere),
 # released as v1.0.0 -- pinned to a tag, not a moving branch.
 # Verified: the full cross-arch regression matrix (357/357) now passes with

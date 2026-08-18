@@ -80,9 +80,11 @@ fi
 # Was Intensity/srep -- migrated after a real cross-architecture bug in
 # upstream (win64-encoded `-dd1` streams failed their own checksum on win32
 # decode). The bug survived the initial migration too, but was root-caused
-# via live cross-AI collaboration to a GCC strict-aliasing miscompile of
-# VMAC's 32-bit ADD128/PMUL64 fallback, fixed upstream and released as
-# v1.0.0. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count
+# via live cross-AI collaboration to the type-punning in VMAC's 32-bit
+# ADD128/PMUL64 fallback, which GCC's -O2+ strict-aliasing optimizations are
+# entitled to break (defect in that source, not in GCC) -- measured by
+# omega-srep's maintainer, see build-plugins-linux.sh's srep comment. Fixed
+# upstream and released as v1.0.0. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count
 # tuning, byte-for-byte identical output verified by upstream) -- added the
 # same -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own
 # Makefile now uses, since this script compiles directly rather than via

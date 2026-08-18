@@ -128,8 +128,9 @@ Found and fixed while building/testing this port, not from any xtool release not
   decoded.
   **The cross-architecture bug is now genuinely fixed**, in omega-srep itself: isolated to a minimal repro
   entirely outside ytool (a win32 `srep`/omega-srep build rejecting valid win64-encoded content with its own
-  internal checksum-mismatch error), root-caused to a GCC strict-aliasing miscompile of VMAC's generic 128-bit
-  `ADD128`/`PMUL64` fallback on i686 (fixed with a targeted `#pragma GCC optimize("no-strict-aliasing")`, no
+  internal checksum-mismatch error), root-caused by omega-srep's maintainer to VMAC's generic 128-bit
+  `ADD128`/`PMUL64` fallback on i686, whose type-punning GCC's `-O2`+ strict-aliasing
+  optimisations are entitled to break -- the defect is in that source, not in GCC (fixed with a targeted `#pragma GCC optimize("no-strict-aliasing")`, no
   performance cost on other paths). Verified end-to-end: the original failing case now round-trips bit-exact,
   and the full cross-architecture regression matrix (357/357) passes with no `-dd1` failures anywhere. See
   [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written)

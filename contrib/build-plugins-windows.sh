@@ -88,8 +88,11 @@ fi
 # comment, and the wiki's Known-Issues-and-Limitations page, for the full
 # history) -- omega-srep is actively maintained by the same author. The bug
 # survived the initial migration too, but was root-caused via live cross-AI
-# collaboration to a GCC strict-aliasing miscompile of VMAC's 32-bit ADD128/
-# PMUL64 fallback, fixed upstream and released as v1.0.0. Verified: the full
+# collaboration to VMAC's 32-bit ADD128/PMUL64 fallback, whose type-punning
+# GCC's -O2+ strict-aliasing optimizations are entitled to break (defect in
+# that source, not in GCC) -- measured by omega-srep's maintainer; see
+# build-plugins-linux.sh's srep comment for the evidence. Fixed upstream and
+# released as v1.0.0. Verified: the full
 # cross-arch regression matrix (357/357) now passes with zero -dd1 failures.
 # Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count tuning,
 # byte-for-byte identical output verified by upstream) -- added the same
