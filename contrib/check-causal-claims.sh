@@ -19,7 +19,31 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-PAT='because|due to|root cause|the reason is|caused by|explains why|it is caused|porque|causa raiz'
+# (1) Frases causales: hablan de una decision TUYA. Casi siempre legitimas --
+#     sos la autoridad sobre tu propia decision -- pero son donde se cuela
+#     "es por X" cuando solo tenes "el sintoma se va si toco X".
+CAUSAL='because|due to|root cause|the reason is|caused by|explains why|it is caused|porque|causa raiz'
+
+# (2) Afirmaciones sobre OTRO sistema: el compilador, el loader, el kernel, una
+#     libreria ajena. Eso ya no es una decision tuya, es una afirmacion sobre el
+#     mundo, y requiere medicion. Casi ninguna es legitima sin instrumentar.
+#     Distincion de packJPG: la regla no es la palabra, es DE QUIEN HABLA la
+#     oracion. Por eso (1) da cientos de coincidencias casi todas buenas y (2)
+#     da un punado casi todas malas.
+#
+#     Van las DOS formas gramaticales, porque la del sujeto sola deja pasar la
+#     peor. Medido aca: la afirmacion mas daniña que tuvo este repo era
+#     "a GCC strict-aliasing miscompile of ...", que no tiene sujeto-verbo --
+#     el reclamo esta NOMINALIZADO, metido dentro de un sustantivo. Esa forma
+#     es mas grave que la del sujeto: presenta el mecanismo como una cosa que
+#     existe y tiene nombre, en vez de como una proposicion que se puede
+#     discutir.
+COMP='GCC|clang|MSVC|the compiler|the linker|the loader|the kernel|the scheduler|the allocator|the driver|the runtime|glibc|mingw|the optimi[sz]er|the CPU'
+# forma sujeto-verbo:  "GCC's optimizations miscompiled", "the loader does not service"
+AGENCY_SUBJ="(${COMP})('s)?[^.]{0,40}(miscompil|optimi[sz]e|reorder|inline|elide|strip|assume|ignore|drop|service|schedule)"
+# forma nominalizada:  "a GCC miscompile", "a kernel bug", "a loader failure"
+AGENCY_NOUN="(a|an|the) (${COMP})[^.]{0,30}(miscompile|bug|failure|quirk|misoptimi[sz]ation|defect)"
+PAT="${CAUSAL}|${AGENCY_SUBJ}|${AGENCY_NOUN}"
 RANGE="${1:-}"
 
 if [ -n "$RANGE" ]; then
@@ -29,7 +53,20 @@ else
   [ -z "$DIFF" ] && DIFF=$(git diff --unified=0 -- '*.pas' '*.dpr' '*.sh' '*.ps1' '*.md' '*.py' 2>/dev/null)
 fi
 
-HITS=$(printf '%s\n' "$DIFF" | grep '^+' | grep -v '^+++' | grep -inE "$PAT" || true)
+# Se buscan las coincidencias sobre las lineas agregadas Y sobre esas mismas
+# lineas UNIDAS. Medido aca: la afirmacion "which GCC's -O2+ strict-aliasing
+# optimizations miscompiled" estaba partida por el salto de linea del
+# comentario (76 columnas), asi que ninguna busqueda por linea la veia. Un
+# comentario envuelto parte la frase justo donde vive el reclamo.
+ADDED=$(printf '%s\n' "$DIFF" | grep '^+' | grep -v '^+++' || true)
+HITS=$(printf '%s\n' "$ADDED" | grep -inE "$PAT" || true)
+JOINED=$(printf '%s\n' "$ADDED" | sed 's/^+[[:space:]]*[#/]*[[:space:]]*//' | tr '\n' ' ')
+WRAPPED=$(printf '%s\n' "$JOINED" | grep -oiE "$PAT" | sort -u || true)
+if [ -n "$WRAPPED" ]; then
+  HITS="$HITS
+  [tambien, uniendo lineas envueltas]
+$(printf '%s\n' "$WRAPPED" | sed 's/^/    /')"
+fi
 
 if [ -z "$HITS" ]; then
   echo "sin frases causales en lo que estas por publicar."
