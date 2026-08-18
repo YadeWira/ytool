@@ -191,13 +191,20 @@ fi
 # Never accept "the crash is gone" as evidence on its own: check that the
 # .pmp actually got smaller (codec ran) in the same test.
 #
-# ROOT CAUSE of the posix row, found with packJPG's maintainer and reproduced
-# in pure C (no FreePascal involved): thread-creation ORDER relative to
-# LoadLibrary, not concurrency. packjpg.cpp has 87 `static thread_local`
+# REPRODUCIBLE TRIGGER for the posix row, found with packJPG's maintainer and
+# reproduced in pure C (no FreePascal involved). Deliberately not called a
+# root cause: what was measured is that the hang appears when the calling
+# threads are created BEFORE LoadLibrary and disappears when they are created
+# after -- 6/6 vs 0/6, thread count and concurrency held constant. The
+# mechanism behind that was never confirmed.
+#
+# What is verified alongside it: packjpg.cpp has 87 `static thread_local`
 # variables and the built DLL carries a real static TLS directory (a .tls
-# section). Threads that already existed when such a DLL is loaded are the
-# historically awkward case on Windows/mingw -- the loader does not service
-# them the way it services threads created afterwards.
+# section), and the fault lands in libstdc++'s __cxa_thread_atexit walker.
+# Static TLS in a LoadLibrary'd DLL is a known-awkward area on Windows/mingw,
+# which is consistent with the trigger but is not evidence for any particular
+# failure mode inside the loader -- nothing here inspected what the loader
+# does for pre-existing threads.
 #
 # IMPORTANT: that C reproduction does NOT explain ytool's own hang, and an
 # earlier version of this comment wrongly claimed it did. ytool loads the
