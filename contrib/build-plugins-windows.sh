@@ -242,7 +242,7 @@ fi
 #
 # Repro harness (4 C hosts, no dependencies): /home/forum/packjpg-dll-harness
 echo "==> packjpg (packjpg_dll.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
@@ -290,7 +290,7 @@ echo "==> fast-lzma2 (fast-lzma2.dll)"
 # packmp3 comment for the full story, including why v3.0c needs packMP2's
 # header (not its built library) even for this BUILD_LIB-only recipe.
 echo "==> packmp3 (packmp3_dll.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0d https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0f https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 [ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
   git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
@@ -365,7 +365,7 @@ echo "==> packpng (packpng.dll)"
 # which 2>/dev/null then hides. Today's assets store plain names, so this is
 # insurance against a layout change, not a live failure -- but the tar side of
 # exactly this already bit us once when packPNG changed its tarball layout.
-PACKPNG_VER="v2.0h"
+PACKPNG_VER="v2.0l"
 PACKPNG_NUM="${PACKPNG_VER#v}"
 if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win64-lib.zip" \
   -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then

@@ -101,7 +101,7 @@ echo "==> osrep"
 # identical pjglib_* symbol set (nm -D, diffed against the previous v5.0
 # build, zero differences) -- drop-in, no other changes needed.
 echo "==> packjpg (libpackjpg.so)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
   -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
@@ -199,7 +199,7 @@ fi
 # under BUILD_LIB actually calls into it, so only the header needs to be
 # present at compile time, not the built packMP2 library itself.
 echo "==> packmp3 (libpackmp3.so)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0d https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0f https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 [ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
   git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 if [ -d "$CSRC/packMP3" ]; then
@@ -218,7 +218,7 @@ echo "==> packpng (libpackpng.so)"
 # Version appears once. It used to be spelled twice -- interpolated into the
 # URL path and hardcoded into the asset filename -- so bumping the variable
 # alone produced a 404 for an asset path that still named the OLD version.
-PACKPNG_VER="v2.0h"
+PACKPNG_VER="v2.0l"
 PACKPNG_NUM="${PACKPNG_VER#v}"
 # -f matters: without it curl treats a 404 as success and writes the 9-byte
 # body "Not Found" to the output file, which then passes the -s (non-empty)

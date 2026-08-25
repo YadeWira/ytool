@@ -146,7 +146,7 @@ fi
 # LoadLibrary fails with 126 and the codec silently degrades to literal
 # storage while every round-trip still passes. See the fuller comment there.
 echo "==> packjpg (packjpg_dll-x86.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0d https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll-x86.dll" ) \
@@ -194,7 +194,7 @@ echo "==> fast-lzma2 (fast-lzma2-x86.dll)"
 # needs packMP2's header, not its built library, even for this BUILD_LIB
 # recipe).
 echo "==> packmp3 (packmp3_dll-x86.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0d https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
+[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0f https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
 [ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
   git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
@@ -290,7 +290,7 @@ fi
 echo "==> packpng (packpng-x86.dll)"
 # See build-plugins-windows.sh's packpng step for the rationale on -f, the
 # single-spelled version, and the quoted-wildcard extraction.
-PACKPNG_VER="v2.0h"
+PACKPNG_VER="v2.0l"
 PACKPNG_NUM="${PACKPNG_VER#v}"
 if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win32-lib.zip" \
   -o "$CSRC/packpng-lib-x86.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib-x86.zip" ]; then
