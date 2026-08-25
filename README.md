@@ -207,6 +207,14 @@ Run `./ytool precomp` with no arguments for the full flag reference.
 whatever output path you give it. It detects its own containers by magic
 bytes, not by filename.
 
+The convention is this project's own, and not something inherited from
+`xtool`: the original 2022 source import (`098e8c4`) does not contain the
+string anywhere in the tree, and `.pmp` first appears here in `a17215f`
+(2026-06-12), the commit that added the regression suite. Which means it was
+adopted while packMP3 was still writing `.pmp` itself -- the rename described
+below landed thirteen days later. Why those three letters were chosen is not
+recorded anywhere in the history.
+
 Worth stating explicitly because the name is not unique: **packMP3 also wrote
 `.pmp` files, up to and including v1.x**. It renamed its own archives to
 `.pm3` in commit `f5cf864` (2026-06-25), first shipped in v2.0 — a rename
