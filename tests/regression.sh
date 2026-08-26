@@ -111,6 +111,16 @@ fi
 # legitimamente cuantos streams detecta, y un umbral exacto se rompe con una
 # mejora en vez de con una regresion. Los conteos medidos hoy estan al lado
 # como referencia, no como condicion.
+
+# LIMITE CONOCIDO -- este assert NO corre en Windows. El contador de streams se
+# lee de la salida de ytool, y en Windows esa salida va directo a la consola:
+# no la captura ni PowerShell redirigiendo, ni cmd.exe redirigiendo a archivo
+# (probadas las dos; solo se obtiene el banner). Por eso los smoke tests de
+# Windows verifican engagement comparando el tamano del .pmp contra el que
+# produce un codec que no puede matchear -- un almacenamiento literal pesa
+# entrada+~50 bytes, uno enganchado no. Es equivalente en poder pero hay que
+# hacerlo a mano; si alguien encuentra como capturar esa salida, este assert
+# se puede activar tambien alla y conviene hacerlo.
 CODEC_EXPECT="
 20_zlib_streams.bin|-mzlib|6
 20_zlib_streams.bin|-mpreflate|6
