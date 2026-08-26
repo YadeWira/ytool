@@ -126,6 +126,20 @@ begin
   // ser LZ4MID, un algoritmo distinto: el alias se rompe y el nivel 1 deja de
   // estar cubierto. Medido: un .lz4 hecho con las opciones por defecto del CLI
   // (que usa el modo rapido) daba 0/1 streams y se guardaba literal, sin error.
+  //
+  // Limitacion conocida en 32-bit, medida con los binarios reales sobre una
+  // matriz de bloque x nivel x dependencia: el nivel 1 solo se reproduce en
+  // x86 cuando el tipo de tabla termina siendo byU16 (bloques de 64KB
+  // independientes). El resto de los casos de nivel 1 quedan en literal ahi,
+  // mientras que en x64 enganchan todos. Es el guard de lz4.c:808
+  // -- `if ((sizeof(reg_t)==8) && (tableType != byU16))` -- que elige
+  // LZ4_hash5 en 64-bit y LZ4_hash4 en 32-bit, asi que el match finder del
+  // camino rapido encuentra otras posiciones y emite otros bytes. El camino HC
+  // no pasa por ahi: los niveles 3..12 enganchan igual en las dos.
+  //
+  // No hay nada que arreglar de este lado: un .lz4 comprimido en modo rapido
+  // por un lz4 de 64-bit no es reproducible por uno de 32-bit. El fallback a
+  // literal es correcto y reversible, solo comprime menos.
   for I := 1 to 12 do
     Insert(I, Options, Length(Options));
   for X := Low(SOList) to High(SOList) do
