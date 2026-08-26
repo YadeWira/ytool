@@ -194,17 +194,37 @@ begin
           // 4/4. Bit 2 = checksum de contenido; bits 6..7 = campo de tamano.
           SetBits(SI.Option, Ord((Input + Pos + 4)^ and $04 <> 0), 27, 1);
           SetBits(SI.Option, ((Input + Pos + 4)^ shr 6) and $03, 28, 2);
-          // HUECO CONOCIDO, medido y no cerrado: sobre un barrido de nivel x
-          // checksum x --long, esto lleva 6 casos de 24 de literal a procesado
-          // y no regresa ninguno, pero 12 siguen en literal. Los que quedan son
-          // los --long de niveles bajos y TODO nivel 9 y 15, y depende del
-          // contenido: los mismos niveles sobre otra entrada si se reproducen.
-          // Descartado que sea el windowLog -- Z_WINDOWLOG es 0, que en zstd ya
-          // significa "derivalo vos", asi que el codec no lo estaba forzando;
-          // probado explicitamente y el conteo no cambio. Queda algun otro
-          // parametro de compresion que el frame no declara y el codec no
-          // reproduce. Es seguro: esos streams se guardan literales y el
-          // round-trip sigue siendo bit-exacto, solo comprimen menos.
+          // HUECO CONOCIDO, y no es un parametro: es COMO el productor le dio
+          // los datos a zstd. Quedan dos casos medidos que siguen en literal.
+          //
+          // 1) Una sola pasada contra streaming por chunks, niveles 5..15.
+          //    El CLI alimenta ZSTD_compressStream2 en trozos de
+          //    ZSTD_CStreamInSize (131072 bytes); aca se llama ZSTD_compress2
+          //    sobre el buffer entero. Reproducido con libzstd puro, sin ytool
+          //    de por medio: los dos bitstreams difieren en 5..15, y el chunked
+          //    es el que coincide con el CLI. Identicos hasta 524288 bytes de
+          //    entrada (4 chunks), divergen desde ~530000 (5 chunks). El motivo
+          //    interno de libzstd no se establecio.
+          // 2) Frames sin campo de tamano (entrada por pipe: FCS_flag=0,
+          //    single_segment=0). Aca siempre se re-encodea con un srcSize
+          //    conocido, asi que el framing no coincide. Guardar el flag no
+          //    alcanza -- esta guardado y el caso sigue fallando.
+          //
+          // NO "ARREGLAR" ESTO RUTEANDO TODO POR STREAMING: se probó y se
+          // refuto con tres verificaciones independientes. Rompe el caso de una
+          // sola pasada, que es como escribe zstd una aplicacion que llama
+          // ZSTD_compress() sobre un buffer -- la forma dominante en el
+          // material que ytool procesa. Medido: 9 de 20 casos que hoy andan
+          // pasan a literal. Y registrar nbWorkers sin chequear el retorno de
+          // ZSTD_CCtx_setParameter corrompe en una libzstd compilada sin
+          // ZSTD_MULTITHREAD, donde esa llamada falla en silencio.
+          //
+          // Descartado ademas el windowLog: Z_WINDOWLOG es 0, que zstd ya lee
+          // como "derivalo vos", asi que el codec no lo estaba forzando.
+          // Probado explicitamente y el conteo no se movio.
+          //
+          // Todo esto es seguro: esos streams se guardan literales y el
+          // round-trip sigue siendo bit-exacto, solo no comprimen.
           SI.Status := TStreamStatus.None;
           Funcs^.LogScan1(ZSTDCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
             SI.OldSize, SI.NewSize);
