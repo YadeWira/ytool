@@ -60,7 +60,7 @@ trap 'rm -rf "$WORK"' EXIT
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mpackjpg" "-mbrunsli" \
+  "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mzstd" "-mpackjpg" "-mbrunsli" \
   "-mpackmp3" "-mlzma")
 
 fail=0; pass=0; err=0; dead=0
@@ -139,6 +139,8 @@ CODEC_EXPECT="
 73_lz4f_crc.bin|-mlz4f|1
 74_lz4f_64k.bin|-mlz4f|1
 75_lz4f_fast.bin|-mlz4f|1
+76_zstd_levels.bin|-mzstd|4
+77_zstd_nocheck.bin|-mzstd|1
 71_jpeg_min.bin|-mpackjpg|1
 71_jpeg_min.bin|-mbrunsli|1
 72_mp3_min.bin|-mpackmp3|1

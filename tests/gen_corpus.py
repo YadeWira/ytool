@@ -91,8 +91,8 @@ def make_lz4f(seed):
     return lz4.frame.compress(text)
 
 
-def _lz4_discriminating_payload(seed):
-    """Payload that different LZ4 strategies actually compress differently.
+def _discriminating_payload(seed):
+    """Payload that different compression strategies actually compress differently.
 
     A repeated literal (the obvious choice) does not work here: 112 KB of one
     repeated phrase collapses to ~500 bytes under every strategy and every
@@ -149,7 +149,7 @@ def make_lz4f_64k(seed):
     # 2..12), asi que este archivo aisla el bug del bound. Con el nivel por
     # defecto seria byte-identico a 75_lz4f_fast.bin y los dos casos probarian
     # lo mismo.
-    return lz4.frame.compress(_lz4_discriminating_payload(seed),
+    return lz4.frame.compress(_discriminating_payload(seed),
                               content_checksum=True, block_size=4,
                               compression_level=9)
 
@@ -167,9 +167,55 @@ def make_lz4f_fast(seed):
         import lz4.frame
     except ImportError:
         return None
-    return lz4.frame.compress(_lz4_discriminating_payload(seed),
+    return lz4.frame.compress(_discriminating_payload(seed),
                               content_checksum=True, compression_level=1,
                               block_size=4)
+
+
+def make_zstd_frames(seed):
+    """Zstd frames across several levels, in one file.
+
+    -mzstd shipped with zero coverage: the codec existed and the suite never
+    named it once, so nobody would have noticed it stop working -- and it had.
+    It detected frames and processed none of them, storing every one literally,
+    which round-trips fine and looks like success.
+
+    Levels 1/3/9/19 in one file so the level search has to find each of them,
+    and on _discriminating_payload because a repeated literal collapses to the
+    same 45 bytes at every level -- measured -- which would let a search that
+    always guesses one level pass anyway."""
+    try:
+        import zstandard
+    except ImportError:
+        return None
+    data = _discriminating_payload(seed)
+    out = b''
+    for lvl in (1, 3, 9, 19):
+        # write_checksum=True on purpose: it is what the zstd CLI writes by
+        # default, and the python module's default is the opposite. Measured:
+        # frames without the checksum are processed 4/4 while every CLI-written
+        # frame reports 0/1, so a corpus built on the module's defaults would
+        # have passed while the case that reaches real users stayed broken.
+        # Same trap 73_lz4f_crc.bin was added for.
+        out += zstandard.ZstdCompressor(level=lvl,
+                                        write_checksum=True).compress(data)
+    return out
+
+
+def make_zstd_nocheck(seed):
+    """A zstd frame with no content checksum and no content-size field.
+
+    Both are frame-header options the codec has to record and put back; the
+    analogous lz4 defect was exactly a frame descriptor bit that was not
+    restored, so the re-encode never matched and the stream fell back to a
+    literal store without an error."""
+    try:
+        import zstandard
+    except ImportError:
+        return None
+    c = zstandard.ZstdCompressor(level=6, write_checksum=False,
+                                 write_content_size=False)
+    return c.compress(_discriminating_payload(seed))
 
 
 def make_lzma_alone(seed):
@@ -358,6 +404,17 @@ def main():
     lz4ffast = make_lz4f_fast(SEED)
     if lz4ffast is not None:
         write(d, '75_lz4f_fast.bin', lz4ffast)
+
+    zf = make_zstd_frames(SEED)
+    if zf is not None:
+        write(d, '76_zstd_levels.bin', zf)
+    else:
+        print('AVISO: falta el modulo python "zstandard" -- sin cobertura de -mzstd',
+              file=sys.stderr)
+
+    zn = make_zstd_nocheck(SEED)
+    if zn is not None:
+        write(d, '77_zstd_nocheck.bin', zn)
 
     jpeg = make_jpeg(SEED)
     if jpeg is not None:

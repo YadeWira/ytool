@@ -184,6 +184,27 @@ begin
           SetBits(SI.Option, ZFastMode, 8, 1);
           SetBits(SI.Option, ZWindowLog, 9, 5);
           SetBits(SI.Option, ZBlockSize, 14, 13);
+          // Descriptor del frame: el byte que sigue al magic. Hasta aca solo se
+          // guardaban los defaults del codec y el frame NUNCA se miraba, asi que
+          // el re-encode salia con los defaults de la libreria, entre ellos
+          // ZSTD_c_checksumFlag=0. El CLI de zstd escribe el checksum por
+          // defecto, asi que sus bytes nunca coincidian, CompareMem fallaba y el
+          // stream terminaba guardado literal sin ningun error. Medido sobre el
+          // mismo binario: material con checksum 0/4 procesados, sin checksum
+          // 4/4. Bit 2 = checksum de contenido; bits 6..7 = campo de tamano.
+          SetBits(SI.Option, Ord((Input + Pos + 4)^ and $04 <> 0), 27, 1);
+          SetBits(SI.Option, ((Input + Pos + 4)^ shr 6) and $03, 28, 2);
+          // HUECO CONOCIDO, medido y no cerrado: sobre un barrido de nivel x
+          // checksum x --long, esto lleva 6 casos de 24 de literal a procesado
+          // y no regresa ninguno, pero 12 siguen en literal. Los que quedan son
+          // los --long de niveles bajos y TODO nivel 9 y 15, y depende del
+          // contenido: los mismos niveles sobre otra entrada si se reproducen.
+          // Descartado que sea el windowLog -- Z_WINDOWLOG es 0, que en zstd ya
+          // significa "derivalo vos", asi que el codec no lo estaba forzando;
+          // probado explicitamente y el conteo no cambio. Queda algun otro
+          // parametro de compresion que el frame no declara y el codec no
+          // reproduce. Es seguro: esos streams se guardan literales y el
+          // round-trip sigue siendo bit-exacto, solo comprimen menos.
           SI.Status := TStreamStatus.None;
           Funcs^.LogScan1(ZSTDCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
             SI.OldSize, SI.NewSize);
@@ -286,6 +307,10 @@ begin
                 IfThen(GetBits(StreamInfo^.Option, 8, 1) = 0, I, -I));
               ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_windowLog,
                 GetBits(StreamInfo^.Option, 9, 5));
+              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
+                GetBits(StreamInfo^.Option, 27, 1));
+              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
+                Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0));
               if Assigned(ZSTD_compress2) then
                 Res1 := ZSTD_compress2(cctx[Instance], Buffer,
                   StreamInfo^.NewSize, NewInput, StreamInfo^.NewSize)
@@ -414,6 +439,12 @@ begin
             -GetBits(StreamInfo.Option, 3, 5)));
           ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_windowLog,
             GetBits(StreamInfo.Option, 9, 5));
+          // Simetrico con Process: sin esto el decode reconstruiria un frame
+          // distinto del que se codifico.
+          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
+            GetBits(StreamInfo.Option, 27, 1));
+          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
+            Ord(GetBits(StreamInfo.Option, 28, 2) <> 0));
           if Assigned(ZSTD_compress2) then
             Res1 := ZSTD_compress2(cctx[Instance], Buffer, StreamInfo.NewSize,
               Input, StreamInfo.NewSize)
