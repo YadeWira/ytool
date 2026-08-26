@@ -120,13 +120,19 @@ begin
       cctx2[X] := nil;
   end;
   SetLength(Options, 0);
-  for I := 2 to 12 do
+  // Desde 1, no desde 2. Con lz4 1.9.4 los niveles 0/1/2 caian todos por
+  // debajo de LZ4HC_CLEVEL_MIN=3 y emitian los mismos bytes, asi que probar el
+  // 2 cubria el 1 de arriba. En 1.10.0 CLEVEL_MIN bajo a 2 y el nivel 2 pasa a
+  // ser LZ4MID, un algoritmo distinto: el alias se rompe y el nivel 1 deja de
+  // estar cubierto. Medido: un .lz4 hecho con las opciones por defecto del CLI
+  // (que usa el modo rapido) daba 0/1 streams y se guardaba literal, sin error.
+  for I := 1 to 12 do
     Insert(I, Options, Length(Options));
   for X := Low(SOList) to High(SOList) do
     if SOList[X, LZ4HC_CODEC].Count = 0 then
       SOList[X, LZ4HC_CODEC].Update(Options);
   SetLength(Options, 0);
-  for I := 2 to 12 do
+  for I := 1 to 12 do
     Insert(I, Options, Length(Options));
   for X := Low(SOList) to High(SOList) do
     if SOList[X, LZ4F_CODEC].Count = 0 then
@@ -323,6 +329,35 @@ begin
   end;
 end;
 
+// Rellena el descriptor de frame desde los bits de Option.
+//
+// El descriptor es propiedad del stream, no del candidato de nivel, asi que se
+// puede armar antes de la busqueda -- y hace falta antes, porque
+// LZ4F_compressFrameBound depende de el.
+//
+// Existe como funcion unica a proposito. Antes el descriptor se armaba inline
+// para comprimir, pero el bound se calculaba aparte pasando nil: con checksum
+// de contenido el bound queda 4 bytes corto, LZ4F_compressFrame rechaza de
+// entrada con ERROR_dstMaxSize_tooSmall, y la busqueda fallaba en los 11
+// niveles. El stream terminaba guardado literal, sin error visible. Se veia en
+// cualquier .lz4 del CLI con bloques de 64KB (blockSizeID 4), que es lo que
+// produce para entradas chicas. Con un solo lugar que arme el descriptor, el
+// bound y la compresion no pueden volver a discrepar.
+procedure LZ4FillFrameInfo(var Prefs: LZ4F_preferences_t; Option: Integer;
+  NewSize: Integer);
+begin
+  FillChar(Prefs, SizeOf(LZ4F_preferences_t), 0);
+  Prefs.frameInfo.blockSizeID :=
+    LZ4F_blockSizeID_t(GetBits(Option, 15, 13) + 4);
+  Prefs.frameInfo.blockMode := LZ4F_blockMode_t(GetBits(Option, 14, 1));
+  Prefs.frameInfo.contentChecksumFlag :=
+    LZ4F_contentChecksum_t(GetBits(Option, 28, 1));
+  Prefs.frameInfo.blockChecksumFlag :=
+    LZ4F_blockChecksum_t(GetBits(Option, 29, 1));
+  if GetBits(Option, 30, 1) = 1 then
+    Prefs.frameInfo.contentSize := NewSize;
+end;
+
 function LZ4Process(Instance, Depth: Integer; OldInput, NewInput: Pointer;
   StreamInfo: PStrInfo2; Output: _PrecompOutput; Funcs: PPrecompFuncs): Boolean;
 var
@@ -340,7 +375,13 @@ begin
   X := GetBits(StreamInfo^.Option, 0, 3);
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
-  Y := LZ4F_compressFrameBound(StreamInfo^.NewSize, nil);
+  if X = LZ4F_CODEC then
+  begin
+    LZ4FillFrameInfo(LZ4FT, StreamInfo^.Option, StreamInfo^.NewSize);
+    Y := LZ4F_compressFrameBound(StreamInfo^.NewSize, @LZ4FT);
+  end
+  else
+    Y := LZ4F_compressFrameBound(StreamInfo^.NewSize, nil);
   Buffer := Funcs^.Allocator(Instance, Y);
   SOList[Instance][X].Index := 0;
   while SOList[Instance][X].Get(I) >= 0 do
@@ -427,22 +468,10 @@ begin
         end;
       LZ4F_CODEC:
         begin
-          FillChar(LZ4FT, SizeOf(LZ4F_preferences_t), 0);
+          // Mismo descriptor con el que se calculo Y mas arriba; solo cambia
+          // el nivel, que no entra en el bound.
+          LZ4FillFrameInfo(LZ4FT, StreamInfo^.Option, StreamInfo^.NewSize);
           LZ4FT.compressionLevel := I;
-          LZ4FT.frameInfo.blockSizeID :=
-            LZ4F_blockSizeID_t(GetBits(StreamInfo^.Option, 15, 13) + 4);
-          LZ4FT.frameInfo.blockMode :=
-            LZ4F_blockMode_t(GetBits(StreamInfo^.Option, 14, 1));
-          // Restore the rest of the frame descriptor (bits 28..30). Leaving
-          // these zeroed made every frame carrying a content checksum -- the
-          // lz4 CLI default -- re-encode to different bytes, fail CompareMem
-          // and silently fall back to storing the stream literally.
-          LZ4FT.frameInfo.contentChecksumFlag :=
-            LZ4F_contentChecksum_t(GetBits(StreamInfo^.Option, 28, 1));
-          LZ4FT.frameInfo.blockChecksumFlag :=
-            LZ4F_blockChecksum_t(GetBits(StreamInfo^.Option, 29, 1));
-          if GetBits(StreamInfo^.Option, 30, 1) = 1 then
-            LZ4FT.frameInfo.contentSize := StreamInfo^.NewSize;
           Params := 'l' + I.ToString + ':' + 'b' +
             (GetBits(StreamInfo^.Option, 15, 13) + 4).ToString + ':' + 'd' +
             GetBits(StreamInfo^.Option, 14, 1).ToString;
@@ -488,7 +517,7 @@ var
   X: Integer;
   Res1: NativeInt;
   Res2: NativeUInt;
-  A, B: Integer;
+  A, B, Cap: Integer;
   LZ4FT: LZ4F_preferences_t;
 begin
   Result := False;
@@ -496,16 +525,24 @@ begin
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
   Params := '';
-  Buffer := Funcs^.Allocator(Instance,
-    LZ4F_compressFrameBound(StreamInfo.NewSize, nil));
+  // Una sola capacidad para el buffer y para el dstCapacity que se le pasa a
+  // lz4. Antes eran dos llamadas independientes que tenian que coincidir; si
+  // se agranda una sin la otra, o se sobreasigna o se desborda.
+  if X = LZ4F_CODEC then
+  begin
+    LZ4FillFrameInfo(LZ4FT, StreamInfo.Option, StreamInfo.NewSize);
+    Cap := LZ4F_compressFrameBound(StreamInfo.NewSize, @LZ4FT);
+  end
+  else
+    Cap := LZ4F_compressFrameBound(StreamInfo.NewSize, nil);
+  Buffer := Funcs^.Allocator(Instance, Cap);
   case X of
     LZ4_CODEC:
       begin
         Params := 'a' + GetBits(StreamInfo.Option, 7, 7).ToString + ':' + 'b' +
           GetBits(StreamInfo.Option, 15, 13).ToString;
         if GetBits(StreamInfo.Option, 15, 13) = 0 then
-          Res1 := LZ4_compress_fast(Input, Buffer, StreamInfo.NewSize,
-            LZ4F_compressFrameBound(StreamInfo.NewSize, nil),
+          Res1 := LZ4_compress_fast(Input, Buffer, StreamInfo.NewSize, Cap,
             GetBits(StreamInfo.Option, 7, 7))
         else
         begin
@@ -535,8 +572,7 @@ begin
         Params := 'l' + GetBits(StreamInfo.Option, 3, 4).ToString + ':' + 'b' +
           GetBits(StreamInfo.Option, 15, 13).ToString;
         if GetBits(StreamInfo.Option, 15, 13) = 0 then
-          Res1 := LZ4_compress_HC(Input, Buffer, StreamInfo.NewSize,
-            LZ4F_compressFrameBound(StreamInfo.NewSize, nil),
+          Res1 := LZ4_compress_HC(Input, Buffer, StreamInfo.NewSize, Cap,
             GetBits(StreamInfo.Option, 3, 4))
         else
         begin
@@ -580,9 +616,8 @@ begin
         Params := 'l' + GetBits(StreamInfo.Option, 3, 4).ToString + ':' + 'b' +
           (GetBits(StreamInfo.Option, 15, 13) + 4).ToString + ':' + 'd' +
           GetBits(StreamInfo.Option, 14, 1).ToString;
-        Res1 := LZ4F_compressFrame(Buffer,
-          LZ4F_compressFrameBound(StreamInfo.NewSize, nil), Input,
-          StreamInfo.NewSize, @LZ4FT);
+        Res1 := LZ4F_compressFrame(Buffer, Cap, Input, StreamInfo.NewSize,
+          @LZ4FT);
       end;
   end;
   Funcs^.LogRestore(LZ4Codecs[GetBits(StreamInfo.Option, 0, 3)], PChar(Params),

@@ -8,6 +8,7 @@ sizes that cross the 16MB chunk boundary, incompressible data, and mixes. Determ
 Usage:  python3 tests/gen_corpus.py <output_dir>
 """
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -90,6 +91,24 @@ def make_lz4f(seed):
     return lz4.frame.compress(text)
 
 
+def _lz4_discriminating_payload(seed):
+    """Payload that different LZ4 strategies actually compress differently.
+
+    A repeated literal (the obvious choice) does not work here: 112 KB of one
+    repeated phrase collapses to ~500 bytes under every strategy and every
+    level, so a file built from it round-trips no matter which level the search
+    finds -- it cannot tell a working level search from a broken one. Measured:
+    with the seed reverted to the old 2..12, a repeated-literal frame still
+    reported 1/1 while these two report 0/1.
+
+    A small vocabulary in random order keeps the data compressible (~55%) while
+    leaving the match finder real decisions to make, which is what makes the
+    strategies diverge."""
+    rnd = random.Random(seed)
+    words = [b'w%03d' % i for i in range(200)]
+    return b' '.join(rnd.choice(words) for _ in range(30000))
+
+
 def make_lz4f_crc(seed):
     """LZ4 frame WITH a content checksum -- what the lz4 CLI writes by default.
 
@@ -104,12 +123,53 @@ def make_lz4f_crc(seed):
     except ImportError:
         return None
     text = (b'lz4 crc frame payload %d ' % seed) * 4000
-    # block_size=7 (4MB, the lz4 CLI's own default) on purpose: the python
-    # module defaults to 64KB blocks, and 64KB frames hit a separate, older
-    # limitation of the level search that has nothing to do with checksums --
-    # this file exists to cover the checksum path, so it must not fail for an
-    # unrelated reason.
+    # block_size=7 (4MB) here; 74_lz4f_64k.bin covers the 64KB case separately.
     return lz4.frame.compress(text, content_checksum=True, block_size=7)
+
+
+def make_lz4f_64k(seed):
+    """LZ4 frame with a content checksum AND 64KB blocks.
+
+    Split out because that combination was declined outright for a reason
+    unrelated to the checksum bits: PrecompLZ4 sized the destination buffer
+    with LZ4F_compressFrameBound(n, nil) but compressed with prefs that enable
+    the checksum, which adds exactly 4 bytes to the required bound, so
+    LZ4F_compressFrame refused before compressing and all 11 candidate levels
+    reported failure. The stream was stored literally and the suite stayed
+    green, because a literal store is still reversible.
+
+    An earlier version of this corpus dodged the case by pinning block_size=7
+    and calling it a pre-existing limitation of the level search. It was not a
+    limitation, it was this bug, and nothing covered it."""
+    try:
+        import lz4.frame
+    except ImportError:
+        return None
+    # Nivel 9 a proposito: es alcanzable por la busqueda vieja (que sembraba
+    # 2..12), asi que este archivo aisla el bug del bound. Con el nivel por
+    # defecto seria byte-identico a 75_lz4f_fast.bin y los dos casos probarian
+    # lo mismo.
+    return lz4.frame.compress(_lz4_discriminating_payload(seed),
+                              content_checksum=True, block_size=4,
+                              compression_level=9)
+
+
+def make_lz4f_fast(seed):
+    """LZ4 frame at the CLI's default compression level (the fast path).
+
+    The level search seeded candidates 2..12. Under lz4 1.9.4 that was enough,
+    because levels 0, 1 and 2 all fell below LZ4HC_CLEVEL_MIN=3 and emitted the
+    same bytes, so probing 2 covered 1. lz4 1.10.0 lowered CLEVEL_MIN to 2 and
+    made level 2 a distinct algorithm (LZ4MID), which broke the alias and left
+    level 1 unreachable -- so a .lz4 written with no level flag at all, the most
+    common kind, stopped being recognised."""
+    try:
+        import lz4.frame
+    except ImportError:
+        return None
+    return lz4.frame.compress(_lz4_discriminating_payload(seed),
+                              content_checksum=True, compression_level=1,
+                              block_size=4)
 
 
 def make_lzma_alone(seed):
@@ -290,6 +350,14 @@ def main():
     lz4fc = make_lz4f_crc(SEED)
     if lz4fc is not None:
         write(d, '73_lz4f_crc.bin', lz4fc)
+
+    lz4f64 = make_lz4f_64k(SEED)
+    if lz4f64 is not None:
+        write(d, '74_lz4f_64k.bin', lz4f64)
+
+    lz4ffast = make_lz4f_fast(SEED)
+    if lz4ffast is not None:
+        write(d, '75_lz4f_fast.bin', lz4ffast)
 
     jpeg = make_jpeg(SEED)
     if jpeg is not None:

@@ -127,6 +127,8 @@ CODEC_EXPECT="
 63_lzma_alone.bin|-mlzma|1
 70_lz4f.bin|-mlz4f|1
 73_lz4f_crc.bin|-mlz4f|1
+74_lz4f_64k.bin|-mlz4f|1
+75_lz4f_fast.bin|-mlz4f|1
 71_jpeg_min.bin|-mpackjpg|1
 71_jpeg_min.bin|-mbrunsli|1
 72_mp3_min.bin|-mpackmp3|1
