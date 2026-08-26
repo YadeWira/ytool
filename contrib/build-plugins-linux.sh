@@ -17,6 +17,14 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 CSRC="$ROOT/contrib/.csrc"
 mkdir -p "$CSRC"
+
+# Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
+# puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
+# que aplicarse tambien sobre un checkout que ya existe.
+PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
+FLZMA2_REF="a793db99fade2957d2453035390f97e573acecb2"
+PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
+BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
 CXX="$(command -v clang++ || command -v g++)"
 CC="$(command -v gcc || command -v clang || command -v cc)"
 
@@ -98,7 +106,7 @@ fi
 # own binary is genuinely named `osrep` (its Makefile installs it as such) --
 # renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
 echo "==> osrep"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.5 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+pin_repo https://github.com/YadeWira/omega-srep "$CSRC/omega-srep" v1.0.5
 ( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
   && echo "   OK -> osrep64" || echo "   (osrep fallo)"
 
@@ -133,7 +141,7 @@ echo "==> osrep"
 # identical pjglib_* symbol set (nm -D, diffed against the previous v5.0
 # build, zero differences) -- drop-in, no other changes needed.
 echo "==> packjpg (libpackjpg.so)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+pin_repo https://github.com/YadeWira/packJPG "$CSRC/packJPG" v5.0f
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
   -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
@@ -141,7 +149,7 @@ echo "==> packjpg (libpackjpg.so)"
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (libpreflate.so)"
-[ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
+pin_repo https://github.com/deus-libri/preflate "$CSRC/preflate" "$PREFLATE_REF"
 if [ -d "$CSRC/preflate" ]; then
   cp "$ROOT/contrib/preflate_wrap.cpp" "$CSRC/preflate/preflate_wrap.cpp"
   # Upstream data race, patched here (not fixable upstream -- deus-libri/preflate
@@ -172,14 +180,14 @@ fi
 
 # ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
 echo "==> fast-lzma2 (libfast-lzma2.so)"
-[ -d "$CSRC/fast-lzma2" ] || git clone --depth 1 https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2"
+pin_repo https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2" "$FLZMA2_REF"
 ( cd "$CSRC/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
   "$CC" -shared -fPIC -O2 *.c -lpthread -o "$ROOT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
 # ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
 echo "==> brunsli (libbrunsli.so)"
-[ -d "$CSRC/brunsli" ] || git clone --depth 1 --recursive https://github.com/google/brunsli "$CSRC/brunsli"
+pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
   ( cd "$CSRC/brunsli" && mkdir -p out && cd out && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. >/dev/null 2>&1 && \
@@ -231,9 +239,9 @@ fi
 # under BUILD_LIB actually calls into it, so only the header needs to be
 # present at compile time, not the built packMP2 library itself.
 echo "==> packmp3 (libpackmp3.so)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0f https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
-[ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
-  git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
+pin_repo https://github.com/YadeWira/packMP3 "$CSRC/packMP3" v3.0f
+pin_repo https://github.com/YadeWira/packMP2 \
+  "$CSRC/packMP3/source/vendor/packmp2-src" "$PACKMP2_REF"
 if [ -d "$CSRC/packMP3" ]; then
   ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
     source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \

@@ -23,6 +23,16 @@ ROOT="$(pwd)"
 CSRC="$ROOT/contrib/.csrc"
 mkdir -p "$CSRC"
 
+# Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
+# puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
+# que aplicarse tambien sobre un checkout que ya existe.
+PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
+FLZMA2_REF="a793db99fade2957d2453035390f97e573acecb2"
+FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
+WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
+PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
+BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
+
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
 # lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
@@ -84,7 +94,7 @@ if [ -d "$CSRC/lz4/lib" ]; then
 fi
 
 echo "==> zlib1.dll (from source, zlib 1.3.1)"
-[ -d "$CSRC/zlib" ] || git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git "$CSRC/zlib"
+pin_repo https://github.com/madler/zlib "$CSRC/zlib" v1.3.1
 if [ -d "$CSRC/zlib" ]; then
   ( cd "$CSRC/zlib" && rm -f *.o && "$CC" -c -O2 -DZLIB_DLL adler32.c compress.c crc32.c deflate.c \
       gzclose.c gzlib.c gzread.c gzwrite.c infback.c inffast.c inflate.c inftrees.c trees.c \
@@ -133,7 +143,7 @@ fi
 # genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
 # constant to match.
 echo "==> osrep (osrep.exe)"
-[ -d "$CSRC/omega-srep" ] || git clone --depth 1 --branch v1.0.5 https://github.com/YadeWira/omega-srep "$CSRC/omega-srep"
+pin_repo https://github.com/YadeWira/omega-srep "$CSRC/omega-srep" v1.0.5
 if [ -d "$CSRC/omega-srep" ]; then
   ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
@@ -255,7 +265,7 @@ fi
 #
 # Repro harness (4 C hosts, no dependencies): /home/forum/packjpg-dll-harness
 echo "==> packjpg (packjpg_dll.dll)"
-[ -d "$CSRC/packJPG" ] || git clone --depth 1 --branch v5.0f https://github.com/YadeWira/packJPG "$CSRC/packJPG"
+pin_repo https://github.com/YadeWira/packJPG "$CSRC/packJPG" v5.0f
 ( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
   -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
@@ -263,7 +273,7 @@ echo "==> packjpg (packjpg_dll.dll)"
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (preflate_dll.dll)"
-[ -d "$CSRC/preflate" ] || git clone --depth 1 https://github.com/deus-libri/preflate "$CSRC/preflate"
+pin_repo https://github.com/deus-libri/preflate "$CSRC/preflate" "$PREFLATE_REF"
 if [ -d "$CSRC/preflate" ]; then
   cp "$ROOT/contrib/preflate_wrap.cpp" "$CSRC/preflate/preflate_wrap.cpp"
   # Unsynchronized check-then-init data race in upstream task_pool.h, patched
@@ -285,7 +295,7 @@ fi
 
 # ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
 echo "==> fast-lzma2 (fast-lzma2.dll)"
-[ -d "$CSRC/fast-lzma2" ] || git clone --depth 1 https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2"
+pin_repo https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2" "$FLZMA2_REF"
 ( cd "$CSRC/fast-lzma2" && "$CC" -shared -O2 -DFL2_DLL_EXPORT=1 -Wl,--export-all-symbols \
   *.c -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
@@ -303,9 +313,9 @@ echo "==> fast-lzma2 (fast-lzma2.dll)"
 # packmp3 comment for the full story, including why v3.0c needs packMP2's
 # header (not its built library) even for this BUILD_LIB-only recipe.
 echo "==> packmp3 (packmp3_dll.dll)"
-[ -d "$CSRC/packMP3" ] || git clone --depth 1 --branch v3.0f https://github.com/YadeWira/packMP3 "$CSRC/packMP3"
-[ -d "$CSRC/packMP3/source/vendor/packmp2-src/src/lib" ] || \
-  git clone --depth 1 https://github.com/YadeWira/packMP2 "$CSRC/packMP3/source/vendor/packmp2-src"
+pin_repo https://github.com/YadeWira/packMP3 "$CSRC/packMP3" v3.0f
+pin_repo https://github.com/YadeWira/packMP2 \
+  "$CSRC/packMP3/source/vendor/packmp2-src" "$PACKMP2_REF"
 ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
   source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
   -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll.dll" ) \
@@ -313,7 +323,7 @@ echo "==> packmp3 (packmp3_dll.dll)"
 
 # ── FLAC (lossless WAV media codec) ──────────────────────────────────────────
 echo "==> FLAC (libFLAC_dynamic.dll)"
-[ -d "$CSRC/flac" ] || git clone --depth 1 https://github.com/xiph/flac.git "$CSRC/flac"
+pin_repo https://github.com/xiph/flac "$CSRC/flac" "$FLAC_REF"
 if [ -d "$CSRC/flac" ] && command -v cmake >/dev/null; then
   ( cd "$CSRC/flac" && mkdir -p out-win && cd out-win && \
     cmake -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release \
@@ -332,7 +342,7 @@ fi
 
 # ── WavPack (lossless WAV media codec, alternative to FLAC) ───────────────────
 echo "==> WavPack (wavpackdll.dll)"
-[ -d "$CSRC/wavpack" ] || git clone --depth 1 https://github.com/dbry/WavPack.git "$CSRC/wavpack"
+pin_repo https://github.com/dbry/WavPack "$CSRC/wavpack" "$WAVPACK_REF"
 if [ -d "$CSRC/wavpack" ] && command -v cmake >/dev/null; then
   ( cd "$CSRC/wavpack" && mkdir -p out-win && cd out-win && \
     cmake -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release \
@@ -348,7 +358,7 @@ fi
 
 # ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
 echo "==> brunsli (brunsli.dll)"
-[ -d "$CSRC/brunsli" ] || git clone --depth 1 --recursive https://github.com/google/brunsli "$CSRC/brunsli"
+pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
   ( cd "$CSRC/brunsli" && mkdir -p out-win && cd out-win && \
     cmake -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release \

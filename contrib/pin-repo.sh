@@ -66,5 +66,13 @@ pin_repo() {
       esac ;;
   esac
 
+  # Si el repo trae submodulos, sincronizarlos al commit pedido. No-op cuando
+  # no hay .gitmodules, que es el caso de todos los deps de hoy -- brunsli se
+  # clonaba con --recursive pero no declara ninguno.
+  if [ -f "$pr_dir/.gitmodules" ]; then
+    git -C "$pr_dir" submodule update --init --recursive --depth 1 >/dev/null 2>&1 \
+      || echo "   aviso: submodulos de $pr_name no se pudieron sincronizar" >&2
+  fi
+
   echo "   pin: $pr_name @ $pr_got"
 }

@@ -57,7 +57,14 @@ cd "$(dirname "$0")"                 # contrib/
 CSRC="$(pwd)/.csrc"
 mkdir -p "$CSRC"
 
-[ -d "$CSRC/xxhash" ] || git clone --depth 1 https://github.com/Cyan4973/xxHash.git "$CSRC/xxhash"
+. "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
+
+# Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
+# puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
+# que aplicarse tambien sobre un checkout que ya existe.
+XXHASH_REF="e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7"
+
+pin_repo https://github.com/Cyan4973/xxHash "$CSRC/xxhash" "$XXHASH_REF"
 if [ ! -d "$CSRC/lzma-sdk-ref" ]; then
   SEVENZ="$(command -v 7z || command -v 7za || true)"
   if [ -z "$SEVENZ" ]; then

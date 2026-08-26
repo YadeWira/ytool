@@ -25,6 +25,11 @@ cd "$(dirname "$0")"                 # contrib/
 CSRC="$(pwd)/.csrc"
 mkdir -p "$CSRC"
 
+# Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
+# puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
+# que aplicarse tambien sobre un checkout que ya existe.
+XXHASH_REF="e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7"
+
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
 # lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
@@ -38,9 +43,9 @@ mkdir -p "$CSRC"
 # otra, a veces en silencio. Ver contrib/pin-repo.sh.
 LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
 
-[ -d "$CSRC/zstd" ]   || git clone --depth 1 --branch v1.5.2 https://github.com/facebook/zstd.git "$CSRC/zstd"
+pin_repo https://github.com/facebook/zstd "$CSRC/zstd" v1.5.2
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
-[ -d "$CSRC/xxhash" ] || git clone --depth 1 https://github.com/Cyan4973/xxHash.git "$CSRC/xxhash"
+pin_repo https://github.com/Cyan4973/xxHash "$CSRC/xxhash" "$XXHASH_REF"
 if [ ! -d "$CSRC/lzma-sdk-ref" ]; then
   SEVENZ="$(command -v 7z || command -v 7za || true)"
   if [ -z "$SEVENZ" ]; then
