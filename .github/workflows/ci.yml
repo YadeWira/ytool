@@ -82,7 +82,6 @@ jobs:
         env:
           NO_BUILD: 1
           XTOOL: ./ytool.exe
-        env:
           # Mismo motivo que el job linux: este runner no cruza ninguna DLL de
           # plugin (ver el comentario de arriba), asi que no se le puede exigir
           # que los codecs procesen streams.
