@@ -22,6 +22,19 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 CSRC="$ROOT/contrib/.csrc"
 mkdir -p "$CSRC"
+
+. "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
+
+# lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
+# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .pmp no
+# confiable, volver al tag sacaria ese fix.
+#
+# Los tres scripts que compilan lz4 comparten $CSRC/lz4, asi que TIENEN que
+# pedir la misma revision: entre 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2)
+# y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
+# otro algoritmo. Un .pmp codificado con una version se restaura mal con la
+# otra, a veces en silencio. Ver contrib/pin-repo.sh.
+LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
 CC="x86_64-w64-mingw32-gcc"
 CXX="x86_64-w64-mingw32-g++"
 TOOLCHAIN="$CSRC/mingw-toolchain.cmake"
@@ -63,7 +76,7 @@ EOF
 # --export-all-symbols porque lz4 solo marca dllexport bajo LZ4_DLL_EXPORT,
 # que su propio build system define; compilando los .c sueltos no aplica.
 echo "==> liblz4.dll (x86-64)"
-[ -d "$CSRC/lz4" ] || git clone --depth 1 --branch v1.9.4 https://github.com/lz4/lz4 "$CSRC/lz4"
+pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
 if [ -d "$CSRC/lz4/lib" ]; then
   ( cd "$CSRC/lz4/lib" && "$CC" -shared -O2 -Wl,--export-all-symbols \
       lz4.c lz4hc.c lz4frame.c xxhash.c -static-libgcc -o "$ROOT/liblz4.dll" ) \

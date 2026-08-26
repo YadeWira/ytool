@@ -18,6 +18,7 @@ libbrunsli.so
 testdata/
 libpackmp3.so
 libpackpng.so
+liblz4.so
 # recursos locales grandes / privados (no versionar; evita que git add -A los suba)
 test-files2.tar
 test-files*.tar

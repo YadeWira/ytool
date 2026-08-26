@@ -25,8 +25,21 @@ cd "$(dirname "$0")"                 # contrib/
 CSRC="$(pwd)/.csrc"
 mkdir -p "$CSRC"
 
+. "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
+
+# lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
+# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .pmp no
+# confiable, volver al tag sacaria ese fix.
+#
+# Los tres scripts que compilan lz4 comparten $CSRC/lz4, asi que TIENEN que
+# pedir la misma revision: entre 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2)
+# y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
+# otro algoritmo. Un .pmp codificado con una version se restaura mal con la
+# otra, a veces en silencio. Ver contrib/pin-repo.sh.
+LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
+
 [ -d "$CSRC/zstd" ]   || git clone --depth 1 --branch v1.5.2 https://github.com/facebook/zstd.git "$CSRC/zstd"
-[ -d "$CSRC/lz4" ]    || git clone --depth 1 https://github.com/lz4/lz4.git "$CSRC/lz4"
+pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
 [ -d "$CSRC/xxhash" ] || git clone --depth 1 https://github.com/Cyan4973/xxHash.git "$CSRC/xxhash"
 if [ ! -d "$CSRC/lzma-sdk-ref" ]; then
   SEVENZ="$(command -v 7z || command -v 7za || true)"

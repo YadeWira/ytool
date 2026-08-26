@@ -185,6 +185,18 @@ begin
   Lib := TLibImport.Create;
   Lib.LoadLib(ExpandPath(Filename, True));
 {$IFDEF UNIX}
+  // Ultimo recurso: el liblz4 de la distro. Se conserva para que un ytool
+  // suelto (sin el liblz4.so al lado) siga funcionando, pero NO es
+  // equivalente a la lib shipeada, y por eso va despues y no antes.
+  //
+  // Entre lz4 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2), y el nivel 2
+  // es el primer candidato que prueba la busqueda de nivel de PrecompLZ4.
+  // Con versiones distintas de un lado y del otro, un .pmp puede no
+  // restaurarse: medido, con una variante silenciosa (mismo largo, bytes
+  // distintos) que pasa el chequeo de tamano de PrecompLZ4.pas:599.
+  //
+  // Un binario que caiga aca queda a merced de la version que tenga instalada
+  // la maquina que decodifica. Ver contrib/build-plugins-linux.sh.
   if not Lib.Loaded then
     Lib.LoadLib('liblz4.so.1');
 {$ENDIF}
@@ -235,7 +247,11 @@ var
 
 initialization
 
+{$IFDEF UNIX}
+DLLFile := PluginsPath + 'liblz4.so';
+{$ELSE}
 DLLFile := PluginsPath + 'liblz4.dll';
+{$ENDIF}
 for I := 1 to ParamCount do
 begin
   if ParamStr(I).StartsWith(DLLParam) then

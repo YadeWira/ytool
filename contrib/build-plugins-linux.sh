@@ -18,6 +18,38 @@ ROOT="$(pwd)"
 CSRC="$ROOT/contrib/.csrc"
 mkdir -p "$CSRC"
 CXX="$(command -v clang++ || command -v g++)"
+CC="$(command -v gcc || command -v clang || command -v cc)"
+
+. "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
+
+# lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
+# trae el merge de fix_read_oob (PR #1753). Ver contrib/pin-repo.sh.
+LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
+
+# -- liblz4.so -- sin esto Linux usa el liblz4 de la DISTRO ------------------
+# imports/LZ4DLL.pas cargaba el soname pelado 'liblz4.so.1', o sea lo que
+# hubiera instalado el sistema. Windows siempre shipeo su liblz4.dll, asi que
+# la asimetria pasaba desapercibida: el tarball de Linux de v0.9.8 no trae
+# ninguna liblz4.
+#
+# Eso no es solo desprolijo. Entre lz4 1.9.4 y 1.10.0, LZ4HC_CLEVEL_MIN paso
+# de 3 a 2, y el nivel 2 -- el primer candidato de la busqueda de nivel de
+# PrecompLZ4 -- pasa a ser otro algoritmo. Medido end-to-end: un .pmp
+# codificado contra 1.10.0 y restaurado contra 1.9.4 falla, y existe la
+# variante silenciosa (mismo largo, bytes distintos) que pasa el gate de
+# tamano de PrecompLZ4.pas:599 y escribe datos mal sin excepcion.
+#
+# Con la lib shipeada, la version deja de depender de la distro del usuario.
+# -Bsymbolic para que la lib resuelva sus propios XXH* aunque el proceso
+# tenga otros: hoy ./ytool no exporta ninguno (medido), pero eso es una
+# propiedad del build de FPC, no una garantia.
+echo "==> liblz4.so (x86-64)"
+pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
+if [ -d "$CSRC/lz4/lib" ]; then
+  ( cd "$CSRC/lz4/lib" && "$CC" -shared -fPIC -O2 -Wl,-Bsymbolic \
+      lz4.c lz4hc.c lz4frame.c xxhash.c -o "$ROOT/liblz4.so" ) \
+    && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
+fi
 
 # ── srep (dedup -d / StoreDD) — omega-srep, github.com/YadeWira/omega-srep ──
 # Was Intensity/srep (upstream, frozen since 2014) until a real cross-arch
