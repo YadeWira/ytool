@@ -4631,6 +4631,16 @@ begin
     Result := ''
   else if Pos(':', AFileName) > 0 then
     Result := AFileName
+  else if (AFileName[1] = '/') or (AFileName[1] = '\') then
+    // Una ruta que arranca con separador ya es absoluta (o relativa a la raiz
+    // en Windows) y no lleva prefijo. Antes solo se reconocia la forma con
+    // dos puntos, que es la letra de unidad de Windows: en Unix ninguna ruta
+    // absoluta la tiene, asi que todas caian en el else y se les anteponia el
+    // directorio del ejecutable. Medido con -lz4: pedir
+    // -lz4/tmp/x/mylz4.so abria <dir-del-exe>/tmp/x/mylz4.so, fallaba con
+    // ENOENT y caia en silencio a la libreria del sistema, ignorando lo que
+    // el usuario habia pedido explicitamente.
+    Result := AFileName
   else
     Result := ExtractFilePath(GetModuleName) + AFileName;
   if AFullPath then
