@@ -52,7 +52,7 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
 **Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
-reverse-engineered decoder) and `jojpeg` (no known public source at all). Oodle's *codec* is the same story
+reverse-engineered decoder), `jojpeg` (no known public source at all) and `reflate` (`-mreflate`, needs `RAW2HIF_DLL.DLL` / `HIF2RAW_DLL.DLL`, no known public source; without them the codec is disabled and reports 0 / 0 on the same deflate streams where `-mzlib` and `-mpreflate` report 6 / 6). Oodle's *codec* is the same story
 (proprietary bitstream, no legally-redistributable open encoder reproduces it) — but the *loader* is open and
 included; if you legally have an `oo2core`/`oo2ext` DLL/.so, drop it next to the binary or point `-oodle<path>`
 at it and the codec activates.

@@ -60,7 +60,7 @@ trap 'rm -rf "$WORK"' EXIT
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpackpng" "-mpreflate" "-mreflate" "-mlz4f" "-mzstd" "-mpackjpg" "-mbrunsli" \
+  "-mpng" "-mpackpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpackjpg" "-mbrunsli" \
   "-mpackmp3" "-mlzma")
 
 fail=0; pass=0; err=0; dead=0
@@ -112,6 +112,14 @@ fi
 # mejora en vez de con una regresion. Los conteos medidos hoy estan al lado
 # como referencia, no como condicion.
 
+# -mreflate NO esta en la lista de arriba, y no es un olvido: necesita
+# RAW2HIF_DLL.DLL y HIF2RAW_DLL.DLL, que ningun script de este repo construye y
+# de las que no hay fuente abierta conocida. Sin ellas ReflateDLL.DLLLoaded es
+# falso, el codec queda deshabilitado y Scan1 sale sin mirar nada: da 0 / 0
+# sobre los mismos streams deflate donde -mzlib y -mpreflate dan 6 / 6.
+# Tenerlo en la lista solo agregaba 27 casos que no ejercitan nada. Esta en la
+# misma categoria que jojpeg y oodle, que el README ya declara no incluidos.
+#
 # LIMITE CONOCIDO -- este assert NO corre en Windows. El contador de streams se
 # lee de la salida de ytool, y en Windows esa salida va directo a la consola:
 # no la captura ni PowerShell redirigiendo, ni cmd.exe redirigiendo a archivo
@@ -141,6 +149,7 @@ CODEC_EXPECT="
 75_lz4f_fast.bin|-mlz4f|1
 76_zstd_levels.bin|-mzstd|4
 77_zstd_nocheck.bin|-mzstd|1
+78_lzo1x.bin|-mlzo1x|1
 71_jpeg_min.bin|-mpackjpg|1
 71_jpeg_min.bin|-mbrunsli|1
 72_mp3_min.bin|-mpackmp3|1

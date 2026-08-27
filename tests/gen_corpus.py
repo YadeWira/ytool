@@ -172,6 +172,45 @@ def make_lz4f_fast(seed):
                               block_size=4)
 
 
+def make_lzo1x(seed):
+    """LZO1X data, compressed with the lzo1x_999 variant.
+
+    tests/lzo_gen.c already generates the same thing and has since June, but it
+    was never wired into this file, which is why -mlzo1x shipped with no
+    coverage at all despite the tool existing. Doing it through ctypes against
+    the system liblzo2 keeps corpus generation a single python step with no
+    compiler in the loop; the C file stays as the reference for WHY the stream
+    has to look the way it does. The three preconditions it documents are met
+    here and were checked: length above 256, first word non-zero, and the
+    11 00 00 end marker.
+
+    999 and not the fast lzo1x_1 on purpose, and the reason is itself a finding:
+    LZOProcess searches lzo1x_999_compress_level over levels 1..9, so it can
+    only ever reproduce output from the 999 family. lzo1x_1 is a different
+    algorithm, not a level of it, and is therefore unreachable by construction.
+    Measured on the same binary: 999 data reports 1/1, lzo1x_1 data reports 0/1
+    -- detected, then stored literally, reversible and silent. So this file
+    proves the codec is alive; it does NOT cover the fast variant, and no test
+    is added for it because the test would simply fail."""
+    try:
+        import ctypes
+        lzo = ctypes.CDLL('liblzo2.so.2')
+        rnd = random.Random(seed)
+        words = [b'w%03d' % i for i in range(200)]
+        data = b' '.join(rnd.choice(words) for _ in range(20000))
+        src = ctypes.create_string_buffer(data, len(data))
+        dst = ctypes.create_string_buffer(len(data) + len(data) // 16 + 64 + 3)
+        outlen = ctypes.c_ulong(0)
+        wrk = ctypes.create_string_buffer(1 << 24)
+        rc = lzo.lzo1x_999_compress(src, ctypes.c_ulong(len(data)), dst,
+                                    ctypes.byref(outlen), wrk)
+        if rc != 0 or outlen.value == 0:
+            return None
+        return dst.raw[:outlen.value]
+    except Exception:
+        return None
+
+
 def make_zstd_frames(seed):
     """Zstd frames across several levels, in one file.
 
@@ -415,6 +454,13 @@ def main():
     zn = make_zstd_nocheck(SEED)
     if zn is not None:
         write(d, '77_zstd_nocheck.bin', zn)
+
+    lz = make_lzo1x(SEED)
+    if lz is not None:
+        write(d, '78_lzo1x.bin', lz)
+    else:
+        print('AVISO: no se pudo usar liblzo2 -- sin cobertura de -mlzo1x',
+              file=sys.stderr)
 
     jpeg = make_jpeg(SEED)
     if jpeg is not None:
