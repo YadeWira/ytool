@@ -405,7 +405,8 @@ begin
         break;
     end;
   end
-  else if (Result = False) and ((StreamInfo^.Status >= TStreamStatus.Predicted)
+  else if (Result = False) and (PATCH_ALL or
+    (StreamInfo^.Status >= TStreamStatus.Predicted)
     or (SOList[Instance][X].Count = 1)) and (DIFF_TOLERANCE > 0) then
   begin
     Res2 := PrecompEncodePatchEx(Instance, OldInput, StreamInfo^.OldSize,

@@ -393,6 +393,15 @@ var
   DIFF_CLEVEL: Integer = 1;
   OPTIMISE_DEC: Boolean = False;
   FULLSCAN: Boolean = False;
+  // -pa: parchea TODO stream que la busqueda no pudo reproducir, sin exigir que
+  // venga predicho ni que quede un solo candidato. Sin esto el fallback de
+  // patch es practicamente inalcanzable en un scan normal: los tres codecs con
+  // busqueda de nivel lo condicionan a Status >= Predicted o Count = 1, y con
+  // la lista sembrada por defecto (22 candidatos en zstd, 12 en lz4) Count
+  // nunca vale 1, asi que un stream que falla por unos pocos bytes se guarda
+  // literal en vez de parchearse. DIFF_TOLERANCE sigue mandando: -pa levanta
+  // la condicion de alcanzabilidad, no el umbral de cuanto parche se acepta.
+  PATCH_ALL: Boolean = False;
   FORCEDMETHOD: Boolean = False;
   EncodeSICmp: TEncodeSIComparer;
   FutureSICmp: TFutureSIComparer;

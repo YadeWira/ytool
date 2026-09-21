@@ -239,6 +239,7 @@ begin
   WriteLine('  -p#  - prefetch cache [0mb]');
   WriteLine('  -r#  - reassign streams detected to another codec');
   WriteLine('  -f   - full scan (disables early-exit in dedup hash search)');
+  WriteLine('  -pa  - patch all streams the level search could not reproduce');
   WriteLine('  -o   - optimise decode (drop already-verified codec variants)');
   WriteLine('  -T#  - process/thread priority (0=idle .. 6=time critical) [3]');
   WriteLine('');
@@ -426,6 +427,13 @@ begin
     SCANONLY := ArgParse.AsBoolean('-scan');
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
+    // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
+    // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
+    // que la cadena de ReplaceText no toca y termina evaluandose como un
+    // tamaño invalido: precomp salia con exit 1 y un .pmp de 22 bytes. Si lo
+    // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
+    if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
+      S := '0mb';
     S := ReplaceText(S, 'KB', '* 1024^1');
     S := ReplaceText(S, 'MB', '* 1024^2');
     S := ReplaceText(S, 'GB', '* 1024^3');
@@ -461,6 +469,7 @@ begin
     SHOWPROGRESS := ArgParse.AsBoolean('-bar') and (IsLibrary = False);
     OPTIMISE_DEC := ArgParse.AsBoolean('-o');
     FULLSCAN := ArgParse.AsBoolean('-f');
+    PATCH_ALL := ArgParse.AsBoolean('-pa');
     Options.ExtractDir := ArgParse.AsString('-x');
     if Options.ExtractDir <> '' then
       EXTRACT := DirectoryExists(Options.ExtractDir);
@@ -524,6 +533,13 @@ begin
     SrepCfg := ArgParse.AsString('-sp', 0, '').ToLower;
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
+    // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
+    // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
+    // que la cadena de ReplaceText no toca y termina evaluandose como un
+    // tamaño invalido: precomp salia con exit 1 y un .pmp de 22 bytes. Si lo
+    // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
+    if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
+      S := '0mb';
     S := ReplaceText(S, 'KB', '* 1024^1');
     S := ReplaceText(S, 'MB', '* 1024^2');
     S := ReplaceText(S, 'GB', '* 1024^3');
