@@ -180,10 +180,17 @@ end;
 var
   Lib: TLibImport;
 
-procedure Init(Filename: String);
+procedure Init(Filename: String; Raw: Boolean = False);
 begin
   Lib := TLibImport.Create;
-  Lib.LoadLib(ExpandPath(Filename, True));
+  // Raw=True carga el nombre tal cual, para un soname del sistema: ExpandPath
+  // le antepone el directorio del ejecutable a toda ruta sin separador
+  // inicial, lo que es correcto para un archivo nuestro y fatal para un
+  // soname, que tiene que resolver el loader.
+  if Raw then
+    Lib.LoadLib(Filename)
+  else
+    Lib.LoadLib(ExpandPath(Filename, True));
 {$IFDEF UNIX}
   // Ultimo recurso: el liblz4 de la distro. Se conserva para que un ytool
   // suelto (sin el liblz4.so al lado) siga funcionando, pero NO es
@@ -197,8 +204,6 @@ begin
   //
   // Un binario que caiga aca queda a merced de la version que tenga instalada
   // la maquina que decodifica. Ver contrib/build-plugins-linux.sh.
-  if not Lib.Loaded then
-    Lib.LoadLib('liblz4.so.1');
 {$ENDIF}
   if Lib.Loaded then
   begin
@@ -243,25 +248,45 @@ const
 
 var
   I: Integer;
-  DLLFile: String;
+  Candidates: TArray<String>;
 
 initialization
 
-{$IFDEF UNIX}
-DLLFile := PluginsPath + 'liblz4.so';
-{$ELSE}
-DLLFile := PluginsPath + 'liblz4.dll';
-{$ENDIF}
+// -lz4 se puede repetir: cada uno agrega un candidato y se prueban EN ORDEN
+// hasta que uno cargue. Antes se tomaba solo el primero. Sigue a xtool 0.9.9,
+// que hizo repetibles -lz4, -zstd y -oodle# (-oodle ya funcionaba asi aca, ver
+// OodleDLL).
+//
+// El soname del sistema va al final y por fuera de la lista, con Raw=True: los
+// candidatos pasan por ExpandPath, que a una ruta sin separador inicial le
+// antepone el directorio del ejecutable. Correcto para un archivo nuestro,
+// fatal para un soname. Ademas antes vivia dentro de Init, y ahi un candidato
+// que no cargaba caia igual al del sistema y dejaba DLLLoaded en true: el
+// primero siempre "tenia exito" y los demas no se probaban nunca.
+SetLength(Candidates, 0);
 for I := 1 to ParamCount do
-begin
   if ParamStr(I).StartsWith(DLLParam) then
-  begin
-    DLLFile := ParamStr(I).Substring(DLLParam.Length);
+    Insert(ParamStr(I).Substring(DLLParam.Length), Candidates,
+      Length(Candidates));
+{$IFDEF UNIX}
+Insert(PluginsPath + 'liblz4.so', Candidates, Length(Candidates));
+{$ELSE}
+Insert(PluginsPath + 'liblz4.dll', Candidates, Length(Candidates));
+{$ENDIF}
+for I := Low(Candidates) to High(Candidates) do
+begin
+  Init(Candidates[I]);
+  if DLLLoaded then
     break;
-  end;
+  FreeAndNil(Lib);
 end;
-
-Init(DLLFile);
+{$IFDEF UNIX}
+if not DLLLoaded then
+begin
+  FreeAndNil(Lib);
+  Init('liblz4.so.1', True);
+end;
+{$ENDIF}
 
 finalization
 
