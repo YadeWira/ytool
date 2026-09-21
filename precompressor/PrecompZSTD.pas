@@ -289,6 +289,8 @@ var
   Inp: ZSTD_inBuffer;
   Oup: ZSTD_outBuffer;
   Progress: NativeInt;
+  EndOp: ZSTD_EndDirective;
+  Rem: size_t;
 begin
   Result := False;
   X := GetBits(StreamInfo^.Option, 0, 3);
@@ -356,23 +358,44 @@ begin
               Oup.dst := Buffer;
               Oup.Size := StreamInfo^.NewSize;
               Oup.Pos := 0;
+              // initCStream resetea el contexto, asi que los parametros van
+              // DESPUES. Antes esta rama no recibia el flag de checksum ni el
+              // de tamaño -- solo se seteaban en la rama de una-pasada -- asi
+              // que el streaming nunca podia reproducir un frame del CLI.
               ZSTD_initCStream(cctx[Instance],
                 IfThen(GetBits(StreamInfo^.Option, 8, 1) = 0, I, -I));
+              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
+                GetBits(StreamInfo^.Option, 27, 1));
+              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
+                Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0));
+              if Assigned(ZSTD_CCtx_setPledgedSrcSize) then
+                ZSTD_CCtx_setPledgedSrcSize(cctx[Instance],
+                  StreamInfo^.NewSize);
               while Progress < StreamInfo^.NewSize do
               begin
                 Inp.src := PByte(NewInput) + Progress;
                 Inp.Size := Min(StreamInfo^.NewSize - Progress,
                   GetBits(StreamInfo^.Option, 14, 13) * 1024);
                 Inp.Pos := 0;
-                if ZSTD_compressStream(cctx[Instance], @Oup, @Inp) > 0 then
-                begin
-                  ZSTD_flushStream(cctx[Instance], @Oup);
-                  Inc(Progress, Inp.Size)
-                end
+                if Progress + NativeInt(Inp.Size) >= StreamInfo^.NewSize then
+                  EndOp := ZSTD_e_end
                 else
-                  break;
+                  EndOp := ZSTD_e_continue;
+                // Sin ZSTD_flushStream por chunk: el CLI no lo hace y forzarlo
+                // cambia el bitstream. Medido con libzstd 1.5.7 sobre 450KB,
+                // niveles 3/9/15: chunked con pledged size y sin flush da el
+                // mismo hash que el CLI; con flush difiere en los tres.
+                repeat
+                  if Assigned(ZSTD_compressStream2) then
+                    Rem := ZSTD_compressStream2(cctx[Instance], @Oup, @Inp,
+                      EndOp)
+                  else
+                    Rem := ZSTD_compress_generic(cctx[Instance], @Oup, @Inp,
+                      EndOp);
+                until (Inp.Pos >= Inp.Size) and
+                  ((EndOp <> ZSTD_e_end) or (Rem = 0));
+                Inc(Progress, NativeInt(Inp.Size));
               end;
-              ZSTD_endStream(cctx[Instance], @Oup);
               Res1 := Oup.Pos;
             end;
             { Res1 := ZSTD_compress_usingCDict(cctx[Instance], Buffer,
@@ -438,6 +461,8 @@ var
   Inp: ZSTD_inBuffer;
   Oup: ZSTD_outBuffer;
   Progress: NativeInt;
+  EndOp: ZSTD_EndDirective;
+  Rem: size_t;
 begin
   Result := False;
   X := GetBits(StreamInfo.Option, 0, 3);
@@ -493,25 +518,39 @@ begin
           Oup.dst := Buffer;
           Oup.Size := StreamInfo.NewSize;
           Oup.Pos := 0;
+          // SIMETRICO CON ZSTDProcess. Tiene que serlo: mientras Process uso
+          // la receta nueva y Restore la vieja, Process aceptaba un candidato
+          // que Restore no podia reconstruir -- medido, 1/1 en el scan y
+          // round-trip roto. Cualquier cambio de un lado va del otro.
           ZSTD_initCStream(cctx[Instance],
             IfThen(GetBits(StreamInfo.Option, 8, 1) = 0,
             GetBits(StreamInfo.Option, 3, 5),
             -GetBits(StreamInfo.Option, 3, 5)));
+          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
+            GetBits(StreamInfo.Option, 27, 1));
+          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
+            Ord(GetBits(StreamInfo.Option, 28, 2) <> 0));
+          if Assigned(ZSTD_CCtx_setPledgedSrcSize) then
+            ZSTD_CCtx_setPledgedSrcSize(cctx[Instance], StreamInfo.NewSize);
           while Progress < StreamInfo.NewSize do
           begin
             Inp.src := PByte(Input) + Progress;
             Inp.Size := Min(StreamInfo.NewSize - Progress,
               GetBits(StreamInfo.Option, 14, 13) * 1024);
             Inp.Pos := 0;
-            if ZSTD_compressStream(cctx[Instance], @Oup, @Inp) > 0 then
-            begin
-              ZSTD_flushStream(cctx[Instance], @Oup);
-              Inc(Progress, Inp.Size)
-            end
+            if Progress + NativeInt(Inp.Size) >= StreamInfo.NewSize then
+              EndOp := ZSTD_e_end
             else
-              break;
+              EndOp := ZSTD_e_continue;
+            repeat
+              if Assigned(ZSTD_compressStream2) then
+                Rem := ZSTD_compressStream2(cctx[Instance], @Oup, @Inp, EndOp)
+              else
+                Rem := ZSTD_compress_generic(cctx[Instance], @Oup, @Inp, EndOp);
+            until (Inp.Pos >= Inp.Size) and
+              ((EndOp <> ZSTD_e_end) or (Rem = 0));
+            Inc(Progress, NativeInt(Inp.Size));
           end;
-          ZSTD_endStream(cctx[Instance], @Oup);
           Res1 := Oup.Pos;
         end;
         { Res1 := ZSTD_compress_usingCDict(cctx[Instance], Buffer,

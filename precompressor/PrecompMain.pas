@@ -281,6 +281,11 @@ begin
       else
         Options.Method := S;
     S := ArgParse.AsString('-c', 0, '16mb');
+    // Misma guarda que -p: AsString matchea por prefijo, asi que -cfg... cae
+    // aca y su resto se evalua como tamaño. Sin esto -cfgzstd dejaba S='fgzstd'
+    // y el evaluador tiraba EParserException.
+    if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
+      S := '16mb';
     S := ReplaceText(S, 'KB', '* 1024^1');
     S := ReplaceText(S, 'MB', '* 1024^2');
     S := ReplaceText(S, 'GB', '* 1024^3');

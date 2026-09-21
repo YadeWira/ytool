@@ -87,6 +87,12 @@ var
     const src: Pointer; srcSize: size_t): size_t cdecl;
   ZSTD_compress_generic: function(cctx: Pointer; output: PZSTD_outBuffer;
     input: PZSTD_inBuffer; endOp: ZSTD_EndDirective): size_t cdecl;
+  // Mismo prototipo que ZSTD_compress_generic, que era su nombre experimental:
+  // zstd lo renombro y las versiones actuales YA NO EXPORTAN el viejo.
+  // Verificado con nm sobre libzstd 1.5.7 -- ZSTD_compress_generic no aparece,
+  // ZSTD_compressStream2 si. Quien use el viejo se queda con un puntero nil.
+  ZSTD_compressStream2: function(cctx: Pointer; output: PZSTD_outBuffer;
+    input: PZSTD_inBuffer; endOp: ZSTD_EndDirective): size_t cdecl;
   ZSTD_decompress: function(dst: Pointer; dstCapacity: size_t;
     const src: Pointer; srcSize: size_t): SSIZE_T cdecl;
   ZSTD_findFrameCompressedSize: function(const src: Pointer; srcSize: size_t)
@@ -120,6 +126,12 @@ var
     dstCapacity: size_t; const src: Pointer; srcSize: size_t;
     const ddict: Pointer): size_t cdecl;
   ZSTD_initCStream: function(zcs: Pointer; compressionLevel: Integer)
+    : size_t cdecl;
+  // Necesario para reproducir lo que escribe el CLI de zstd: sin declarar el
+  // tamaño de origen, el frame sale distinto. Medido con libzstd 1.5.7 sobre
+  // 450KB: chunked con pledged size y sin flush por chunk da el mismo hash que
+  // el CLI en niveles 3, 9 y 15; con flush por chunk difiere en los tres.
+  ZSTD_CCtx_setPledgedSrcSize: function(cctx: Pointer; pledgedSrcSize: UInt64)
     : size_t cdecl;
   ZSTD_compressStream: function(zcs: Pointer; output: PZSTD_outBuffer;
     input: PZSTD_inBuffer): size_t cdecl;
@@ -178,6 +190,7 @@ begin
     @ZSTD_compress := Lib.GetProcAddr('ZSTD_compress');
     @ZSTD_compress2 := Lib.GetProcAddr('ZSTD_compress2');
     @ZSTD_compress_generic := Lib.GetProcAddr('ZSTD_compress_generic');
+    @ZSTD_compressStream2 := Lib.GetProcAddr('ZSTD_compressStream2');
     @ZSTD_decompress := Lib.GetProcAddr('ZSTD_decompress');
     @ZSTD_findFrameCompressedSize :=
       Lib.GetProcAddr('ZSTD_findFrameCompressedSize');
@@ -199,6 +212,8 @@ begin
     @ZSTD_decompress_usingDDict :=
       Lib.GetProcAddr('ZSTD_decompress_usingDDict');
     @ZSTD_initCStream := Lib.GetProcAddr('ZSTD_initCStream');
+    @ZSTD_CCtx_setPledgedSrcSize :=
+      Lib.GetProcAddr('ZSTD_CCtx_setPledgedSrcSize');
     @ZSTD_compressStream := Lib.GetProcAddr('ZSTD_compressStream');
     @ZSTD_flushStream := Lib.GetProcAddr('ZSTD_flushStream');
     @ZSTD_endStream := Lib.GetProcAddr('ZSTD_endStream');
