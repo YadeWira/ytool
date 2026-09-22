@@ -16,6 +16,11 @@ uses
 resourcestring
   SPrecompError1 = 'Method ''%s'' not found';
   SPrecompError3 = 'Error in the method ''%s'' (stream #%d, pos %d, depth %d)';
+  // Distinto de SPrecompError3 a proposito: ese dice que el codec no pudo
+  // reconstruir, este dice que reconstruyo ALGO y no es lo que se guardo.
+  // El segundo apunta a corrupcion del .pmp, el primero no.
+  SPrecompError4 = 'Checksum mismatch restoring ''%s'' (stream #%d, pos %d, depth %d) '
+    + '-- the .pmp is corrupt or was produced by a different build';
   SPrecompSep1 = '+';
   SPrecompSep2 = ':';
   SPrecompSep3 = ',';
@@ -85,6 +90,19 @@ type
     Resource: Integer;
     Codec: Byte;
     Option: Integer;
+    // Digest del stream comprimido ORIGINAL, o sea de lo que el decode tiene
+    // que reconstruir. El encode ya lo calculaba (PrecompMain, sobre OldSize
+    // bytes en ActualPosition) y lo usaba solo para emparejar duplicados en
+    // memoria; no viajaba al contenedor, asi que el decode no tenia contra que
+    // comparar y aceptaba un stream restaurado comparando SOLO EL TAMANO.
+    //
+    // Medido antes de agregarlo: 40 de 40 flips de un byte en el cuerpo de un
+    // .pmp decodificaban con exit 0 y devolvian datos distintos. Ninguno daba
+    // error. El cuerpo no tenia ninguna cobertura.
+    //
+    // Los streams DUPLICATED_STREAM llevan esto en cero: no pasan por Restore,
+    // se copian de otro stream ya verificado.
+    Checksum: XXH128_hash_t;
   end;
 
   PStrInfo1 = ^_StrInfo1;

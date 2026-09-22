@@ -18,7 +18,22 @@ uses
   Generics.Defaults, Generics.Collections, Character;
 
 const
-  YTOOL_PRECOMP = $304C5458;
+  // 'XTP1' -- formato de precomp, version 1. Bumpeado al agregar el checksum a
+  // TStreamHeader: un .pmp nuevo leido por un ytool viejo cae en el else del
+  // case de ytool.dpr y sale con error de magic desconocido, exit 1 y sin
+  // dejar archivo (verificado). Sin el bump, el ytool viejo habria leido
+  // headers de 14 bytes como si fueran de 30, y el fallo no habria tenido
+  // atribucion posible.
+  //
+  // OJO CON LA SERIE 'XTL': el ultimo byte de 'XTL0'/'XTL1'/'XTL2' NO es un
+  // digito de version, es un discriminador de TIPO de contenedor -- XTL1 ya
+  // es YTOOL_IODEC y XTL2 es YTOOL_EXEC. Bumpear 'XTL0' a 'XTL1' habria hecho
+  // que un .pmp nuevo se despachara al decodificador de iodec. Lo atrapo el
+  // compilador como duplicate case label; si los tres no hubieran estado en
+  // el mismo case, no lo habria atrapado nadie.
+  YTOOL_PRECOMP = $31505458;
+  // El formato anterior, conservado solo para reconocerlo.
+  YTOOL_PRECOMP0 = $304C5458;
   YTOOL_BSIZE = 4194304;
 {$IFDEF CPU64}
   YTOOL_MEMLIMIT = Int64.MaxValue;
@@ -601,6 +616,12 @@ var
   Tasks: TArray<TTask>;
   CurCodec: TArray<Byte>;
   CurDepth: TArray<Integer>;
+  // Verificacion del stream restaurado contra el digest del header. Se hace
+  // incremental porque en el camino no-MT los bytes se escriben directo al
+  // stream de salida y nunca quedan en un buffer contiguo que se pueda hashear
+  // despues.
+  VerifySt: TArray<XXH3_state_t>;
+  VerifyOn: TArray<Boolean>;
   ThrIdx: TArray<Integer>;
   WorkStream: TArray<TMemoryStreamEx2>;
   WorkLastSize: TArray<NativeInt>;
@@ -2317,6 +2338,7 @@ begin
                   Inc(StreamHeader.NewSize, StreamInfo.ExtSize.Size);
                 end;
                 StreamHeader.Codec := StreamInfo.Codec;
+                StreamHeader.Checksum := StreamInfo.Checksum;
                 StreamHeader.Option := StreamInfo.Option;
                 Inc(BlockSize, StreamHeader.NewSize);
                 EncInfo.DecMem0 := Max(EncInfo.DecMem0,
@@ -2709,6 +2731,11 @@ var
 procedure PrecompOutput2(Instance: Integer; const Buffer: Pointer;
   Size: Integer);
 begin
+  // Alimenta el digest del stream que se esta restaurando. Va aca y no
+  // despues de Restore porque en el camino no-MT estos bytes se escriben
+  // directo a la salida y no quedan en ningun buffer.
+  if VerifyOn[Instance] then
+    XXH3_128bits_update(VerifySt[Instance], Buffer, Size);
   with ComVars2[CurDepth[Instance]] do
     DecOutput[Instance].WriteBuffer(Buffer^, Size);
   if (StoreDD > -2) and (CurDepth[Instance] = 0) then
@@ -2727,6 +2754,11 @@ end;
 procedure PrecompOutput3(Instance: Integer; const Buffer: Pointer;
   Size: Integer);
 begin
+  // Alimenta el digest del stream que se esta restaurando. Va aca y no
+  // despues de Restore porque en el camino no-MT estos bytes se escriben
+  // directo a la salida y no quedan en ningun buffer.
+  if VerifyOn[Instance] then
+    XXH3_128bits_update(VerifySt[Instance], Buffer, Size);
   with ComVars2[CurDepth[Instance]] do
     MemOutput1[Instance].WriteBuffer(Buffer^, Size);
 end;
@@ -2764,6 +2796,7 @@ var
   UI32: UInt32;
   Ptr1, Ptr2: PByte;
   LOutput: _PrecompOutput;
+  VerifyHash: XXH128_hash_t;
 begin
   with ComVars2[Depth] do
   begin
@@ -2845,10 +2878,33 @@ begin
       Y := GetBits(SI.Option, 0, 3);
       if not InRange(Y, 0, Pred(Length(Codecs[SH^.Codec].Names))) then
         Y := 0;
+      // Verificacion de contenido. Solo a profundidad 0: un stream anidado se
+      // restaura dentro de la restauracion del padre y sus bytes ya entran en
+      // el digest del padre, asi que hashearlo aparte contaria dos veces.
+      VerifyOn[Index2] := (Depth = 0) and
+        not((SH^.Checksum.low64 = 0) and (SH^.Checksum.high64 = 0));
+      if VerifyOn[Index2] then
+        XXH3_128bits_reset(VerifySt[Index2]);
       if (Codecs[SH^.Codec].Restore(Index2, Depth, Ptr1, Ptr2, SI, LOutput,
         @PrecompFunctions) = False) then
+      begin
+        VerifyOn[Index2] := False;
         raise Exception.CreateFmt(SPrecompError3,
           [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
+      end;
+      if VerifyOn[Index2] then
+      begin
+        VerifyOn[Index2] := False;
+        VerifyHash := XXH3_128bits_digest(VerifySt[Index2]);
+        // Esto es lo que antes no existia: hasta ahora el decode aceptaba un
+        // stream restaurado comparando SOLO el tamano, asi que una corrupcion
+        // en el cuerpo salia con exit 0 y datos distintos. Medido: 40 de 40
+        // flips de un byte pasaban sin error.
+        if (VerifyHash.low64 <> SH^.Checksum.low64) or
+          (VerifyHash.high64 <> SH^.Checksum.high64) then
+          raise Exception.CreateFmt(SPrecompError4,
+            [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
+      end;
       AtomicIncrement(EncInfo.Processed);
       if MT then
       begin
@@ -2908,6 +2964,8 @@ begin
   if Options^.Threads > 1 then
     SetLength(Tasks, Options^.Threads);
   SetLength(CurCodec, Options^.Threads);
+  SetLength(VerifySt, Options^.Threads);
+  SetLength(VerifyOn, Options^.Threads);
   SetLength(CurDepth, Options^.Threads);
   SetLength(WorkStream, Options^.Threads);
   SetLength(WorkLastSize, Options^.Threads);
