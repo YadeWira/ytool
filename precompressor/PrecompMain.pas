@@ -109,7 +109,6 @@ type
     DupCount: Integer;
     InSize, InflSize, SrepSize, CompSize: Int64;
     CovSize: Int64;
-    SrepMem: Integer;
     PatchCount: Integer;
     PatchSize: Int64;
   end;
@@ -2620,16 +2619,24 @@ begin
       finally
       end;
     end;
-    S := 'Decompression memory is ';
-    I := ErrStream.DataString.IndexOf(S);
-    J := 0;
-    if I > 0 then
-    begin
-      while ErrStream.DataString.Substring(I + S.Length + J, 1) <> ' ' do
-        Inc(J);
-      EncInfo.SrepMem := ErrStream.DataString.Substring(I + S.Length, J)
-        .ToInteger;
-    end;
+    // Aca habia un scrape del stderr de osrep buscando el literal
+    // 'Decompression memory is ' para llenar EncInfo.SrepMem. Sacado por tres
+    // razones medidas, no por estilo:
+    //
+    // 1. El valor era SIEMPRE 0, comprobado con el osrep64 que shipeamos
+    //    (1.0.5) en -m3, -m4 y -m5 con 8 MB de entrada con duplicados reales.
+    //    El unico consumo era una linea que le mostraba ese cero al usuario.
+    // 2. El literal depende de la version: osrep lo cambio en 1.0.6 a
+    //    'Decompression memory with -m<N> is ', asi que subir el pin lo
+    //    rompia, y en 2.x la linea no existe en compresion.
+    // 3. Ese texto nunca fue interfaz. El fragmento del medio sale de un
+    //    printf condicional y aparecio porque un arreglo de parseo de opciones
+    //    -- no una edicion del mensaje -- hizo que una variable pasara a tener
+    //    valor. No hay a quien pedirle estabilidad.
+    //
+    // El stderr se sigue capturando: no cuesta nada y es de donde habria que
+    // sacar los errores del hijo el dia que se reporten. Hoy no se reportan, y
+    // el call site de descompresion de este archivo ni siquiera lo pide.
     ErrStream.Free;
   end;
 end;
@@ -3296,12 +3303,6 @@ var
         ConvertKB2TB(EncInfo.DecMem2 div 1024) + ') [' +
         ConvertKB2TB(EncInfo.DupSize1 div 1024) + ' >> ' +
         ConvertKB2TB(EncInfo.DupSize2 div 1024) + ']     ';
-      if StoreDD > 0 then
-      begin
-        I := 6;
-        SL[4] := 'Srep decompression memory: ' +
-          ConvertKB2TB(EncInfo.SrepMem * 1024) + '     ';
-      end;
     end
     else
       I := 4;
@@ -3344,8 +3345,6 @@ begin
   if StoreDD > -2 then
   begin
     SL.Add('Duplicates: 0 (0.00 MB) [0.00 MB  >> 0.00 MB]');
-    if StoreDD > 0 then
-      SL.Add('Srep decompression memory: 0.00 MB [0.00MB]');
   end;
   SL.Add('');
   SL.Add('Size: ');
