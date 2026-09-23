@@ -123,7 +123,10 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
 
 Pending from 0.9.9: `-cfg<codec>` (the flag names and sub-keys were read out of the 0.9.9 binary, but its
 output cannot be captured even on real Windows, so what the sub-keys mean is inferred from their names, not
-documented), and the `bink` / `wwise` / `ogg` / `gdeflate` scanners.
+documented), and the `bink` / `wwise` / `ogg` scanners. Its `gdeflate` scanner is **not** pending: gdeflate is
+DirectStorage-specific (0.9.9 ships `dstorage.dll` alongside it) and was deliberately removed from this port
+as dead code with no cross-platform meaning — see
+[Known Issues](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#gdeflate-removed).
 
 Declared **not applicable** to an open build (would need proprietary multi-DLL infrastructure with no open
 equivalent): the `-mzstd=zstd147`-style library-variant pinning syntax.

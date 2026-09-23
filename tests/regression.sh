@@ -149,7 +149,7 @@ CODEC_EXPECT="
 75_lz4f_fast.bin|-mlz4f|1
 76_zstd_levels.bin|-mzstd|4
 77_zstd_nocheck.bin|-mzstd|1
-78_lzo1x.bin|-mlzo1x|1
+50_lzo1x.bin|-mlzo1x|1
 71_jpeg_min.bin|-mpackjpg|1
 71_jpeg_min.bin|-mbrunsli|1
 72_mp3_min.bin|-mpackmp3|1
