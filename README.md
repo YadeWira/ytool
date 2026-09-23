@@ -25,9 +25,27 @@ original file — and `decode` reverses the whole pipeline back to the exact ori
 ## Status
 
 Migrated in full: build, native reversibility, dynamic codec loading, and the encode/decode pipeline all run
-on **FPC 3.2.2 (`{$mode delphi}`)**, Linux and Windows, x86-64. Every claim below has been verified by an
-actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the platform(s) listed — not just
-"it compiles".
+on **FPC 3.2.2 (`{$mode delphi}`)**, Linux and Windows, x86-64.
+
+**How the ✅ marks below were earned, because the obvious method is not enough.** A bit-exact round-trip
+(`decode(precomp(x)) == x`) proves the tool is *reversible*. It does **not** prove a codec works: when a
+codec fails to reproduce a stream, `ytool` stores that stream literally, and a literal store is perfectly
+reversible. A codec that does nothing at all passes every round-trip test. That is not hypothetical — with
+all six plugin libraries deleted the regression suite used to report `399 OK, 0 FAIL`, and `-mzstd` shipped
+dead, detecting every CLI-written frame and processing none, under a ✅ earned by round-trip alone.
+
+So each ✅ now also requires *engagement*: the suite asserts a minimum number of streams actually processed
+per codec, and packaged releases are checked by comparing each codec's output size against the size a
+literal store would produce. See [Testing](#testing).
+
+> **Container format change (`XTP1`).** `.pmp` files now carry a digest of every stream, and decoding
+> verifies each restored stream against it. Before this, the decoder accepted a restored stream by
+> comparing its **size** and nothing else: 40 of 40 single-byte corruptions of a `.pmp` decoded with exit 0
+> and produced wrong data. The magic moved from `XTL0` to `XTP1`, so **`.pmp` files written by this version
+> cannot be read by earlier builds**, and earlier builds' files cannot be read by this one — an older build
+> refuses the file with exit 1 and leaves no output behind, rather than misreading it. Coverage is limited to
+> streams: bytes that pass through literally (all of a file in which no codec matched) are still not
+> verified. See [the format page](https://github.com/YadeWira/ytool/wiki/Precomp-File-Format).
 
 ### Codecs
 
@@ -42,9 +60,10 @@ actual bit-exact round-trip (`decode(precomp(x)) == x`, byte-compared) on the pl
 | FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
 | WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
 | MP3 | [YadeWira/packMP3](https://github.com/YadeWira/packMP3) (successor fork, LGPLv3) | ✅ | ✅ |
-| LZ4 | liblz4 | ✅ | ✅ (built into the binary) |
-| Zstandard | libzstd | ✅ | ✅ (built into the binary) |
-| LZO | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ | ✅ |
+| LZ4 (`lz4f`) | liblz4, pinned to `0774d05` | ✅ (`liblz4.so`, shipped) | ✅ (`liblz4.dll`) |
+| LZ4 raw blocks (`lz4`, `lz4hc`) | liblz4 | ⚠️ detects nothing — see below | same |
+| Zstandard | libzstd | ✅ ¹ | ✅ ¹ |
+| LZO (`lzo1x`) | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ ² | ✅ ² |
 | raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
 | fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
@@ -57,6 +76,24 @@ reverse-engineered decoder), `jojpeg` (no known public source at all) and `refla
 included; if you legally have an `oo2core`/`oo2ext` DLL/.so, drop it next to the binary or point `-oodle<path>`
 at it and the codec activates.
 
+¹ **Zstandard** was dead until recently: `Scan1` never read the frame header and re-encoded with the
+library's defaults, which omit the content checksum the `zstd` CLI writes by default, so every CLI-written
+frame fell back to a literal store. Fixed by recording the frame descriptor. Two cases still store
+literally, both safe and both documented in `PrecompZSTD.pas`: frames written from a pipe (no content-size
+field), and some one-shot-versus-chunked divergences at levels 5–15 unless `-mzstd:b128` selects the
+streaming path. libzstd is loaded dynamically, not linked in.
+
+² **LZO** reproduces only the `lzo1x_999` family, because its level search iterates
+`lzo1x_999_compress_level`. Data from the fast `lzo1x_1` is detected and stored literally.
+
+**LZ4 raw blocks** (`-mlz4`, `-mlz4hc`) report `0 / 0` — not even detection — on raw blocks produced by the
+lz4 library, at every size tried and with a first token byte inside the range the heuristic keys on. Open
+and not yet diagnosed. Framed LZ4 (`-mlz4f`) is unaffected.
+
+**Linux ships its own `liblz4.so`** and loads it ahead of the system library. Previously the distro's
+`liblz4.so.1` was used, and lz4 1.9.4 and 1.10.0 emit different bytes at the same level (`LZ4HC_CLEVEL_MIN`
+moved from 3 to 2), so a `.pmp` made on one machine could fail to restore on another.
+
 Prebuilt binaries (Linux x64 tarball, Windows x64 zip, Windows x86 zip — all three with every
 buildable plugin library included) are on the [Releases page](https://github.com/YadeWira/ytool/releases).
 
@@ -65,7 +102,7 @@ buildable plugin library included) are on the [Releases page](https://github.com
 > original xtool's `.cls` files). No functional issue is known — it's a false positive — but if you're
 > repackaging `ytool` for wider public distribution, prefer the Windows x64 build where possible.
 
-### Changelog coverage — inherited/recreated from xtool's own published notes (post-0.7.9, up to 0.9.7)
+### Changelog coverage — inherited/recreated from xtool's own published notes (post-0.7.9, up to 0.9.9)
 
 These recreate upstream Razor12911's *own announced* changes, not new design of ours:
 
@@ -78,6 +115,15 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
 - 0.9.2 — three low-memory levels (`-lm1`/`-lm2`/`-lm3`)
 - 0.9.6 — stream-coverage telemetry (%), `-oodl#` multi-library loader
 - 0.9.7 — reassign stream moved from `-a` to `-r`
+- 0.9.9 — `-pa` (patch all streams): lifts the condition that made the patch fallback unreachable in a
+  normal scan. `DIFF_TOLERANCE` (`-df#`) still decides whether a patch is accepted.
+- 0.9.9 — `-lz4` and `-zstd` repeatable: each occurrence adds a candidate library, tried in order until one
+  loads. (Upstream ships several versions of each and loads them *simultaneously*; ours is fallback
+  ordering only, since the changelog does not say which and there is no source past 0.7.9 to read.)
+
+Pending from 0.9.9: `-cfg<codec>` (the flag names and sub-keys were read out of the 0.9.9 binary, but its
+output cannot be captured even on real Windows, so what the sub-keys mean is inferred from their names, not
+documented), and the `bink` / `wwise` / `ogg` / `gdeflate` scanners.
 
 Declared **not applicable** to an open build (would need proprietary multi-DLL infrastructure with no open
 equivalent): the `-mzstd=zstd147`-style library-variant pinning syntax.
@@ -90,7 +136,10 @@ Found and fixed while building/testing this port, not from any xtool release not
   any handler — running them silently did nothing.
 - Fixed `WriteLine` on Windows: it called `WriteConsole()` directly, which silently produces zero output when
   stdout/stderr isn't a real console (any redirect, pipe, or non-interactive SSH session) — the process would
-  exit 0 having "worked" while emitting nothing.
+  exit 0 having "worked" while emitting nothing. **Only `WriteLine` was fixed.** The live status block
+  (`Streams:`, `Size:`) still calls `WriteConsole` directly (`PrecompMain.pas`), so on Windows it is lost
+  under any redirect: the banner survives, the stream counts do not. Upstream 0.9.9 reworked stats printing
+  for what looks like the same reason.
 - `WavPack` codec is new (xtool's own changelog only ever mentioned wavpack as an *external plugin transfer
   target*, 0.8.6 — we built it as a first-class codec instead, since no open TAK encoder exists to pair with it).
 - Ported `srep` (external dedup, `-dd<N>`) to Windows: its Win32 threading backend was missing from the
@@ -157,10 +206,10 @@ codes across identical invocations** in testing (likely a latent concurrency iss
 Requirements: FPC 3.2.2+, a C compiler (clang++ or g++), `git`, `cmake` (for brunsli).
 
 ```bash
-# 1. native objects (lz4/zstd/xxhash linked into the binary)
+# 1. native objects (lz4/zstd/xxhash linked into the binary, for the internal cache)
 bash contrib/build-native-linux.sh
 
-# 2. optional plugins (srep, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so/exe
+# 2. plugins (liblz4, srep, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so/exe
 bash contrib/build-plugins-linux.sh
 
 # 3. the ytool binary
@@ -170,7 +219,30 @@ fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
 ```
 
 System libraries loaded via `dlopen` fallback if the bundled name isn't found: `libz`, `libzstd`, `liblz4`,
-`liblzo2`, `libFLAC`, `libwavpack`.
+`liblzo2`, `libFLAC`, `libwavpack`. For lz4 and zstd the fallback is the *last* resort: the codecs that
+reconstruct streams are sensitive to the library version, so a bare binary relying on the distro's copy is
+at the mercy of whatever version the decoding machine has installed.
+
+**Every dependency is pinned, and the pin is enforced.** All build scripts fetch through
+`contrib/pin-repo.sh`, which checks the checkout against the requested revision, corrects it when they
+differ, and fails when the result is still wrong. The previous pattern, `[ -d "$dir" ] || git clone
+--branch <ver>`, skipped the clone whenever the directory already existed, so a pin only applied to a fresh
+checkout: it left packJPG on an old version after the pin moved, and built a published `liblz4.dll` from
+lz4 1.10.0 while its script asked for 1.9.4.
+
+### Packaging a release
+
+```bash
+contrib/package-release.sh <outdir> [--win-bin <dir-with-ytool.exe-and-ytool-x86.exe>]
+```
+
+It refuses to produce an archive when any of these fails, one check per defect that has actually shipped:
+each artifact newer than the newest source; the regression suite green in **strict** mode (every codec
+must process streams); every Windows DLL importing only libraries Windows ships (a `-posix` build once
+imported `libwinpthread-1.dll` and the codec loaded nowhere); an explicit manifest, so a missing DLL
+aborts; single-level archive nesting; the README's version claims matching the binaries; and each codec in
+the extracted archive measured against the size a literal store would produce. Windows engagement is the
+one check it cannot automate — see the note in [Testing](#testing).
 
 ### Windows
 
@@ -247,6 +319,23 @@ FULL=1 tests/regression.sh   # + a slice of a large real-world corpus, if presen
 
 The regression suite covers every codec above plus dedup (`-dd`) and reassign (`-r`) paths — any change that
 breaks `decode(precomp(x)) == x` fails the suite.
+
+**Round-trips are necessary and not sufficient.** Each codec also has a minimum number of streams it must
+actually process (`CODEC_EXPECT` in `tests/regression.sh`), and the suite reports `*** CODEC MUERTO ***`
+when one processes none. Pipeline stages are checked the same way (`STAGE_EXPECT`). Without those two, a
+codec that silently stores everything literally passes.
+
+The test material matters as much as the assertion. Library bindings choose conservative defaults and
+command-line tools choose useful ones, and the two diverge systematically: the python `lz4.frame` and
+`zstandard` modules write frames **without** a content checksum, the `lz4` and `zstd` CLIs write them
+**with** one. A corpus built on the modules' defaults exercised exactly the case that already worked and
+passed against codecs that were broken for every real file. The generators use CLI-equivalent settings for
+that reason, and a payload chosen to discriminate between compression strategies — a repeated literal
+collapses to the same bytes at every level and cannot tell a working level search from a broken one.
+
+**The engagement assertion does not run on Windows.** `ytool`'s status output there goes straight to the
+console (see the `WriteLine` note above) and survives neither PowerShell nor `cmd.exe` redirection, so
+stream counts cannot be read over SSH. Windows engagement is checked by comparing `.pmp` sizes instead.
 
 ## License
 
