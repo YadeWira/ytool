@@ -27,16 +27,11 @@ program ytool;
 {$WEAKLINKRTTI ON}
 {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
 {$POINTERMATH ON}
-{.$DEFINE UseFastMM}
 
 uses
 {$IFDEF UNIX}
   cthreads, // pthread thread driver; must come first (TThread/TTask)
 {$ENDIF}
-{$IFDEF UseFastMM}
-  FastMM4 in 'contrib\FastMM4-AVX\FastMM4.pas',
-  FastMM4Messages in 'contrib\FastMM4-AVX\FastMM4Messages.pas',
-{$ENDIF }
 {$IFDEF MSWINDOWS}
   Windows,
 {$ENDIF}

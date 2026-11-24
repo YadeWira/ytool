@@ -1,29 +1,52 @@
+# ── Salida del compilador FPC ────────────────────────────────────────────────
 .fpcout/
+.fpcout_dbg/
 *.o
 *.O
 *.ppu
 *.compiled
-contrib/.csrc/
+*.or
 link*.res
-# Nota: contrib/*/*.linux.x64.o se regeneran con contrib/build-native-linux.sh
+
+# ── Binario principal (se compila; ver README "Building") ────────────────────
 /ytool
 /ytool.exe
+ytool_base
+ytool-base
+ytool-x86
+
+# ── Plugins y dependencias externas construidas localmente ───────────────────
+# Todas se regeneran con contrib/build-plugins-*.sh y contrib/build-native-*.sh
+*.dll
+*.so
+*.so.*
+osrep
 osrep64
 osrep.exe
 osrep-x86.exe
-libpackjpg.so
-libpreflate.so
-libfast-lzma2.so
-libbrunsli.so
+srep
+srep64
+srep.exe
+srep-x86.exe
+
+# ── Checkouts de terceros descargados por los build scripts ──────────────────
+# contrib/pin-repo.sh los clona aqui; nunca se versionan (580 MB con todo).
+contrib/.csrc/
+
+# ── Material de prueba grande o privado ─────────────────────────────────────
 testdata/
-libpackmp3.so
-libpackpng.so
-liblz4.so
-# recursos locales grandes / privados (no versionar; evita que git add -A los suba)
-test-files2.tar
 test-files*.tar
-CONEXION-IA.md
-ytool_base
-# DLLs Windows construidas localmente (contrib/build-plugins-windows.sh), regenerables
-*.dll
 /regression-failures/
+
+# ── Archivos de trabajo de agentes/IA (no forman parte del proyecto) ────────
+CONEXION-IA.md
+CONEXION-IA-W7.md
+credenciales.md
+handoff.md
+message-from-*.md
+xtool_*.7z
+*.tar
+
+# ── Editor / SO ─────────────────────────────────────────────────────────────
+*~
+.DS_Store
