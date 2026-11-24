@@ -121,15 +121,56 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
   loads. (Upstream ships several versions of each and loads them *simultaneously*; ours is fallback
   ordering only, since the changelog does not say which and there is no source past 0.7.9 to read.)
 
-Pending from 0.9.9: `-cfg<codec>` (the flag names and sub-keys were read out of the 0.9.9 binary, but its
-output cannot be captured even on real Windows, so what the sub-keys mean is inferred from their names, not
-documented), and the `bink` / `wwise` / `ogg` scanners. Its `gdeflate` scanner is **not** pending: gdeflate is
-DirectStorage-specific (0.9.9 ships `dstorage.dll` alongside it) and was deliberately removed from this port
-as dead code with no cross-platform meaning — see
+#### What 0.9.9 actually ships, read out of the binary
+
+`xtool_099_hotifx.7z` (password `123`) was unpacked so this port could be audited against the real thing
+instead of against the release notes. Two facts that the notes alone did not give:
+
+- **`brute` is a top-level subcommand**, listed in `Available commands` next to `decode`, `precomp` and
+  the legacy toolkit — not a `precomp` flag. Its own usage text is not reachable: the 0.9.9 binary
+  writes its help through `WriteConsole`, so it prints nothing under Wine or any redirect (the same
+  defect this port fixed for `WriteLine` only — see below). What it does is therefore unknown beyond
+  its name.
+- **The full codec list is `-mzlib+png+lz4f+zstd+kraken+mermaid+leviathan+gdeflate+flac+wwise+brunsli+mp3+ogg+bink`**,
+  and there is a second internal list (`lz4hc`, `lz4f`, `lzo1x`, `lzo2a`, `lzo1c`, `zstd`, then the Oodle
+  family `lzna`/`kraken`/`mermaid`/`selkie`/`hydra`/`leviathan`). `packjpg` and `jojpeg` are absent,
+  matching the 0.9.9 note "removed packjpg and jojpeg".
+
+Pending from 0.9.9, in the order they would matter:
+
+| Item | State here | Why |
+|---|---|---|
+| `-cfg<codec>` precompression config | **not implemented** | Sub-key names are recoverable from the binary (`-cfgzlib`, `-cfglz4ac`/`-cfglz4af`/`-cfglz4`, `-cfgzstdwl`/`-cfgzstd`, `-cfgoodle`/`-cfgoodleds`, plus the autocomplete strings `Possible parameters:` / `No possible parameters match`), but what each one *means* is not: the same `WriteConsole` defect hides the help. Implementing it would be guessing at semantics. |
+| `ogg` scanner (`vorbis`, `opus`) | **not implemented** | Needs a Vorbis/Opus re-encoder; no open one is wired up. |
+| `bink` scanner | **not implemented** | No open Bink encoder exists (Bink 2 audio is a proprietary RAD codec). |
+| `wwise` scanner | **not implemented** | Needs the Wwise Vorbis/Opus/[ADPCM] re-encoders, proprietary. |
+| `-oodle#` multiple libraries | **not implemented** | Loader takes one `-oodle<path>`. Ours cannot use more than one anyway without a real Oodle library. |
+| `packjpg` / `jojpeg` removal | **not done** | We still ship `-mpackjpg` as a working codec. 0.9.9 dropped it; we have an open fork (`YadeWira/packJPG`) that works, so dropping it would lose a working codec for changelog fidelity. `jojpeg` has never been buildable (no public source). |
+| `mp3` as a *scanner* | **different design** | 0.9.9 scans MP3; we replace MP3 streams through `packMP3` (`-mpackmp3`), which is stronger. Not an omission. |
+
+Its `gdeflate` scanner is **not** pending: gdeflate is DirectStorage-specific (0.9.9 ships `dstorage.dll`
+alongside it) and was deliberately removed from this port as dead code with no cross-platform meaning — see
 [Known Issues](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#gdeflate-removed).
 
 Declared **not applicable** to an open build (would need proprietary multi-DLL infrastructure with no open
 equivalent): the `-mzstd=zstd147`-style library-variant pinning syntax.
+
+#### CLI flag differences from 0.9.9, verified against both binaries
+
+Three flags do not behave like 0.9.9's. All three were checked by running both parsers, not by reading
+release notes:
+
+| 0.9.9 | `ytool` | Consequence |
+|---|---|---|
+| `-pf#` (prefetch) | parses as `-p#` | `-pf32mb` is accepted and **silently ignored** — `-p` matches by prefix, the trailing `f32mb` fails the "must start with a digit" guard and the cache stays 0. The number is lost with no warning. |
+| `-lm#` (0–3) | `-lm#`, same range | Matches; only the help text is wrong (it prints `-lm` with no level). |
+| `-r#` separated by `;` | `-r#` separated by `;` | Matches. |
+| `-x#`, `-X#` | same | `-X` verified end to end: on a file with three deflate streams it extracted exactly the one that the first level-search attempt failed on. |
+| `brute` subcommand | absent | Not implemented; its semantics are unknown (see above). |
+
+Renaming `-p` to `-pf` is a one-line change, but it would break every existing command line that uses
+`-p`, so it is left as a documented divergence until someone decides which way to go.
+
 
 ### Beyond the changelog — our own fixes, found during this port (not upstream features)
 
@@ -187,6 +228,29 @@ Found and fixed while building/testing this port, not from any xtool release not
   and the full cross-architecture regression matrix (357/357) passes with no `-dd1` failures anywhere. See
   [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written)
   for the full investigation history.
+
+  > **Decision pending implementation: back to `Intensity/srep`.** The current tree pins omega-srep v1.0.5
+  > (see `contrib/build-plugins-*.sh`). Upstream Intensity/srep is still the reference implementation and is
+  > what this port is being moved back to. Measured against the 2014 binary (`48f4b97`) while auditing this:
+  >
+  > - **Decode invocation differs.** omega-srep decodes with `-m<N>f <in> <out>`; Intensity/srep requires the
+  >   explicit mode flag, `-d -m<N>f <in> <out>`. Without `-d` it silently *compresses* the compressed file
+  >   instead of restoring it (exit 0, output 100.04% of input, no error). This is the one code change the
+  >   switch needs in `PrecompMain.pas`.
+  > - **`-` as decode *input* does not work** (`ERROR! Not found SREP compressed file footer in file -`).
+  >   ytool's actual call is file → stdout (`<tmpfile> -`), which works. Encode via stdin/stdout also works.
+  > - **The two inline-asm defects are still present upstream.** The `"rm"`→`"qm"` register-clobber fix in
+  >   `hashes.cpp` and the VMAC `ADD128`/`PMUL64` strict-aliasing fix in `vmac.c` were only ever applied here
+  >   and in omega-srep. Returning to Intensity/srep means restoring `contrib/patch_srep_vmac.py` and the
+  >   `sed` patch, both deleted in `300a5ab`.
+  > - **The Windows threading backend must also be restored.** Intensity/srep kept only the Unix backend;
+  >   `contrib/srep-win32/{ThreadsWin32.c,ThreadsWin32.h,Handle.h}` (adapted from the public-domain LZMA SDK)
+  >   were added in `054c42e` and deleted in `300a5ab`. All three files are recoverable from git history.
+  >
+  > Until this lands, the shipped build still uses omega-srep, and the two formats are not interchangeable:
+  > omega-srep writes `OSRP` magic and a `.osr` payload, Intensity/srep writes `SREP`. A `.pmp` produced by one
+  > cannot be decoded by the other.
+
 - Also fixed: `common/Threading.pas`'s `TTask.FStatus` had no synchronization at all between the main thread
   and worker threads (plus a dead-code bug that meant a worker's error message never actually got cleared),
   and `find`/`erase`/`replace` swallowed worker errors instead of propagating them — the likely cause of a
@@ -227,19 +291,32 @@ verified by building both trees: the resulting binaries are byte-identical. Do n
 
 Requirements: FPC 3.2.2+, a C compiler (clang++ or g++), `git`, `cmake` (for brunsli).
 
+Steps 1 and 3 are both **required**: the binary will not link without step 1, because four C
+objects it references (`lz4delphi.linux.x64.o`, `xxhash4delphi.linux.x64.o`,
+`zstd4delphi.linux.x64.o`, `lzmadelphi.linux.x64.o`) are generated, not committed — they are
+covered by the `*.o` ignore rule and a fresh clone does not have them. Step 2 is optional: a
+binary built without it still runs, but the plugin-only codecs stay unavailable and the lz4
+codecs fall back to the distro's library.
+
 ```bash
-# 1. native objects (lz4/zstd/xxhash linked into the binary, for the internal cache)
+# 1. native objects (lz4/zstd/xxhash/lzma, linked into the binary) — REQUIRED
 bash contrib/build-native-linux.sh
 
 # 2. plugins (liblz4, srep, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so/exe
 bash contrib/build-plugins-linux.sh
 
 # 3. the ytool binary
+mkdir -p .fpcout
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
   -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
   -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \
   -oytool ytool.dpr
 ```
+
+`mkdir -p .fpcout` is not cosmetic: `-FU.fpcout` makes FPC write its unit files there,
+and a fresh clone has no such directory, so the compile dies with
+`Can't create object file: .fpcout/IOUtils.o (error code: 2)`. `tests/regression.sh`
+already creates it.
 
 System libraries loaded via `dlopen` fallback if the bundled name isn't found: `libz`, `libzstd`, `liblz4`,
 `liblzo2`, `libFLAC`, `libwavpack`. For lz4 and zstd the fallback is the *last* resort: the codecs that
