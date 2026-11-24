@@ -270,9 +270,9 @@ codes across identical invocations** in testing (likely a latent concurrency iss
 
 ### Repository layout
 
-Only ~200 files in `contrib/` are inputs to the build. Everything else there is a third-party checkout
-that `contrib/pin-repo.sh` downloads on demand, and those are gitignored (`contrib/.csrc/`) — together
-they are 580 MB, so they are never committed.
+197 files live under `contrib/`, and every one of them is either a build input or a build script.
+Third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them on demand into
+`contrib/.csrc/`, which is gitignored and reaches 580 MB with every pinned repo checked out.
 
 | Path | What it is | Versioned? |
 |---|---|---|
@@ -281,6 +281,7 @@ they are 580 MB, so they are never committed.
 | `contrib/LZ4Delphi/`, `ZSTD4Delphi/`, `XXHASH4Delphi/`, `LZMADelphi/`, `LIBC/`, `WinLibcShim/` | Pascal bindings plus the prebuilt C objects their `{$L}` directives link | yes — these objects are build **inputs** |
 | `contrib/ParseExpression/` | expression parser (`-df` tolerance, `-c` sizes) | yes |
 | `contrib/preflate/` | preflate C++ source, built into `libpreflate.so` | yes |
+| `contrib/mingw-shims/` | a one-line `ShObjIdl.h` redirect for cross-compiling the srep helper with mingw-w64 | yes |
 | `contrib/.csrc/` | lz4, zstd, packJPG, packMP3, packPNG, brunsli, FLAC, WavPack, lzo, srep, preflate, fast-lzma2 checkouts | **no** — cloned by the build scripts |
 
 The mORMot tree was trimmed from 976 files to the 11 the binary actually compiles against. That was
