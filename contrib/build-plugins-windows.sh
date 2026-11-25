@@ -104,53 +104,8 @@ if [ -d "$CSRC/zlib" ]; then
     && echo "   OK -> zlib1.dll" || echo "   (zlib1.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — Intensity/srep, con backend Win32 propio ──
-# Upstream Intensity/srep, frozen since 2014 and still the reference
-# implementation. The port briefly used omega-srep (a fork) because of a real
-# cross-architecture bug -- a win64-encoded `-dd1` stream failed its own
-# checksum when decoded on win32 -- which was eventually root-caused to THIS
-# source (vmac.c's 32-bit ADD128/PMUL64 fallback, broken by -O2+
-# strict-aliasing; see build-plugins-linux.sh's srep comment for the evidence).
-#
-# The threading API srep uses (Compression/LZMA2/C/ThreadsUnix.h) is the same
-# as 7-Zip's LZMA SDK (Igor Pavlov, public domain). This fork kept only the
-# Unix half, so the Windows side (ThreadsWin32.*) is added from
-# contrib/srep-win32/, adapted from the official LZMA SDK. Handle.h is an
-# empty stub: Synchronization.h includes it under #ifdef _WIN32 but no class
-# in that file actually uses a "Handle" type.
-#
-# Also needed: -DUNICODE/-D_UNICODE (Common.h assumes TCHAR=wchar_t),
-# -lole32 -luuid (COM, for the Windows 7 taskbar progress indicator -- a
-# feature irrelevant to a headless helper, but it still has to link), and a
-# case shim for <ShObjIdl.h> (mingw-w64 ships lowercase "shobjidl.h"; this
-# only matters on a case-sensitive FS like Linux, never on real Windows).
-#
-# The same two inline-asm patches as the Linux build are applied. They matter
-# here too: the i386 build is exactly where the CRC32 register-clobber and the
-# VMAC 32-bit fallback misbehave.
-echo "==> srep (srep.exe)"
-# From the vendored tree, patched into a scratch copy -- see the Linux script's
-# srep block for why. The Win32 threading backend upstream never shipped lives in
-# contrib/srep-win32/ and is copied in here.
-if [ -f "$ROOT/vendor/srep/Makefile" ]; then
-  SREPBUILD="$CSRC/srep-build"
-  rm -rf "$SREPBUILD" && cp -a "$ROOT/vendor/srep" "$SREPBUILD"
-  if python3 "$ROOT/contrib/patch_srep.py" "$SREPBUILD" >/dev/null; then
-    cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
-      "$SREPBUILD/Compression/LZMA2/C/"
-    cp "$ROOT/contrib/srep-win32/Handle.h" "$SREPBUILD/Compression/LZMA2/MultiThreading/"
-    ( cd "$SREPBUILD" && "$CXX" -O3 -std=c++17 \
-      -I"$ROOT/contrib/mingw-shims" \
-      -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
-      -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
-      -Wno-write-strings -Wno-unused-result \
-      Compression/Common.cpp Compression/SREP/srep.cpp \
-      -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep.exe" ) \
-      && echo "   OK -> srep.exe" || echo "   (srep fallo)"
-  else
-    echo "   (srep: los parches no aplicaron)"
-  fi
-fi
+# srep is no longer built here: it is optional and separate from ytool.
+# Use `bash contrib/build-srep.sh win64` (that script carries the patches and the why).
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
 echo "==> lzo2 (lzo2.dll)"
@@ -397,5 +352,5 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. srep.exe + plugins .dll en la raiz del repo (gitignored)."
+echo "Hecho. Plugins .dll en la raiz del repo (gitignored). srep: contrib/build-srep.sh win64."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."

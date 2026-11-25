@@ -59,63 +59,8 @@ if [ -d "$CSRC/lz4/lib" ]; then
     && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
 fi
 
-# ── srep (dedup -d / StoreDD) — Intensity/srep, github.com/Intensity/srep ──
-# Upstream, frozen since 2014 (3.93a beta), and the reference implementation.
-# This port used omega-srep (YadeWira's fork) for a while because of a real
-# cross-architecture bug: a win64-encoded `-dd1` stream failed its own internal
-# checksum when decoded by the win32 build. The root cause was eventually
-# isolated to THIS source -- vmac.c's __i386__ branch never defines its own
-# ADD128/MUL64/PMUL64, so the 32-bit build falls through to the generic
-# portable-C fallback, whose type-punning GCC's -O2+ strict-aliasing
-# optimizations are entitled to break. That is why the fix below patches
-# vmac.c rather than working around it: the defect is in the source, not in
-# GCC. (Measured, not assumed: -O1 clean, -O3 broken,
-# -O3 -fno-strict-aliasing clean.) The same fix went into omega-srep; it is
-# applied here from contrib/patch_srep_vmac.py.
-#
-# Two source patches are applied to a fresh clone, both with independently
-# confirmed 32-bit failure modes:
-#   1. hashes.cpp: the inline-asm CRC32 declared its operand "rm" while the
-#      asm body can pick a register -- changed to "qm" with a defensive "cc"
-#      clobber. Without it i386 builds can produce a wrong checksum.
-#   2. vmac.c: nh_16_func/poly_step_func advance esi/edi/ecx without
-#      declaring them, so -O2+'s interprocedural register allocator may skip
-#      reloading them between two back-to-back calls (VMAC_TAG_LEN is 128
-#      here, so both functions are always called twice). Fixed by routing the
-#      modified operands through read-write ("+") operands.
-# Both patches are idempotent, so re-running this script is safe.
-#
-# CLI NOTE -- this is the one place the two implementations differ, and it is
-# a real trap: Intensity/srep requires the explicit mode flag on decode,
-# `-d -m<N>f <in> <out>`. Without `-d` it sees two filenames, assumes
-# compression, re-compresses the already-compressed file and exits 0 while
-# emitting 100.04% of its input -- no error at all. PrecompMain.pas passes the
-# `-d` (see the SREP_DECODE_MODE comment there). Also: `-` as decode *input*
-# is rejected ("Not found SREP compressed file footer in file -"), but ytool
-# decodes file -> stdout (`<tmpfile> -`), which works.
-#
-# On-disk format: upstream writes magic "SREP" and a .srep payload, unlike
-# omega-srep's "OSRP"/.osr clean break. Archives made with either are not
-# interchangeable, and this migration is also a one-way format change: .pmp
-# files produced while omega-srep was pinned cannot be decoded after it.
-echo "==> srep (vendor/srep)"
-# Built from the vendored tree, not from a git clone: the source is in the repo,
-# the patches are visible as a diff against upstream in vendor/srep/, and the
-# build no longer depends on a 2014 repository being reachable. Build into a
-# scratch copy so vendor/srep/ itself stays pristine (the patch script is
-# idempotent, but a build should not dirtify a tracked tree).
-if [ -f "$ROOT/vendor/srep/Makefile" ]; then
-  SREPBUILD="$CSRC/srep-build"
-  rm -rf "$SREPBUILD" && cp -a "$ROOT/vendor/srep" "$SREPBUILD"
-  if python3 "$ROOT/contrib/patch_srep.py" "$SREPBUILD"; then
-    ( cd "$SREPBUILD" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
-      && echo "   OK -> srep64" || echo "   (srep fallo)"
-  else
-    echo "   (srep: los parches no aplicaron, build omitido)"
-  fi
-else
-  echo "   (srep: falta vendor/srep/Makefile)"
-fi
+# srep is no longer built here: it is optional and separate from ytool.
+# Use `bash contrib/build-srep.sh` (that script carries the patches and the why).
 
 # ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
@@ -287,4 +232,4 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. Plugins .so/srep64 en la raiz del repo (gitignored)."
+echo "Hecho. Plugins .so en la raiz del repo (gitignored). srep: contrib/build-srep.sh."

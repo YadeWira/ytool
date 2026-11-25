@@ -99,47 +99,8 @@ if [ -d "$CSRC/zlib" ]; then
     || echo "   (zlib1-x86.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
-# Same source/threading-shim setup as the win64 build (contrib/srep-win32/,
-# see build-plugins-windows.sh's own comment for the why). i386-SPECIFIC BUG:
-# Compression/SREP/hashes.cpp's CRC32 helper uses inline asm with a "rm"
-# (register-or-memory) constraint on a uint8 operand -- safe on x86_64 (every
-# GPR has a REX byte-addressable form) but not on i386, where only
-# eax/ebx/ecx/edx have legacy 8-bit sub-registers (esi/edi/ebp/esp don't);
-# GCC's i386 codegen fails with "unsupported size for integer register"
-# (reported at the enclosing function due to inlining, not the true line).
-# Fixed by narrowing the constraint to "qm" (byte-addressable registers
-# only), applied as an idempotent sed patch below (checks before patching,
-# safe to re-run). The same fix also adds a defensive "cc" clobber, because
-# the asm body is free to touch the flags.
-#
-# The vmac.c patch matters MORE here than anywhere else: this is the exact
-# 32-bit build where VMAC's portable ADD128/PMUL64 fallback gets
-# type-punned and miscompiled by -O2+ strict aliasing. See
-# build-plugins-linux.sh's srep comment for the measurement.
-echo "==> srep (srep-x86.exe)"
-# From the vendored tree, patched into a scratch copy -- see the Linux script's
-# srep block for why. The Win32 threading backend upstream never shipped lives in
-# contrib/srep-win32/ and is copied in here.
-if [ -f "$ROOT/vendor/srep/Makefile" ]; then
-  SREPBUILD="$CSRC/srep-build-x86"
-  rm -rf "$SREPBUILD" && cp -a "$ROOT/vendor/srep" "$SREPBUILD"
-  if python3 "$ROOT/contrib/patch_srep.py" "$SREPBUILD" >/dev/null; then
-    cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
-      "$SREPBUILD/Compression/LZMA2/C/"
-    cp "$ROOT/contrib/srep-win32/Handle.h" "$SREPBUILD/Compression/LZMA2/MultiThreading/"
-    ( cd "$SREPBUILD" && "$CXX" -O3 -std=c++17 \
-      -I"$ROOT/contrib/mingw-shims" \
-      -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
-      -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
-      -Wno-write-strings -Wno-unused-result \
-      Compression/Common.cpp Compression/SREP/srep.cpp \
-      -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep-x86.exe" ) \
-      && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
-  else
-    echo "   (srep: los parches no aplicaron)"
-  fi
-fi
+# srep is no longer built here: it is optional and separate from ytool.
+# Use `bash contrib/build-srep.sh win32` (that script carries the patches and the why).
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
 echo "==> lzo2 (lzo2-x86.dll)"
@@ -328,7 +289,7 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. srep-x86.exe + plugins -x86.dll en la raiz del repo (gitignored)."
+echo "Hecho. Plugins -x86.dll en la raiz del repo (gitignored). srep: contrib/build-srep.sh win32."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
 echo "Al empaquetar: renombrar cada uno quitando el sufijo -x86 junto al ytool.exe"
 echo "de 32-bit (packpng-x86.dll -> packpng.dll, zlib1-x86.dll -> zlib1.dll, etc.),"

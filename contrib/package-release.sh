@@ -81,6 +81,8 @@ ok "commit $COMMIT"
 step "build linux"
 bash contrib/build-native-linux.sh  >/dev/null 2>&1 || die "build-native-linux.sh fallo"
 bash contrib/build-plugins-linux.sh >/dev/null 2>&1 || die "build-plugins-linux.sh fallo"
+# srep va aparte del build de ytool, pero el paquete lo incluye para -dd<N>.
+bash contrib/build-srep.sh linux   >/dev/null 2>&1 || die "build-srep.sh fallo"
 mkdir -p .fpcout
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
@@ -211,7 +213,7 @@ for spec in "x64:" "x86:-x86"; do
   arch="${spec%%:*}"; sfx="${spec#*:}"
   D="$STAGE/ytool-windows-$arch"; rm -rf "$D"; mkdir -p "$D"
   cp "$WINBIN/ytool${sfx}.exe" "$D/ytool.exe"
-  [ -f "$ROOT/srep${sfx}.exe" ] || die "falta srep${sfx}.exe"
+  [ -f "$ROOT/srep${sfx}.exe" ] || die "falta srep${sfx}.exe (bash contrib/build-srep.sh $([ -z "$sfx" ] && echo win64 || echo win32))"
   cp "$ROOT/srep${sfx}.exe" "$D/srep.exe"
   for d in $WIN_DLLS; do
     if   [ -f "$ROOT/${d}${sfx}.dll" ]; then cp "$ROOT/${d}${sfx}.dll" "$D/${d}.dll"

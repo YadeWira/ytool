@@ -307,7 +307,7 @@ codecs fall back to the distro's library.
 # 1. native objects (lz4/zstd/xxhash/lzma, linked into the binary) — REQUIRED
 bash contrib/build-native-linux.sh
 
-# 2. plugins (liblz4, srep, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so/exe
+# 2. plugins (liblz4, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so
 bash contrib/build-plugins-linux.sh
 
 # 3. the ytool binary
@@ -316,6 +316,14 @@ fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
   -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
   -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \
   -oytool ytool.dpr
+```
+
+**srep is built separately, and only if you want it.** It is the helper behind `-dd<N>` (external
+dedup); ytool builds and runs without it, and `-dd` (in-memory dedup) does not need it. Its source,
+SREP 3.93a beta (Intensity/srep `48f4b97`, October 2014), lives in `vendor/srep/`:
+
+```bash
+bash contrib/build-srep.sh            # srep64        (also: win64 -> srep.exe, win32 -> srep-x86.exe, all)
 ```
 
 `mkdir -p .fpcout` is not cosmetic: `-FU.fpcout` makes FPC write its unit files there,
@@ -357,7 +365,8 @@ Windows (FPC/Lazarus has no Linux→Windows cross-compiler for this codebase's d
 ```bash
 # on Linux:
 bash contrib/build-native-windows.sh    # native lz4/zstd/xxhash objects (mingw-w64)
-bash contrib/build-plugins-windows.sh   # 8 plugin DLLs + osrep.exe (mingw-w64 + cmake)
+bash contrib/build-plugins-windows.sh   # 8 plugin DLLs (mingw-w64 + cmake)
+bash contrib/build-srep.sh win64        # optional: srep.exe for -dd<N>
 # copy the source tree + the .dll files to a Windows machine with FPC/Lazarus 3.2.2, then:
 ```
 ```powershell
