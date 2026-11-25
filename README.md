@@ -113,7 +113,9 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
 - 0.9.0 — lzo hardening (buffer sizing, error-code handling)
 - 0.9.1 — removed the `recompress stream` feature
 - 0.9.2 — three low-memory levels (`-lm1`/`-lm2`/`-lm3`)
-- 0.9.6 — stream-coverage telemetry (%), `-oodl#` multi-library loader
+- 0.9.6 — stream-coverage telemetry (%); `-oodl#` only partly (see the table below)
+- 0.9.9 — zlib scanner: a zlib stream starting at byte 0 of a block was skipped (a `Pos >= 3` guard inherited
+  from 0.7.9, where `Pos >= 2` is the first valid position). 21_zlib_many.bin now gives 200 / 200, as 0.9.9 does
 - 0.9.7 — reassign stream moved from `-a` to `-r`
 - 0.9.9 — `-pa` (patch all streams): lifts the condition that made the patch fallback unreachable in a
   normal scan. `DIFF_TOLERANCE` (`-df#`) still decides whether a patch is accepted.
@@ -127,10 +129,10 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
 instead of against the release notes. Two facts that the notes alone did not give:
 
 - **`brute` is a top-level subcommand**, listed in `Available commands` next to `decode`, `precomp` and
-  the legacy toolkit — not a `precomp` flag. Its own usage text is not reachable: the 0.9.9 binary
-  writes its help through `WriteConsole`, so it prints nothing under Wine or any redirect (the same
-  defect this port fixed for `WriteLine` only — see below). What it does is therefore unknown beyond
-  its name.
+  the legacy toolkit — not a `precomp` flag. It prints nothing: not with no arguments, not with `-h`,
+  not with an input file (all three tried under Wine through a pty, which *does* show every other
+  command's help, since 0.9.9 writes through `WriteConsole` and a plain redirect captures nothing).
+  What it does is therefore unknown beyond its name.
 - **The full codec list is `-mzlib+png+lz4f+zstd+kraken+mermaid+leviathan+gdeflate+flac+wwise+brunsli+mp3+ogg+bink`**,
   and there is a second internal list (`lz4hc`, `lz4f`, `lzo1x`, `lzo2a`, `lzo1c`, `zstd`, then the Oodle
   family `lzna`/`kraken`/`mermaid`/`selkie`/`hydra`/`leviathan`). `packjpg` and `jojpeg` are absent,
@@ -140,11 +142,11 @@ Pending from 0.9.9, in the order they would matter:
 
 | Item | State here | Why |
 |---|---|---|
-| `-cfg<codec>` precompression config | **not implemented** | Sub-key names are recoverable from the binary (`-cfgzlib`, `-cfglz4ac`/`-cfglz4af`/`-cfglz4`, `-cfgzstdwl`/`-cfgzstd`, `-cfgoodle`/`-cfgoodleds`, plus the autocomplete strings `Possible parameters:` / `No possible parameters match`), but what each one *means* is not: the same `WriteConsole` defect hides the help. Implementing it would be guessing at semantics. |
+| `-cfg<codec>` precompression config | **not implemented** | Sub-key names are recoverable from the binary (`-cfgzlib`, `-cfglz4ac`/`-cfglz4af`/`-cfglz4`, `-cfgzstdwl`/`-cfgzstd`, `-cfgoodle`/`-cfgoodleds`, plus the autocomplete strings `Possible parameters:` / `No possible parameters match`), but what each one *means* is not: 0.9.9 prints no help for them. They do change behaviour — measured, `-mzlib -cfgzlib` on a file where plain `-mzlib` processes 6 / 6 reports `Streams: 0 / 0` — so finding out needs reverse engineering, not guessing. |
 | `ogg` scanner (`vorbis`, `opus`) | **not implemented** | Needs a Vorbis/Opus re-encoder; no open one is wired up. |
 | `bink` scanner | **not implemented** | No open Bink encoder exists (Bink 2 audio is a proprietary RAD codec). |
 | `wwise` scanner | **not implemented** | Needs the Wwise Vorbis/Opus/[ADPCM] re-encoders, proprietary. |
-| `-oodle#` multiple libraries | **not implemented** | Loader takes one `-oodle<path>`. Ours cannot use more than one anyway without a real Oodle library. |
+| `-oodle#` multiple libraries | **partial** | `-oodle<path>` can be repeated, and the candidates are tried in order until one loads; that one library is then used for every stream. 0.9.6/0.9.9 instead fall through to the next library *per stream* when one fails. Not measurable here without a real Oodle library. |
 | `packjpg` / `jojpeg` removal | **not done** | We still ship `-mpackjpg` as a working codec. 0.9.9 dropped it; we have an open fork (`YadeWira/packJPG`) that works, so dropping it would lose a working codec for changelog fidelity. `jojpeg` has never been buildable (no public source). |
 | `mp3` as a *scanner* | **different design** | 0.9.9 scans MP3; we replace MP3 streams through `packMP3` (`-mpackmp3`), which is stronger. Not an omission. |
 
@@ -157,15 +159,15 @@ equivalent): the `-mzstd=zstd147`-style library-variant pinning syntax.
 
 #### CLI flag differences from 0.9.9, verified against both binaries
 
-Three flags do not behave like 0.9.9's. All three were checked by running both parsers, not by reading
-release notes:
+Every row was checked by running both binaries on the same input (0.9.9_hotfix5 under Wine), not by
+reading release notes:
 
 | 0.9.9 | `ytool` | Consequence |
 |---|---|---|
 | `-pf#` (prefetch) | parses as `-p#` | `-pf32mb` is accepted and **silently ignored** — `-p` matches by prefix, the trailing `f32mb` fails the "must start with a digit" guard and the cache stays 0. The number is lost with no warning. |
-| `-lm#` (0–3) | `-lm#`, same range | Matches; only the help text is wrong (it prints `-lm` with no level). |
-| `-r#` separated by `;` | `-r#` separated by `;` | Matches. |
-| `-x#`, `-X#` | same | `-X` verified end to end: on a file with three deflate streams it extracted exactly the one that the first level-search attempt failed on. |
+| `-lm#` (0–3) | `-lm#`, same range | Parses the same, but only `-lm3` measurably lowers memory: peak RSS on a 20 MB input (`-c64mb -t4`) was 55.7 MB without it, 53.2 / 55.3 / 30.3 MB with `-lm1` / `-lm2` / `-lm3`. The help prints `-lm` with no level. |
+| `-r#` separated by `;` | `-r#` separated by `;` | Parses the same; semantics differ. `-rzlib=zlib` gives 0 / 149 streams in 0.9.9 and 135 / 149 here. |
+| `-x#`, `-X#` | same | Byte-identical to 0.9.9: `-x` 149 / 149 files on a real 1.5 MB zip, `-X` the same 14 files (149 − 135 processed). Until 2026-11-25 `-X` extracted on every *failed level attempt*, so a stream that failed at one level and succeeded at another was extracted too (24 files there instead of 14); `tests/regression.sh` now checks it on `24_zlib_mixed.bin`. |
 | `brute` subcommand | absent | Not implemented; its semantics are unknown (see above). |
 
 Renaming `-p` to `-pf` is a one-line change, but it would break every existing command line that uses
