@@ -288,14 +288,17 @@ type
 {$ELSE}
     FProcess: TProcess;
 {$ENDIF}
-    FExecutable, FCommandLine, FWorkDir: String;
+    FExecutable, FCommandLine: String;
+    FWorkDir: String;
+    FEnvironment: TStringArray;
     FInSize, FOutSize: Int64;
     procedure ExecReadTask;
     procedure ExecWriteTask;
     procedure ExecErrorTask;
   public
     constructor Create(AExecutable, ACommandLine, AWorkDir: String;
-      AInput: TStream = nil; AOutput: TStream = nil; AError: TStream = nil);
+      AInput: TStream = nil; AOutput: TStream = nil; AError: TStream = nil;
+      const AEnvironment: TStringArray = nil);
     destructor Destroy; override;
     function Read(var Buffer; Count: LongInt): LongInt; override;
     function Write(const Buffer; Count: LongInt): LongInt; override;
@@ -2095,9 +2098,11 @@ begin
 end;
 
 constructor TProcessStream.Create(AExecutable, ACommandLine, AWorkDir: String;
-  AInput: TStream; AOutput: TStream; AError: TStream);
+  AInput: TStream; AOutput: TStream; AError: TStream;
+  const AEnvironment: TStringArray);
 begin
   inherited Create;
+  FEnvironment := AEnvironment;
   FInput := AInput;
   FOutput := AOutput;
   FError := AError;
@@ -2379,6 +2384,8 @@ begin
 end;
 
 function TProcessStream.Execute: Boolean;
+var
+  I: Integer;
 begin
   Result := False;
   FProcess := TProcess.Create(nil);
@@ -2390,6 +2397,9 @@ begin
   else
     FProcess.CurrentDirectory := GetCurrentDir;
   FProcess.Options := [poUsePipes];
+  if Length(FEnvironment) > 0 then
+    for I := 0 to High(FEnvironment) do
+      FProcess.Environment.Add(FEnvironment[I]);
   FProcess.Execute;
   FTask2.Perform(ExecErrorTask);
   FTask2.Start;

@@ -267,6 +267,43 @@ for f in "$CORPUS"/*; do
   done
 done
 
+# --- srep: reproducibilidad y metodos -------------------------------------
+# La suite de arriba prueba reversibilidad; esto prueba dos propiedades que no
+# se ven en un round-trip y que costaron bugs reales:
+#   1. -dd<N> con un metodo fuera de rango fallaba con un .pmp de 34 bytes y
+#      exit 0. Un error de linea de comandos tiene que ser un error.
+#   2. El output de srep no era reproducible (clave VMAC aleatoria). Con -seed
+#      dos corridas tienen que dar el MISMO .pmp; sin eso no se puede fijar un
+#      archivo por hash ni comparar dos builds.
+if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
+  SEED="$(printf 'ab%.0s' $(seq 1 32))"
+  SP1="$WORK/rep1.pmp"; SP2="$WORK/rep2.pmp"; SPR="$WORK/rep.out"
+  if "$XTOOL" precomp -mzlib -dd3 -seed"$SEED" "$CORPUS/23_dup_streams.bin" "$SP1" >/dev/null 2>&1 \
+  && "$XTOOL" precomp -mzlib -dd3 -seed"$SEED" "$CORPUS/23_dup_streams.bin" "$SP2" >/dev/null 2>&1; then
+    if cmp -s "$SP1" "$SP2"; then
+      echo "-- srep: -seed reproducible --"
+    else
+      echo "-- srep: *** -seed NO reproducible *** --"
+      fail=$((fail+1))
+    fi
+    if "$XTOOL" decode "$SP1" "$SPR" >/dev/null 2>&1 && cmp -s "$CORPUS/23_dup_streams.bin" "$SPR"; then
+      echo "-- srep: round-trip con -seed --"
+    else
+      echo "-- srep: *** round-trip con -seed fallo *** --"
+      fail=$((fail+1))
+    fi
+  else
+    echo "-- srep: (sin helper o -dd3 no soportado, se omiten estas pruebas) --"
+  fi
+  # Un metodo fuera de rango tiene que fallar, no producir un .pmp vacio.
+  if "$XTOOL" precomp -mzlib -dd9 "$CORPUS/23_dup_streams.bin" "$WORK/bad.pmp" >/dev/null 2>&1; then
+    echo "-- srep: *** -dd9 (invalido) NO fallo *** --"
+    fail=$((fail+1))
+  else
+    echo "-- srep: -dd9 rechazado --"
+  fi
+fi
+
 echo "-- resumen: $pass OK, $fail FAIL ($err por exit code != 0, $dead por codec muerto) --"
 [ "$dead" -gt 0 ] && echo "AVISO: $dead caso(s) fueron reversibles pero el codec no proceso NINGUN stream (guardo literal)."
 [ "$err" -gt 0 ] && echo "AVISO: $err caso(s) abortaron; eso NO es un fallo de reversibilidad. Artefactos en $FAILDIR/"

@@ -187,7 +187,126 @@ def main():
     # through read-write "+" operands. Same fix as omega-srep's 22bbe43.
     ok &= patch_nh16(vmac)
 
-    # --- 5. LibTomCrypt STORE32H/LOAD32H: missing "memory" clobber -----------
+    # --- 5. Reproducible output: SREP_SEED_HEX ---------------------------------
+    # Origin: measured, not from omega-srep (it has a -seed flag; this does not).
+    # Two identical runs of the same command produce different bytes, because the
+    # VMAC key is filled from systemRandomData() plus time(). That is correct for
+    # a crypto key and hostile to everything else: the same input cannot be made
+    # to produce the same archive, so a .pmp cannot be reproduced, byte-diffed
+    # across builds, or pinned by a test.
+    #
+    # The seed is stored in the archive header, so it is not a security boundary:
+    # whoever decodes already has it. An env var rather than a CLI flag keeps the
+    # argument parser untouched (all options are parsed in one long if-chain where
+    # a new prefix can shadow an existing one -- see the -vmfile= bug that cost
+    # omega-srep a release).
+    ok &= apply(
+        hashes,
+        "reproducible output: SREP_SEED_HEX",
+        """  if (!initialized)
+  {
+    fortuna_start(prng);""",
+        """  /* ytool patch: reproducible output. If SREP_SEED_HEX is set to 2*size hex
+     digits, use those bytes as the key instead of entropy. The seed is stored in
+     the archive header anyway, so this exposes nothing that a decoder does not
+     already have; it exists so the same input can produce the same .pmp. */
+  const char *env_seed = getenv("SREP_SEED_HEX");
+  if (!initialized && env_seed && strlen(env_seed) == 2*size)
+  {
+    for (size_t i = 0; i < size; i++)
+    {
+      unsigned byte = 0;
+      sscanf(env_seed + 2*i, "%2x", &byte);
+      ((unsigned char*)result)[i] = (unsigned char)byte;
+    }
+    return;
+  }
+  if (!initialized)
+  {
+    fortuna_start(prng);""",
+        marker="SREP_SEED_HEX",
+    )
+
+    # --- 6. SliceHash::prepare_buffer: heap-buffer-overflow (-m5) ------------
+    # Origin: measured. `srep -m5f` segfaults (SIGSEGV, sometimes SIGABRT) on
+    # some inputs and not others, with no message. ASan puts it exactly:
+    #
+    #   heap-buffer-overflow WRITE of size 4
+    #     SliceHash::prepare_buffer  Compression/SREP/hash_table.cpp:68
+    #     BG_COMPRESSION_THREAD::run  Compression/SREP/io.cpp:154
+    #
+    # Two independent overruns in one loop:
+    #
+    #  a) The outer loop runs while `p < buf+size`, but the inner loop always
+    #     advances `slices_in_block * slice_size` = L bytes and writes one entry
+    #     per iteration. When `size` is not a multiple of L the last iteration
+    #     starts inside the buffer and writes an entry for a chunk that does not
+    #     exist -- and reads `hash(p, slice_size)` past the end to compute it.
+    #
+    #  b) `h` is indexed by `chunk = offset/L`, an absolute file position, but it
+    #     is allocated for `filesize/L` entries only. In future-LZ the reader runs
+    #     ahead of what has been consumed, so `offset + size` can exceed
+    #     `filesize`; measured on a 3,300,000-byte input with -m5: the loop wanted
+    #     entry 45056 of 12890.
+    #
+    # Fixed by bounding both: the inner loop stops when the slice would leave the
+    # buffer, and the entry write is skipped when its index would leave `h`. A
+    # chunk that does not fit is simply not hashed, which can only cost a missed
+    # match check -- `check()` already returns true ("maybe large enough") when
+    # it has no hash, so output stays correct and this cannot make a wrong match
+    # be accepted.
+    hash_table = os.path.join(root, "Compression/SREP/hash_table.cpp")
+    ok &= apply(
+        hash_table,
+        "SliceHash: remember how many entries h has",
+        "  entry *h;  // Array holding all slice hashes, one `entry` per L bytes\n  Offset memreq;",
+        "  entry *h;  // Array holding all slice hashes, one `entry` per L bytes\n"
+        "  Offset memreq;\n"
+        "  /* ytool patch: how many entries h actually has. prepare_buffer indexes h by\n"
+        "     an absolute file position, so it has to know the bound to respect it. */\n"
+        "  Offset chunks_allocated;",
+        marker="Offset chunks_allocated;",
+    )
+    ok &= apply(
+        hash_table,
+        "SliceHash: initialise chunks_allocated",
+        "         memreq = 0;                                                   // no need in SliceHash since each potential match is almost guaranteed to have MIN_MATCH matched bytes\n"
+        "    else memreq = filesize/L * sizeof(entry);                          // one `entry` per L input bytes",
+        "         memreq = 0;                                                   // no need in SliceHash since each potential match is almost guaranteed to have MIN_MATCH matched bytes\n"
+        "    else memreq = filesize/L * sizeof(entry);                          // one `entry` per L input bytes\n"
+        "    chunks_allocated = memreq/sizeof(entry);   // ytool patch: bound used by prepare_buffer",
+        marker="chunks_allocated = memreq/sizeof(entry);",
+    )
+    ok &= apply(
+        hash_table,
+        "SliceHash::prepare_buffer: bound both overruns",
+        """    Chunk curchunk = offset/L;
+    for (char *p = buf;  p < buf+size;  )
+    {
+      entry checksum = 0;
+      for (int i=0;  i<slices_in_block;  i++, p+=slice_size)
+        checksum  +=  hash(p,slice_size) << (i*BITS);
+      h[curchunk++] = checksum;
+    }""",
+        """    Chunk curchunk = offset/L;
+    /* ytool patch: see contrib/patch_srep.py -- two overruns here. `slices` is
+       L/slices_in_block and the inner walk must not read past `buf+size`, while
+       `h` only has filesize/L entries and `offset` is an absolute position that
+       future-LZ can push past filesize. */
+    for (char *p = buf;  p < buf+size;  )
+    {
+      entry checksum = 0;
+      int i = 0;
+      for (;  i<slices_in_block  &&  p+slice_size<=buf+size;  i++, p+=slice_size)
+        checksum  +=  hash(p,slice_size) << (i*BITS);
+      if (i < slices_in_block)   break;          // trailing partial chunk: no entry
+      if (Offset(curchunk) >= chunks_allocated)   break; // ran ahead of the allocation
+      h[curchunk++] = checksum;
+    }""",
+        marker="if (Offset(curchunk) >= chunks_allocated)",
+    )
+
+    # --- 7. LibTomCrypt STORE32H/LOAD32H: missing "memory" clobber -----------
     # Origin: -hash=sha1 failed its own verification on 32-bit builds. Only
     # sha1.c uses these big-endian macros (md5 uses the L-suffixed ones;
     # sha512's STORE64H is __x86_64__-only), and the hand-written asm read/wrote

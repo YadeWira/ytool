@@ -150,6 +150,9 @@ const
     (verified with strace; -temp= overrides the location). That is the reason the
     encode side must keep feeding srep a real writable working directory. }
   SREP_ENCODE_METHOD = '-m';
+  { Metodo mas alto que srep conoce (SREP_METHOD_LAST en su srep.cpp). El digito
+    de -dd<N> ES el metodo, asi que esto es el limite de -dd. }
+  SREP_METHOD_MAX = 5;
 
 var
   GlobalSync: TCriticalSection;
@@ -198,6 +201,13 @@ var
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
   SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
+  { Semilla fija para srep (SREP_SEED_HEX, parche propio en contrib/patch_srep.py).
+    Sin ella cada ejecucion produce bytes distintos: la clave VMAC sale de
+    systemRandomData()+time(). Con ella, el mismo input da el mismo .pmp, que es
+    lo que permite comparar dos builds, fijar un test por hash y reproducir un
+    archivo publicado. Vacia = comportamiento de siempre (aleatoria). }
+  SrepSeed: String = '';
+  SrepSeedEnv: TStringArray;
   CACHE: Int64 = 0;
   NULLOUT: Boolean = False;
   DupSysMem: Int64 = 0;
@@ -358,6 +368,17 @@ begin
             if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               if S.Length > 1 then
                 StoreDD := StrToInt(S[2]);
+            // El digito ES el metodo de srep (-dd3 -> srep -m3f), y srep solo
+            // tiene del 0 al 5. Con -dd9 el helper sale con error, ytool no
+            // mira su exit code, y el resultado era un .pmp de 34 bytes con
+            // exit 0: el unico sintoma, tres "0.00 MB" en el resumen. Un valor
+            // fuera de rango es un error de linea de comandos, no algo que
+            // degradar, asi que se rechaza antes de empezar.
+            if (StoreDD >= 0) and (StoreDD > SREP_METHOD_MAX) then
+              raise Exception.CreateFmt
+                ('-dd%d no existe: srep solo tiene los metodos 1..%d ' +
+                '(el numero es el metodo: -dd3 = srep -m3f).',
+                [StoreDD, SREP_METHOD_MAX]);
             // La degradacion a dedup en memoria era silenciosa: pedias -dd1
             // (srep externo) y obtenias -dd (memoria) sin una linea de aviso,
             // con la unica pista en el numero de etapas del resumen de tamanos.
@@ -471,6 +492,29 @@ begin
       Inc(I);
     end;
     SCANONLY := ArgParse.AsBoolean('-scan');
+    SrepSeed := ArgParse.AsString('-seed', 0, '').ToLower;
+    if SrepSeed <> '' then
+    begin
+      // Se valida aca y no alla porque srep ignora en silencio una semilla
+      // malformada y vuelve a la aleatoria: el usuario creeria que su build es
+      // reproducible cuando no lo es.
+      B := Length(SrepSeed) = 64;
+      if B then
+        for I := 1 to Length(SrepSeed) do
+          if not CharInSet(SrepSeed[I], ['0' .. '9', 'a' .. 'f']) then
+            B := False;
+      if not B then
+        raise Exception.CreateFmt
+          ('-seed necesita exactamente 64 digitos hexadecimales (32 bytes, el ' +
+          'tamano de la clave VMAC de srep); recibido: "%s" (%d caracteres).',
+          [SrepSeed, Length(SrepSeed)]);
+      // Se le pasa al hijo como variable de entorno, no por la linea de
+      // comandos: srep no tiene opcion para esto y agregarla tocaria su parser.
+      SetLength(SrepSeedEnv, 1);
+      SrepSeedEnv[0] := 'SREP_SEED_HEX=' + SrepSeed;
+    end
+    else
+      SrepSeedEnv := nil;
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
@@ -577,6 +621,9 @@ begin
     if B then
       Options.DedupSysMem := -Options.DedupSysMem;
     SrepCfg := ArgParse.AsString('-sp', 0, '').ToLower;
+    // -seed<hex>: semilla fija para srep. Se valida aca y no alla porque srep
+    // ignora en silencio una semilla malformada (vuelve a la aleatoria), y
+    // entonces el usuario creeria que su build es reproducible cuando no lo es.
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
@@ -2182,7 +2229,7 @@ begin
           Index.ToString +
           ' -t' + Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
           ' - -', GetCurrentDir, nil, Output,
-          ErrStream), False, YTOOL_BSIZE);
+          ErrStream, SrepSeedEnv), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
       end
       else
@@ -2647,7 +2694,7 @@ begin
             '-m' + StoreDD.ToString + 'f' + T + ' -t' +
             Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
             ' ' + S + ' -', GetCurrentDir,
-            nil, Output, ErrStream) do
+            nil, Output, ErrStream, SrepSeedEnv) do
             try
               if Execute then
               begin
@@ -3197,7 +3244,7 @@ begin
           T := T + ' -' + List[I];
       end;
       LStream2 := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-        '-d' + T + ' - -', GetCurrentDir, Input, nil);
+        '-d' + T + ' - -', GetCurrentDir, Input, nil, nil, SrepSeedEnv);
       if not LStream2.Execute then
         raise EReadError.CreateRes(@SReadError);
       if Assigned(LCache) then
