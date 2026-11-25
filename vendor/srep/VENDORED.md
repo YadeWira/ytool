@@ -33,8 +33,24 @@ to the code that applies it; see `contrib/build-plugins-linux.sh` and
 
 ## Licensing
 
-Upstream ships no licence file and no licence header (the same situation as omega-srep,
-whose changelog records the decision to proceed while declaring none). This vendor copy
-inherits that status: it is redistributed as source, unmodified except for the patches,
-and `ytool` loads it as a separate executable — not linked into the binary — so the
-question of combining it with `ytool`'s MIT code does not arise at link time.
+This section used to say upstream ships "no licence header". That was wrong.
+Upstream ships no licence *file*, but the eight SREP sources in
+`Compression/SREP/` (`srep.cpp`, `compress*.cpp`, `decompress.cpp`, `hashes.cpp`,
+`hash_table.cpp`, `io.cpp`) all begin with:
+
+    // Copyright (C) 2009-2014 Bulat Ziganshin. All rights reserved.
+    // Mail Bulat.Ziganshin@gmail.com if you have any questions or want to buy a
+    // commercial license for the source code.
+
+That is a reservation of rights, not a grant. No licence permits redistributing or
+modifying this code; the author offers a commercial one. omega-srep reached the
+same reading: its `NOTICE` says its pre-3.0.0 history "contain[s] a derivative of
+SREP 3.93a (Bulat Ziganshin, 'All rights reserved') and [is] NOT covered by" its MIT
+licence, which is why OSREP was written clean-room.
+
+The support code bundled with it has permissive terms of its own: VMAC/VHASH and the
+LZMA SDK threading code are public domain, LibTomCrypt is "free for all purposes".
+
+Also contrary to what this file says above, the tree is not byte-for-byte upstream:
+patches 1-3 of `contrib/patch_srep.py` are already present in place
+(`hashes.cpp`, `vmac.c`). See `THIRD_PARTY.md` at the repository root.

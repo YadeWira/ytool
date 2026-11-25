@@ -3,6 +3,9 @@ MIT License
 Copyright (c) 2016-2023 Razor12911
 Copyright (c) 2026 Yade E. Bravo (YadeWira)
 
+This license covers ytool's own code. Third-party components in this
+repository, listed in THIRD_PARTY.md, keep their own authors and terms.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
