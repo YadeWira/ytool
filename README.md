@@ -228,8 +228,9 @@ Found and fixed while building/testing this port, not from any xtool release not
   >   writes an index-LZ footer that the decoder reaches by **seeking** to end-of-file. `DecChunk` feeds
   >   srep through a stdin pipe, which cannot seek, so every `-dd1` decode failed with
   >   `ERROR! Not found SREP compressed file footer in file -` (exit 4). Switching the encode to
-  >   `-m<N>f` (future-LZ) puts the footer in the stream instead: measured across every method, only
-  >   `-m1f`/`-m1o` decode from a pipe, while `-m0`/`-m1`/`-m2`/`-m3` all fail. Future-LZ is also
+  >   `-m<N>f` (future-LZ) puts the footer in the stream instead. Measured across the whole
+  >   matrix: every `f` and `o` variant (`-m0f` … `-m5o`) decodes from a pipe, and only the
+  >   suffix-less `-mN` forms fail. Future-LZ is also
   >   marginally smaller (123,592 vs 123,620 bytes on a 360 KB input) because the index is not
   >   duplicated, and costs a scratch file, since re-reading its input makes stdin compression write
   >   `srep-data.tmp` into the working directory (`-temp=` relocates it).
