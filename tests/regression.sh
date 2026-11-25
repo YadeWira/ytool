@@ -301,7 +301,7 @@ PYEOF
     echo "-- *** mORMot: faltan objetos referenciados:$MISSING_L *** --"
     fail=$((fail+1))
   else
-    echo "-- mORMot: objetos de \{$L\} presentes --"
+    echo "-- mORMot: objetos de carga diferida presentes --"
   fi
 fi
 
