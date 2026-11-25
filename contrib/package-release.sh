@@ -56,7 +56,7 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool srep64 liblz4.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
+LINUX_FILES="ytool liblz4.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
 WIN_DLLS="zlib1 lzo2 packjpg_dll brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
@@ -81,8 +81,6 @@ ok "commit $COMMIT"
 step "build linux"
 bash contrib/build-native-linux.sh  >/dev/null 2>&1 || die "build-native-linux.sh fallo"
 bash contrib/build-plugins-linux.sh >/dev/null 2>&1 || die "build-plugins-linux.sh fallo"
-# srep va aparte del build de ytool, pero el paquete lo incluye para -dd<N>.
-bash contrib/build-srep.sh linux   >/dev/null 2>&1 || die "build-srep.sh fallo"
 mkdir -p .fpcout
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
@@ -114,22 +112,15 @@ ok "suite verde en estricto"
 step "README linux: cruzar lo que dice contra lo que hay"
 RM_LINUX="$ROOT/contrib/release-notes/README.linux.txt"
 [ -f "$RM_LINUX" ] || die "falta $RM_LINUX"
-# Leido de los strings del binario y no ejecutandolo: srep64 sin argumentos
-# se queda esperando stdin, y eso colgaba el empaquetado entero.
-# Intensity/srep reports itself as "SREP 3.93a beta (October 11, 2014)"; omega-srep
-# used to say "Omega SREP 1.0.5". Match the upstream form.
-SREP_REAL="$(strings -a srep64 2>/dev/null | grep -oE 'SREP [0-9]+\.[0-9]+[a-z]? beta' | head -1)"
-SREP_DOC="$(tr '\n' ' ' < "$RM_LINUX" | grep -oE 'SREP [0-9]+\.[0-9]+[a-z]? beta' | head -1)"
-[ -n "$SREP_REAL" ] || die "no se pudo leer la version de srep64"
-[ -n "$SREP_DOC" ] || die "el README no declara la version de Intensity/srep"
-[ "$SREP_REAL" = "$SREP_DOC" ] || die "el README dice '$SREP_DOC' pero el binario reporta '$SREP_REAL'"
-ok "$SREP_REAL coincide con el README"
+# srep no se empaqueta: SREP 3.93a es "All rights reserved" (THIRD_PARTY.md).
+grep -q "srep" "$RM_LINUX" || die "el README linux no explica que srep no viene incluido"
+ok "README linux revisado"
 
 step "armar tarball linux"
 D="$STAGE/ytool-linux-x64"; mkdir -p "$D"
 for f in $LINUX_FILES; do cp "$f" "$D/"; done
 cp "$RM_LINUX" "$D/README.txt"
-chmod +x "$D/ytool" "$D/srep64"
+chmod +x "$D/ytool"
 ( cd "$STAGE" && tar czf "$OUT/ytool-linux-x64.tar.gz" ytool-linux-x64 ) || die "tar fallo"
 DEPTH="$(tar tzf "$OUT/ytool-linux-x64.tar.gz" | awk '{n=gsub("/","/",$0); print n}' | sort -u | tr '\n' ' ')"
 [ "$DEPTH" = "1 " ] || die "el tarball tiene anidamiento '$DEPTH', se esperaba un solo nivel"
@@ -213,8 +204,6 @@ for spec in "x64:" "x86:-x86"; do
   arch="${spec%%:*}"; sfx="${spec#*:}"
   D="$STAGE/ytool-windows-$arch"; rm -rf "$D"; mkdir -p "$D"
   cp "$WINBIN/ytool${sfx}.exe" "$D/ytool.exe"
-  [ -f "$ROOT/srep${sfx}.exe" ] || die "falta srep${sfx}.exe (bash contrib/build-srep.sh $([ -z "$sfx" ] && echo win64 || echo win32))"
-  cp "$ROOT/srep${sfx}.exe" "$D/srep.exe"
   for d in $WIN_DLLS; do
     if   [ -f "$ROOT/${d}${sfx}.dll" ]; then cp "$ROOT/${d}${sfx}.dll" "$D/${d}.dll"
     elif [ -z "$sfx" ] && [ -f "$ROOT/${d}.dll" ]; then cp "$ROOT/${d}.dll" "$D/${d}.dll"

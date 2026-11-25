@@ -20,7 +20,7 @@ ytool-x86
 *.dll
 *.so
 *.so.*
-# Anclados a la raiz: sin la barra inicial, "srep" tambien excluiria vendor/srep/.
+# srep no esta en el repo (THIRD_PARTY.md); quien lo use deja su binario en la raiz.
 /srep
 /srep64
 /srep.exe
@@ -35,8 +35,6 @@ ytool-x86
 # ── Checkouts de terceros descargados por los build scripts ──────────────────
 # contrib/pin-repo.sh los clona aqui; nunca se versionan (580 MB con todo).
 contrib/.csrc/
-# copia de trabajo donde se compila srep con sus parches; vendor/srep queda pristino
-contrib/.csrc/srep-build*/
 # temporales de srep (future-LZ relee su entrada y usa un archivo de trabajo)
 srep-data.tmp
 *.tmp

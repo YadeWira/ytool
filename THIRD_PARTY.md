@@ -20,7 +20,6 @@ found, and no grant of rights should be read into the silence.
 | mORMot (8 units) | `contrib/mORMot/` | Arnaud Bouchez / Synopse | MPL 1.1 / GPL 2.0+ / LGPL 2.1+ tri-licence (per file headers) |
 | LZ4Delphi, ZSTD4Delphi, XXHASH4Delphi, LIBC | `contrib/` | YWtheGod (github.com/YWtheGod) | **None declared** (no licence file in the upstream repositories) |
 | ParseExpression | `contrib/ParseExpression/` | Egbert van Nes | "Freeware with source" (its `readme.txt`) |
-| Win32 threading backend | `contrib/srep-win32/` | adapted from the LZMA SDK (Igor Pavlov) | Public domain |
 
 ## Plugins (separate libraries, loaded at run time, not linked)
 
@@ -36,15 +35,12 @@ found, and no grant of rights should be read into the silence.
 | WavPack | github.com/dbry/WavPack | David Bryant | BSD 3-Clause |
 | LZO | oberhumer.com, lzo-2.10 | Markus F.X.J. Oberhumer | **GPL 2.0**. The shipped `lzo2` library is GPL: whoever redistributes it must also offer its source (the unmodified 2.10 tarball). |
 
-## External helper (a separate program)
+## Not included: SREP
 
-| Component | Where | Author | Terms |
-|---|---|---|---|
-| SREP 3.93a beta | `vendor/srep/`, built only by `contrib/build-srep.sh` | Bulat Ziganshin | **"Copyright (C) 2009-2014 Bulat Ziganshin. All rights reserved."** The eight files in `vendor/srep/Compression/SREP/` carry that header and add: *"Mail Bulat.Ziganshin@gmail.com if you have any questions or want to buy a commercial license for the source code."* No licence grants redistribution or modification. |
-
-SREP's support code in the same tree has its own, permissive terms: VMAC/VHASH
-(Ted Krovetz, Wei Dai) and the LZMA SDK threading code are public domain, and
-the LibTomCrypt ciphers and hashes are "free for all purposes".
-
-ytool runs SREP as an external process (`-dd<N>`); it is not linked into
-ytool, and ytool builds and runs without it.
+`-dd<N>` (external dedup) runs **SREP 3.93a beta** by Bulat Ziganshin as a
+separate program. Its sources say "Copyright (C) 2009-2014 Bulat Ziganshin. All
+rights reserved." and offer a commercial licence; no licence grants
+redistribution or modification. So this repository does not contain SREP's
+source or binaries (it did until 2026-11-25). Personal builds are kept, with
+that notice, in [YadeWira/srep-builds](https://github.com/YadeWira/srep-builds).
+ytool builds and runs without it.

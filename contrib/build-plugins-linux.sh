@@ -59,8 +59,8 @@ if [ -d "$CSRC/lz4/lib" ]; then
     && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
 fi
 
-# srep is no longer built here: it is optional and separate from ytool.
-# Use `bash contrib/build-srep.sh` (that script carries the patches and the why).
+# srep is not part of this repository (SREP 3.93a is "All rights reserved";
+# see THIRD_PARTY.md). Personal builds: github.com/YadeWira/srep-builds.
 
 # ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
@@ -232,4 +232,4 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. Plugins .so en la raiz del repo (gitignored). srep: contrib/build-srep.sh."
+echo "Hecho. Plugins .so en la raiz del repo (gitignored)."

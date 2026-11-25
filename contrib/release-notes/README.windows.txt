@@ -1,15 +1,10 @@
 ytool - Windows x86-64 build (open-source recreation of xtool by Razor12911)
 =============================================================================
 ytool.exe: binario principal (precomp/decode/extract/erase/execute/find/replace/generate).
-srep.exe: helper de deduplicacion externa (-dd<N>), invocado por ytool.exe como proceso hijo.
-          Es Intensity/srep (github.com/Intensity/srep) SREP 3.93a beta, la implementacion
-          de referencia. Compilado con dos parches que el upstream no trae: el clobber
-          "rm"->"qm" del CRC32 en hashes.cpp (en i386 el "rm" original ni siquiera compila)
-          y los operandos read-write de VMAC en vmac.c, que arreglan un miscompile real de
-          GCC/strict-aliasing en el fallback de 128 bits que rompia el checksum interno
-          cross-arquitectura. El backend de threading Win32 (contrib/srep-win32/) tambien es
-          nuestro: el fork upstream solo conservo la mitad Unix.
-          Ver la pagina de Known Issues & Limitations del wiki.
+srep.exe NO viene incluido. La deduplicacion externa (-dd<N>) necesita SREP 3.93a
+          (Bulat Ziganshin, "All rights reserved": no se puede redistribuir). Si lo
+          tienes, pon srep.exe junto a ytool.exe. Builds personales y sus scripts:
+          https://github.com/YadeWira/srep-builds . La dedup en memoria (-dd) no lo necesita.
 
 DLLs incluidas (todas cross-compiladas con mingw-w64 desde fuente abierta,
 ver contrib/build-plugins-windows.sh):
@@ -52,12 +47,12 @@ el usuario aporte su propia oo2core/oo2ext DLL).
 
 Verificado: round-trip bit-exacto en la VM Windows para CADA codec de esta lista
 (packjpg, brunsli, packmp3, flac, wavpack, lzo1x, preflate, fast-lzma2 final,
-dedup en memoria -dd, dedup EXTERNO -dd<N> via srep.exe, reassign -r, packpng).
+dedup en memoria -dd, reassign -r, packpng).
 
 Uso:
   ytool.exe precomp -mzlib+zstd input.bin output.pmp
   ytool.exe precomp -mpackpng image.png output.pmp
-  ytool.exe precomp -mzlib -dd1 input.bin output.pmp   (dedup externo, srep.exe)
+  ytool.exe precomp -mzlib -dd1 input.bin output.pmp   (dedup externo, requiere tu srep.exe)
   ytool.exe decode output.pmp restored.bin
 
 Repo: https://github.com/YadeWira/ytool

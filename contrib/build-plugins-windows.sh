@@ -104,8 +104,8 @@ if [ -d "$CSRC/zlib" ]; then
     && echo "   OK -> zlib1.dll" || echo "   (zlib1.dll fallo)"
 fi
 
-# srep is no longer built here: it is optional and separate from ytool.
-# Use `bash contrib/build-srep.sh win64` (that script carries the patches and the why).
+# srep is not part of this repository (SREP 3.93a is "All rights reserved";
+# see THIRD_PARTY.md). Personal builds: github.com/YadeWira/srep-builds.
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
 echo "==> lzo2 (lzo2.dll)"
@@ -352,5 +352,5 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. Plugins .dll en la raiz del repo (gitignored). srep: contrib/build-srep.sh win64."
+echo "Hecho. Plugins .dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."

@@ -67,7 +67,7 @@ literal store would produce. See [Testing](#testing).
 | raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
 | fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
-| dedup, external (`-dd<N>`) | [omega-srep](https://github.com/YadeWira/omega-srep) | ✅ | ✅ |
+| dedup, external (`-dd<N>`) | SREP 3.93a, **not included** — bring your own `srep64`/`srep.exe` ([srep-builds](https://github.com/YadeWira/srep-builds)) | ✅ ³ | ✅ ³ |
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
 **Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
@@ -85,6 +85,9 @@ streaming path. libzstd is loaded dynamically, not linked in.
 
 ² **LZO** reproduces only the `lzo1x_999` family, because its level search iterates
 `lzo1x_999_compress_level`. Data from the fast `lzo1x_1` is detected and stored literally.
+
+³ **External dedup** works when an `srep64`/`srep.exe` is present next to the binary; this repository
+does not ship one (see [Building](#building)).
 
 **LZ4 raw blocks** (`-mlz4`, `-mlz4hc`) report `0 / 0` — not even detection — on raw blocks produced by the
 lz4 library, at every size tried and with a first token byte inside the range the heuristic keys on. Open
@@ -275,7 +278,6 @@ codes across identical invocations** in testing (likely a latent concurrency iss
 197 files live under `contrib/`, and every one of them is either a build input or a build script.
 Most third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them on demand into
 `contrib/.csrc/`, which is gitignored and reaches 580 MB with every pinned repo checked out.
-The exception is `vendor/srep/` — see below.
 
 | Path | What it is | Versioned? |
 |---|---|---|
@@ -284,8 +286,6 @@ The exception is `vendor/srep/` — see below.
 | `contrib/LZ4Delphi/`, `ZSTD4Delphi/`, `XXHASH4Delphi/`, `LZMADelphi/`, `LIBC/`, `WinLibcShim/` | Pascal bindings plus the prebuilt C objects their `{$L}` directives link | yes — these objects are build **inputs** |
 | `contrib/ParseExpression/` | expression parser (`-df` tolerance, `-c` sizes) | yes |
 | `contrib/preflate/` | preflate C++ source, built into `libpreflate.so` | yes |
-| `contrib/mingw-shims/` | a one-line `ShObjIdl.h` redirect for cross-compiling the srep helper with mingw-w64 | yes |
-| `vendor/srep/` | **Intensity/srep 3.93a beta, vendored in full** (52 files, 3.6 MB). The one dependency whose source is in the repo rather than cloned: it is frozen since 2014, it carries four local patches `ytool` needs, and it is the only one `ytool` may want to modify rather than just call | yes — the patches are a visible diff against upstream, not a `sed` at build time |
 | `contrib/.csrc/` | lz4, zstd, packJPG, packMP3, packPNG, brunsli, FLAC, WavPack, lzo, preflate, fast-lzma2 checkouts | **no** — cloned by the build scripts |
 
 The mORMot tree was trimmed from 976 files to the 11 the binary actually compiles against. That was
@@ -318,13 +318,11 @@ fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
   -oytool ytool.dpr
 ```
 
-**srep is built separately, and only if you want it.** It is the helper behind `-dd<N>` (external
-dedup); ytool builds and runs without it, and `-dd` (in-memory dedup) does not need it. Its source,
-SREP 3.93a beta (Intensity/srep `48f4b97`, October 2014), lives in `vendor/srep/`:
-
-```bash
-bash contrib/build-srep.sh            # srep64        (also: win64 -> srep.exe, win32 -> srep-x86.exe, all)
-```
+**srep is not part of this repository.** It is the helper behind `-dd<N>` (external dedup); ytool
+builds and runs without it, and `-dd` (in-memory dedup) does not need it. SREP 3.93a is Bulat Ziganshin's
+code under "All rights reserved" (see `THIRD_PARTY.md`), so it is not shipped here. Personal builds and
+their scripts live in [YadeWira/srep-builds](https://github.com/YadeWira/srep-builds); to use `-dd<N>`,
+put `srep64` (Linux) or `srep.exe` (Windows) next to the ytool binary.
 
 `mkdir -p .fpcout` is not cosmetic: `-FU.fpcout` makes FPC write its unit files there,
 and a fresh clone has no such directory, so the compile dies with
@@ -366,7 +364,6 @@ Windows (FPC/Lazarus has no Linux→Windows cross-compiler for this codebase's d
 # on Linux:
 bash contrib/build-native-windows.sh    # native lz4/zstd/xxhash objects (mingw-w64)
 bash contrib/build-plugins-windows.sh   # 8 plugin DLLs (mingw-w64 + cmake)
-bash contrib/build-srep.sh win64        # optional: srep.exe for -dd<N>
 # copy the source tree + the .dll files to a Windows machine with FPC/Lazarus 3.2.2, then:
 ```
 ```powershell
