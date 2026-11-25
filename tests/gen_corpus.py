@@ -341,6 +341,26 @@ def main():
     raw += rng_bytes(400, SEED + 7)
     write(d, '22_raw_deflate.bin', bytes(raw))
 
+    # --- zlib streams that only SOME settings reproduce (-x/-X coverage) ---
+    # Levels 1/9/5/2 and memLevel 5/9 make the level search fail before it
+    # succeeds, and Z_HUFFMAN_ONLY/Z_RLE/Z_FILTERED are never reproduced. The
+    # mix is what tells -X (final failures only) apart from "any failed
+    # attempt": measured, the buggy -X extracted 5 files here, xtool 0.9.9 3.
+    import random
+    rz = random.Random(SEED + 24)
+    words = [bytes(rz.choice(b'abcdefghij ') for _ in range(rz.randint(2, 9)))
+             for _ in range(300)]
+    mix = bytearray()
+    for i, (lv, ml, st) in enumerate([
+            (1, 8, zlib.Z_DEFAULT_STRATEGY), (9, 8, zlib.Z_DEFAULT_STRATEGY),
+            (6, 8, zlib.Z_HUFFMAN_ONLY), (5, 5, zlib.Z_DEFAULT_STRATEGY),
+            (9, 9, zlib.Z_DEFAULT_STRATEGY), (6, 8, zlib.Z_RLE),
+            (2, 8, zlib.Z_DEFAULT_STRATEGY), (6, 8, zlib.Z_FILTERED)]):
+        txt = b' '.join(rz.choice(words) for _ in range(6000))
+        co = zlib.compressobj(lv, zlib.DEFLATED, 15, ml, st)
+        mix += b'HDR%02d' % i + co.compress(txt) + co.flush() + b'\0' * 64
+    write(d, '24_zlib_mixed.bin', bytes(mix))
+
     # --- crosses the 16MB chunk: zlib streams scattered across ~20MB ---
     big = bytearray()
     while len(big) < 20_000_000:

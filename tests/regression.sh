@@ -267,6 +267,30 @@ for f in "$CORPUS"/*; do
   done
 done
 
+# --- -x / -X: extraccion de streams ------------------------------------------
+# -X tiene que extraer SOLO los streams cuyo resultado FINAL fue un fallo. Antes
+# extraia en cada intento de nivel fallido, asi que un stream que fallaba en l1
+# y salia en l6 aparecia como "no procesado": en 24_zlib_mixed.bin daba 5
+# archivos donde xtool 0.9.9 da 3. -x tiene que extraer todos los intentados.
+XF="$CORPUS/24_zlib_mixed.bin"
+if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
+  XA="$WORK/x_all"; XU="$WORK/x_unproc"; mkdir -p "$XA" "$XU"
+  "$XTOOL" precomp -mzlib -x"$XA" "$XF" "$WORK/x1.pmp" > "$WORK/x1.log" 2>&1
+  "$XTOOL" precomp -mzlib -X"$XU" "$XF" "$WORK/x2.pmp" > /dev/null 2>&1
+  st=$(tr '\r' '\n' < "$WORK/x1.log" | grep -oE "Streams: [0-9]+ / [0-9]+" | tail -1)
+  xp=$(echo "$st" | awk '{print $2}'); xt=$(echo "$st" | awk '{print $4}')
+  na=$(ls "$XA" | wc -l); nu=$(ls "$XU" | wc -l)
+  same=1
+  for f in "$XU"/*; do cmp -s "$f" "$XA/$(basename "$f")" || same=0; done
+  if [ -n "$xt" ] && [ "$na" -eq "$xt" ] && [ "$nu" -eq $((xt - xp)) ] && \
+     [ "$nu" -gt 0 ] && [ "$xp" -gt 0 ] && [ "$same" = 1 ]; then
+    echo "-- -x/-X: $na extraidos, $nu no procesados ($st) --"; pass=$((pass+1))
+  else
+    echo "-- *** -x/-X: -x=$na -X=$nu con '$st' (esperado -x=Y, -X=Y-X, -X subconjunto de -x) *** --"
+    fail=$((fail+1))
+  fi
+fi
+
 # --- integridad del passthrough literal --------------------------------------
 # El digest XTP1 cubria solo los streams. En un .pmp donde ningun codec engancho
 # los bytes pasaban de largo sin verificacion: medido, 40 de 40 flips de un byte

@@ -704,6 +704,11 @@ var
   LogInt: Integer;
   LogInt64: Int64;
   LogPtr: Pointer;
+  // -x/-X: PrecompLogProcess runs once per ATTEMPT (every level a codec tries),
+  // so it only records what to extract; Process writes the file once, after the
+  // stream's final outcome is known. Threads are forced to 1 when extracting.
+  ExtCodec: String;
+  ExtSize: Integer;
 
 procedure CodecInit(Count: Integer; Method: String);
 var
@@ -873,18 +878,10 @@ begin
     WriteLine(Format(S2, [CurDepth[0], Codec, LogInt64.ToHexString, Size1,
       Size2, Size3]));
   end;
-  // -X (EXTRACT_UNPROCESSED): only extract if the stream could NOT be processed.
-  if EXTRACT and (CurDepth[0] = 0) and
-    ((not EXTRACT_UNPROCESSED) or (not Status)) then
+  if EXTRACT and (CurDepth[0] = 0) then
   begin
-    S1 := '%s_%s.raw';
-    with TFileStream.Create(ExtDir + Format(S1, [LogInt64.ToHexString, Codec]),
-      fmCreate) do
-      try
-        WriteBuffer(LogPtr^, Size1);
-      finally
-        Free;
-      end;
+    ExtCodec := String(Codec);
+    ExtSize := Size1;
   end;
 end;
 
@@ -1537,6 +1534,7 @@ begin
     SI1.Status := SI2.Status;
     LogInt64 := DataStore.Position(ThreadIndex) + SI2.ActualPosition;
     LogPtr := PByte(DataStore.Slot(ThreadIndex).Memory) + SI2.ActualPosition;
+    ExtCodec := '';
     if UseDB and (SI2.Codec > 2) then
     begin
       DBBool := CheckDB(SI2, @DBTyp);
@@ -1611,6 +1609,19 @@ begin
       Result := Process(ThreadIndex, StreamIndex, Index, Depth, True);
       exit;
     end;
+    // 0.8.5: -x extracts every stream a codec attempted; -X only the ones whose
+    // FINAL outcome is a failure. Deciding here, not per attempt, is what makes
+    // -X match xtool (a stream that fails at l1 and succeeds at l6 is processed)
+    // and writes each file once instead of once per level tried.
+    if EXTRACT and (Depth = 0) and (ExtCodec <> '') and
+      ((not EXTRACT_UNPROCESSED) or (not Result)) then
+      with TFileStream.Create(ExtDir + Format('%s_%s.raw',
+        [LogInt64.ToHexString, ExtCodec]), fmCreate) do
+        try
+          WriteBuffer(LogPtr^, ExtSize);
+        finally
+          Free;
+        end;
     if UseDB then
       if not DBBool then
       begin
