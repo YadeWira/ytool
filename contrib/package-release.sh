@@ -56,7 +56,7 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool osrep64 liblz4.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
+LINUX_FILES="ytool srep64 liblz4.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
 WIN_DLLS="zlib1 lzo2 packjpg_dll brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
@@ -112,19 +112,22 @@ ok "suite verde en estricto"
 step "README linux: cruzar lo que dice contra lo que hay"
 RM_LINUX="$ROOT/contrib/release-notes/README.linux.txt"
 [ -f "$RM_LINUX" ] || die "falta $RM_LINUX"
-# Leido de los strings del binario y no ejecutandolo: osrep64 sin argumentos
+# Leido de los strings del binario y no ejecutandolo: srep64 sin argumentos
 # se queda esperando stdin, y eso colgaba el empaquetado entero.
-SREP_REAL="$(strings -a osrep64 2>/dev/null | grep -oE 'Omega SREP [0-9]+\.[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-SREP_DOC="$(grep -oE 'pinneado a v[0-9]+\.[0-9]+\.[0-9]+' "$RM_LINUX" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-[ -n "$SREP_REAL" ] || die "no se pudo leer la version de osrep64"
-[ "$SREP_REAL" = "$SREP_DOC" ] || die "el README dice omega-srep $SREP_DOC pero el binario reporta $SREP_REAL"
-ok "omega-srep $SREP_REAL coincide con el README"
+# Intensity/srep reports itself as "SREP 3.93a beta (October 11, 2014)"; omega-srep
+# used to say "Omega SREP 1.0.5". Match the upstream form.
+SREP_REAL="$(strings -a srep64 2>/dev/null | grep -oE 'SREP [0-9]+\.[0-9]+[a-z]? beta' | head -1)"
+SREP_DOC="$(grep -oE 'Intensity/srep [0-9]+\.[0-9]+[a-z]? beta' "$RM_LINUX" | head -1)"
+[ -n "$SREP_REAL" ] || die "no se pudo leer la version de srep64"
+[ -n "$SREP_DOC" ] || die "el README no declara la version de Intensity/srep"
+[ "$SREP_REAL" = "$SREP_DOC" ] || die "el README dice '$SREP_DOC' pero el binario reporta '$SREP_REAL'"
+ok "$SREP_REAL coincide con el README"
 
 step "armar tarball linux"
 D="$STAGE/ytool-linux-x64"; mkdir -p "$D"
 for f in $LINUX_FILES; do cp "$f" "$D/"; done
 cp "$RM_LINUX" "$D/README.txt"
-chmod +x "$D/ytool" "$D/osrep64"
+chmod +x "$D/ytool" "$D/srep64"
 ( cd "$STAGE" && tar czf "$OUT/ytool-linux-x64.tar.gz" ytool-linux-x64 ) || die "tar fallo"
 DEPTH="$(tar tzf "$OUT/ytool-linux-x64.tar.gz" | awk '{n=gsub("/","/",$0); print n}' | sort -u | tr '\n' ' ')"
 [ "$DEPTH" = "1 " ] || die "el tarball tiene anidamiento '$DEPTH', se esperaba un solo nivel"
@@ -208,8 +211,8 @@ for spec in "x64:" "x86:-x86"; do
   arch="${spec%%:*}"; sfx="${spec#*:}"
   D="$STAGE/ytool-windows-$arch"; rm -rf "$D"; mkdir -p "$D"
   cp "$WINBIN/ytool${sfx}.exe" "$D/ytool.exe"
-  [ -f "$ROOT/osrep${sfx}.exe" ] || die "falta osrep${sfx}.exe"
-  cp "$ROOT/osrep${sfx}.exe" "$D/osrep.exe"
+  [ -f "$ROOT/srep${sfx}.exe" ] || die "falta srep${sfx}.exe"
+  cp "$ROOT/srep${sfx}.exe" "$D/srep.exe"
   for d in $WIN_DLLS; do
     if   [ -f "$ROOT/${d}${sfx}.dll" ]; then cp "$ROOT/${d}${sfx}.dll" "$D/${d}.dll"
     elif [ -z "$sfx" ] && [ -f "$ROOT/${d}.dll" ]; then cp "$ROOT/${d}.dll" "$D/${d}.dll"

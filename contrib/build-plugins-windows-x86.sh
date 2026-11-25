@@ -99,43 +99,45 @@ if [ -d "$CSRC/zlib" ]; then
     || echo "   (zlib1-x86.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — omega-srep, github.com/YadeWira/omega-srep ──
-# Was Intensity/srep -- migrated after a real cross-architecture bug in
-# upstream (win64-encoded `-dd1` streams failed their own checksum on win32
-# decode). The bug survived the initial migration too, but was root-caused
-# via live cross-AI collaboration to the type-punning in VMAC's 32-bit
-# ADD128/PMUL64 fallback, which GCC's -O2+ strict-aliasing optimizations are
-# entitled to break (defect in that source, not in GCC) -- measured by
-# omega-srep's maintainer, see build-plugins-linux.sh's srep comment. Fixed
-# upstream and released as v1.0.0. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count
-# tuning, byte-for-byte identical output verified by upstream) -- added the
-# same -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own
-# Makefile now uses, since this script compiles directly rather than via
-# `make`/cmake. Bumped again to v1.0.5, fixing a real -m1/-m2 cross-arch CDC
-# bug -- see build-plugins-linux.sh's srep comment for the full story.
-# omega-srep already ships its own Windows threading backend
-# and properly gates out the
-# LZMA-SDK Handle.h stub for MinGW builds, so neither shim from
-# contrib/srep-win32/ is needed anymore -- only the <ShObjIdl.h> case shim
-# (mingw-w64 ships lowercase "shobjidl.h") still applies, same as every other
-# cmake/mingw build in this script. CLI unchanged for what ytool sends
-# (`-m<N>f`, `-d`, stdin/stdout piping via "-").
+# ── srep (external dedup -dd<N>) — Intensity/srep, with its own Win32 backend ──
+# Same source/threading-shim setup as the win64 build (contrib/srep-win32/,
+# see build-plugins-windows.sh's own comment for the why). i386-SPECIFIC BUG:
+# Compression/SREP/hashes.cpp's CRC32 helper uses inline asm with a "rm"
+# (register-or-memory) constraint on a uint8 operand -- safe on x86_64 (every
+# GPR has a REX byte-addressable form) but not on i386, where only
+# eax/ebx/ecx/edx have legacy 8-bit sub-registers (esi/edi/ebp/esp don't);
+# GCC's i386 codegen fails with "unsupported size for integer register"
+# (reported at the enclosing function due to inlining, not the true line).
+# Fixed by narrowing the constraint to "qm" (byte-addressable registers
+# only), applied as an idempotent sed patch below (checks before patching,
+# safe to re-run). The same fix also adds a defensive "cc" clobber, because
+# the asm body is free to touch the flags.
 #
-# Kept the plain `srep-x86.exe` filename (inherited from the old Intensity/srep
-# dependency) until it was pointed out that omega-srep's own binary is
-# genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
-# constant to match.
-echo "==> osrep (osrep-x86.exe)"
-pin_repo https://github.com/YadeWira/omega-srep "$CSRC/omega-srep" v1.0.5
-if [ -d "$CSRC/omega-srep" ]; then
-  ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
+# The vmac.c patch matters MORE here than anywhere else: this is the exact
+# 32-bit build where VMAC's portable ADD128/PMUL64 fallback gets
+# type-punned and miscompiled by -O2+ strict aliasing. See
+# build-plugins-linux.sh's srep comment for the measurement.
+echo "==> srep (srep-x86.exe)"
+pin_repo https://github.com/Intensity/srep "$CSRC/srep" main
+if [ -d "$CSRC/srep" ]; then
+  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+  fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
+  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
+    "$CSRC/srep/Compression/LZMA2/C/"
+  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
+  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/osrep-x86.exe" ) \
-    && echo "   OK -> osrep-x86.exe" || echo "   (osrep fallo)"
+    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep-x86.exe" ) \
+    && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
 fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
@@ -325,7 +327,7 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. osrep-x86.exe + plugins -x86.dll en la raiz del repo (gitignored)."
+echo "Hecho. srep-x86.exe + plugins -x86.dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
 echo "Al empaquetar: renombrar cada uno quitando el sufijo -x86 junto al ytool.exe"
 echo "de 32-bit (packpng-x86.dll -> packpng.dll, zlib1-x86.dll -> zlib1.dll, etc.),"

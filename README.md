@@ -213,43 +213,42 @@ Found and fixed while building/testing this port, not from any xtool release not
   Prebuilt binary on the [Releases page](https://github.com/YadeWira/ytool/releases); see
   `contrib/winbuild-x86.ps1` and
   [Build System Internals](https://github.com/YadeWira/ytool/wiki/Build-System-Internals) to build it yourself.
-- External dedup (`-mzlib -dd1`) migrated from [Intensity/srep](https://github.com/Intensity/srep) (frozen
-  upstream, unmaintained since 2014) to [omega-srep](https://github.com/YadeWira/omega-srep): actively
-  maintained by the same author, with 3 real bugs already found and fixed upstream during this migration.
-  **Breaking change**: omega-srep's on-disk format is a deliberate clean break (`.osr` extension,
-  `OSRP` magic bytes instead of `SREP`) — any `.pmp` made with `-dd1` before this migration can no longer be
-  decoded.
-  **The cross-architecture bug is now genuinely fixed**, in omega-srep itself: isolated to a minimal repro
-  entirely outside ytool (a win32 `srep`/omega-srep build rejecting valid win64-encoded content with its own
-  internal checksum-mismatch error), root-caused by omega-srep's maintainer to VMAC's generic 128-bit
-  `ADD128`/`PMUL64` fallback on i686, whose type-punning GCC's `-O2`+ strict-aliasing
-  optimisations are entitled to break -- the defect is in that source, not in GCC (fixed with a targeted `#pragma GCC optimize("no-strict-aliasing")`, no
-  performance cost on other paths). Verified end-to-end: the original failing case now round-trips bit-exact,
-  and the full cross-architecture regression matrix (357/357) passes with no `-dd1` failures anywhere. See
-  [Known Issues & Limitations](https://github.com/YadeWira/ytool/wiki/Known-Issues-and-Limitations#fixed-since-this-page-was-first-written)
-  for the full investigation history.
+- External dedup (`-mzlib -dd1`) has moved twice and settled. It started on
+  [Intensity/srep](https://github.com/Intensity/srep), moved to
+  [omega-srep](https://github.com/YadeWira/omega-srep) to escape a real cross-architecture bug, and has now
+  **returned to Intensity/srep** — the reference implementation — with that bug fixed at its source instead.
+  The defect was VMAC's generic 128-bit `ADD128`/`PMUL64` fallback on i686, whose type-punning GCC's `-O2`+
+  strict-aliasing optimisations are entitled to break; the fix routes the modified operands through
+  read-write constraints (`contrib/patch_srep_vmac.py`), so it is a correction to that source, not a
+  compiler workaround. The same fix was applied to omega-srep while it was pinned.
 
-  > **Decision pending implementation: back to `Intensity/srep`.** The current tree pins omega-srep v1.0.5
-  > (see `contrib/build-plugins-*.sh`). Upstream Intensity/srep is still the reference implementation and is
-  > what this port is being moved back to. Measured against the 2014 binary (`48f4b97`) while auditing this:
+  > **What the return to `Intensity/srep` actually took**, all measured against the 2014 binary (`48f4b97`):
   >
-  > - **Decode invocation differs.** omega-srep decodes with `-m<N>f <in> <out>`; Intensity/srep requires the
-  >   explicit mode flag, `-d -m<N>f <in> <out>`. Without `-d` it silently *compresses* the compressed file
-  >   instead of restoring it (exit 0, output 100.04% of input, no error). This is the one code change the
-  >   switch needs in `PrecompMain.pas`.
-  > - **`-` as decode *input* does not work** (`ERROR! Not found SREP compressed file footer in file -`).
-  >   ytool's actual call is file → stdout (`<tmpfile> -`), which works. Encode via stdin/stdout also works.
-  > - **The two inline-asm defects are still present upstream.** The `"rm"`→`"qm"` register-clobber fix in
-  >   `hashes.cpp` and the VMAC `ADD128`/`PMUL64` strict-aliasing fix in `vmac.c` were only ever applied here
-  >   and in omega-srep. Returning to Intensity/srep means restoring `contrib/patch_srep_vmac.py` and the
-  >   `sed` patch, both deleted in `300a5ab`.
-  > - **The Windows threading backend must also be restored.** Intensity/srep kept only the Unix backend;
-  >   `contrib/srep-win32/{ThreadsWin32.c,ThreadsWin32.h,Handle.h}` (adapted from the public-domain LZMA SDK)
-  >   were added in `054c42e` and deleted in `300a5ab`. All three files are recoverable from git history.
+  > - **The encode method changed, and that is the real fix — not the decode flag.** The bare `-m<N>` form
+  >   writes an index-LZ footer that the decoder reaches by **seeking** to end-of-file. `DecChunk` feeds
+  >   srep through a stdin pipe, which cannot seek, so every `-dd1` decode failed with
+  >   `ERROR! Not found SREP compressed file footer in file -` (exit 4). Switching the encode to
+  >   `-m<N>f` (future-LZ) puts the footer in the stream instead: measured across every method, only
+  >   `-m1f`/`-m1o` decode from a pipe, while `-m0`/`-m1`/`-m2`/`-m3` all fail. Future-LZ is also
+  >   marginally smaller (123,592 vs 123,620 bytes on a 360 KB input) because the index is not
+  >   duplicated, and costs a scratch file, since re-reading its input makes stdin compression write
+  >   `srep-data.tmp` into the working directory (`-temp=` relocates it).
+  > - **An earlier claim here is retracted.** It said the only change needed was inserting `-d` on
+  >   decode. That measurement was real — without `-d` the 2014 binary treats the two filenames as
+  >   input/output, *compresses* the already-compressed file and exits 0 emitting 100.04% of its input —
+  >   but it was the wrong conclusion: ytool already passed `-d` on its decode path, and the failure was
+  >   the seek, one layer below.
+  > - **Both inline-asm patches are back.** The `"rm"`→`"qm"` register-clobber fix in `hashes.cpp` (which
+  >   on i386 is not even a miscompile but a hard failure: only eax/ebx/ecx/edx have 8-bit sub-registers
+  >   there) and the VMAC fix above. Every build script applies both, idempotently.
+  > - **The Windows threading backend is back.** Intensity/srep kept only the Unix half;
+  >   `contrib/srep-win32/` (adapted from the public-domain LZMA SDK) is restored from `054c42e` and
+  >   copied into the clone before each Windows build.
   >
-  > Until this lands, the shipped build still uses omega-srep, and the two formats are not interchangeable:
-  > omega-srep writes `OSRP` magic and a `.osr` payload, Intensity/srep writes `SREP`. A `.pmp` produced by one
-  > cannot be decoded by the other.
+  > **Both format changes are one-way.** omega-srep wrote `OSRP` magic and a `.osr` payload; Intensity/srep
+  > writes `SREP`. A `.pmp` carrying an omega-srep `-dd1` sub-stream cannot be decoded by this build, and
+  > one made by this build cannot be decoded by a binary from the omega-srep era.
+
 
 - Also fixed: `common/Threading.pas`'s `TTask.FStatus` had no synchronization at all between the main thread
   and worker threads (plus a dead-code bug that meant a worker's error message never actually got cleared),

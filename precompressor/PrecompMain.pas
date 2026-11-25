@@ -130,10 +130,26 @@ type
 
 const
 {$IFDEF MSWINDOWS}
-  SREPEXE64 = 'osrep64.exe';
+  SREPEXE64 = 'srep64.exe';
 {$ELSE}
-  SREPEXE64 = 'osrep64';
+  SREPEXE64 = 'srep64';
 {$ENDIF}
+
+const
+  { Intensity/srep encode mode. The "f" (future-LZ) suffix is load-bearing, not a
+    tuning choice: the bare `-m<N>` form writes an index-LZ footer that the decoder
+    reaches by SEEKING to end-of-file, so a stream produced that way can only be
+    decompressed from a real file. DecChunk feeds srep through its stdin pipe and
+    cannot seek, and then the decoder rejects it outright --
+    "ERROR! Not found SREP compressed file footer in file -", exit 4.
+    Measured against the 2014 binary (48f4b97) across every method: only -m1f and
+    -m1o decode from a pipe; -m0/-m1/-m2/-m3 all fail. Future-LZ also produces a
+    slightly smaller stream (123,592 vs 123,620 bytes on a 360 KB test input,
+    because the index is not duplicated). It costs a scratch file: future-LZ
+    re-reads the input, so stdin compression writes `srep-data.tmp` in the CWD
+    (verified with strace; -temp= overrides the location). That is the reason the
+    encode side must keep feeding srep a real writable working directory. }
+  SREP_ENCODE_METHOD = '-m';
 
 var
   GlobalSync: TCriticalSection;
@@ -146,13 +162,15 @@ var
   ResCount: Integer;
   UseDB: Boolean = False;
   StoreDD: Integer = -2;
-  // Sampled (not locked) at each osrep spawn to divide the user's -t# budget
-  // across concurrently-active osrep subprocesses -- prevents each of
+  // Sampled (not locked) at each srep spawn to divide the user's -t# budget
+  // across concurrently-active srep subprocesses -- prevents each of
   // ytool's own N stream-workers from independently requesting the full N
-  // threads from osrep when several hit a -dd<N> stream at once (would ask
+  // threads from srep when several hit a -dd<N> stream at once (would ask
   // for up to N^2 threads). A stale sample just means a slightly-off split,
-  // never wrong output -- osrep's own -t is a performance hint, not
+  // never wrong output -- srep's own -t is a performance hint, not
   // load-bearing for correctness.
+  // (Name kept as OsrepActive from the omega-srep era; renaming it would touch
+  // six call sites for no behavioural gain.)
   OsrepActive: Integer = 0;
   // Cheap detection-only mode (-scan): counts what the detection phase
   // (Scan1/Scan2 -- the same magic/structural checks that run before any
@@ -179,7 +197,7 @@ var
   REASSIGN: String = '';
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
-  SREPEXE: String = {$IFDEF MSWINDOWS}'osrep.exe'{$ELSE}'osrep'{$ENDIF};
+  SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
   CACHE: Int64 = 0;
   NULLOUT: Boolean = False;
   DupSysMem: Int64 = 0;
@@ -2141,7 +2159,7 @@ begin
         end;
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-          '-m' + StoreDD.ToString + T + ' -t' +
+          SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + T + ' -t' +
           Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
           ' - -', GetCurrentDir, nil, Output,
           ErrStream), False, YTOOL_BSIZE);
@@ -2641,20 +2659,21 @@ begin
       finally
       end;
     end;
-    // Aca habia un scrape del stderr de osrep buscando el literal
+    // Aca habia un scrape del stderr de srep buscando el literal
     // 'Decompression memory is ' para llenar EncInfo.SrepMem. Sacado por tres
     // razones medidas, no por estilo:
     //
-    // 1. El valor era SIEMPRE 0, comprobado con el osrep64 que shipeamos
-    //    (1.0.5) en -m3, -m4 y -m5 con 8 MB de entrada con duplicados reales.
-    //    El unico consumo era una linea que le mostraba ese cero al usuario.
-    // 2. El literal depende de la version: osrep lo cambio en 1.0.6 a
+    // 1. El valor era SIEMPRE 0, comprobado con el osrep64 de omega-srep que
+    //    se shipeaba entonces (1.0.5) en -m3, -m4 y -m5 con 8 MB de entrada
+    //    con duplicados reales. El unico consumo era una linea que le mostraba
+    //    ese cero al usuario.
+    // 2. El literal depende de la version: omega-srep lo cambio en 1.0.6 a
     //    'Decompression memory with -m<N> is ', asi que subir el pin lo
-    //    rompia, y en 2.x la linea no existe en compresion.
-    // 3. Ese texto nunca fue interfaz. El fragmento del medio sale de un
-    //    printf condicional y aparecio porque un arreglo de parseo de opciones
-    //    -- no una edicion del mensaje -- hizo que una variable pasara a tener
-    //    valor. No hay a quien pedirle estabilidad.
+    //    rompia, y en 2.x la linea no existe en compresion. Con el
+    //    Intensity/srep actual la linea SI existe y trae un valor real
+    //    ('Decompression memory is 0 mb' en -m3 sobre 1 MB), pero el texto
+    //    sigue siendo un printf condicional del binario, no una interfaz.
+    // 3. Ese texto nunca fue interfaz. No hay a quien pedirle estabilidad.
     //
     // El stderr se sigue capturando: no cuesta nada y es de donde habria que
     // sacar los errores del hijo el dia que se reporten. Hoy no se reportan, y

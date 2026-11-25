@@ -104,55 +104,51 @@ if [ -d "$CSRC/zlib" ]; then
     && echo "   OK -> zlib1.dll" || echo "   (zlib1.dll fallo)"
 fi
 
-# ── srep (external dedup -dd<N>) — omega-srep, github.com/YadeWira/omega-srep ──
-# Was Intensity/srep until a real cross-architecture bug surfaced (win64-
-# encoded `-dd1` streams failed their own checksum decoded on win32). Migrated
-# after ruling out 4 candidate causes (see build-plugins-linux.sh's srep
-# comment, and the wiki's Known-Issues-and-Limitations page, for the full
-# history) -- omega-srep is actively maintained by the same author. The bug
-# survived the initial migration too, but was root-caused via live cross-AI
-# collaboration to VMAC's 32-bit ADD128/PMUL64 fallback, whose type-punning
-# GCC's -O2+ strict-aliasing optimizations are entitled to break (defect in
-# that source, not in GCC) -- measured by omega-srep's maintainer; see
-# build-plugins-linux.sh's srep comment for the evidence. Fixed upstream and
-# released as v1.0.0. Verified: the full
-# cross-arch regression matrix (357/357) now passes with zero -dd1 failures.
-# Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-count tuning,
-# byte-for-byte identical output verified by upstream) -- added the same
-# -flto/-mtune=generic/-funroll-all-loops/-msse2 flags their own Makefile now
-# uses, since this script compiles directly rather than via `make`/cmake
-# (their platform detection doesn't cross-compile cleanly from Linux). Bumped
-# again to v1.0.5, fixing a real -m1/-m2 cross-arch CDC bug -- see
-# build-plugins-linux.sh's srep comment for the full story.
-# BREAKING: on-disk
-# format changed (magic bytes, extension) -- old `.pmp` using `-dd1` from
-# before this migration can't be decoded anymore. Already ships its own
-# Windows threading backend
-# (Compression/LZMA2/C/ThreadsWin32.*) and properly gates out the LZMA-SDK
-# Handle.h stub for MinGW builds -- neither shim from contrib/srep-win32/ is
-# needed anymore. Still needs -DUNICODE/-D_UNICODE (Common.h assumes
-# TCHAR=wchar_t), -lole32 -luuid -lshell32 -ladvapi32 (COM, for the Windows 7
-# taskbar progress indicator), and the case shim for <ShObjIdl.h> (mingw-w64
-# ships lowercase "shobjidl.h"; only matters on a case-sensitive FS like
-# Linux). CLI unchanged for what ytool sends (`-m<N>f`, `-d`, stdin/stdout
-# piping via "-") -- confirmed reading srep.cpp's parser, byte-for-byte
-# identical to upstream there.
+# ── srep (external dedup -dd<N>) — Intensity/srep, con backend Win32 propio ──
+# Upstream Intensity/srep, frozen since 2014 and still the reference
+# implementation. The port briefly used omega-srep (a fork) because of a real
+# cross-architecture bug -- a win64-encoded `-dd1` stream failed its own
+# checksum when decoded on win32 -- which was eventually root-caused to THIS
+# source (vmac.c's 32-bit ADD128/PMUL64 fallback, broken by -O2+
+# strict-aliasing; see build-plugins-linux.sh's srep comment for the evidence).
 #
-# Kept the plain `srep.exe` filename (inherited from the old Intensity/srep
-# dependency) until it was pointed out that omega-srep's own binary is
-# genuinely named `osrep` -- renamed here and in PrecompMain.pas's SREPEXE
-# constant to match.
-echo "==> osrep (osrep.exe)"
-pin_repo https://github.com/YadeWira/omega-srep "$CSRC/omega-srep" v1.0.5
-if [ -d "$CSRC/omega-srep" ]; then
-  ( cd "$CSRC/omega-srep" && "$CXX" -O3 -flto -mtune=generic -funroll-all-loops -msse2 -std=c++17 \
+# The threading API srep uses (Compression/LZMA2/C/ThreadsUnix.h) is the same
+# as 7-Zip's LZMA SDK (Igor Pavlov, public domain). This fork kept only the
+# Unix half, so the Windows side (ThreadsWin32.*) is added from
+# contrib/srep-win32/, adapted from the official LZMA SDK. Handle.h is an
+# empty stub: Synchronization.h includes it under #ifdef _WIN32 but no class
+# in that file actually uses a "Handle" type.
+#
+# Also needed: -DUNICODE/-D_UNICODE (Common.h assumes TCHAR=wchar_t),
+# -lole32 -luuid (COM, for the Windows 7 taskbar progress indicator -- a
+# feature irrelevant to a headless helper, but it still has to link), and a
+# case shim for <ShObjIdl.h> (mingw-w64 ships lowercase "shobjidl.h"; this
+# only matters on a case-sensitive FS like Linux, never on real Windows).
+#
+# The same two inline-asm patches as the Linux build are applied. They matter
+# here too: the i386 build is exactly where the CRC32 register-clobber and the
+# VMAC 32-bit fallback misbehave.
+echo "==> srep (srep.exe)"
+pin_repo https://github.com/Intensity/srep "$CSRC/srep" main
+if [ -d "$CSRC/srep" ]; then
+  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+  fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
+  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
+    "$CSRC/srep/Compression/LZMA2/C/"
+  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
+  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
     -I"$ROOT/contrib/mingw-shims" \
     -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
     -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
     -Wno-write-strings -Wno-unused-result \
     Compression/Common.cpp Compression/SREP/srep.cpp \
-    -lstdc++ -lole32 -luuid -lshell32 -ladvapi32 -static -o "$ROOT/osrep.exe" ) \
-    && echo "   OK -> osrep.exe" || echo "   (osrep fallo)"
+    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep.exe" ) \
+    && echo "   OK -> srep.exe" || echo "   (srep fallo)"
 fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
@@ -400,5 +396,5 @@ else
   echo "   (packpng: descarga fallo)"
 fi
 
-echo "Hecho. osrep.exe + plugins .dll en la raiz del repo (gitignored)."
+echo "Hecho. srep.exe + plugins .dll en la raiz del repo (gitignored)."
 echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."

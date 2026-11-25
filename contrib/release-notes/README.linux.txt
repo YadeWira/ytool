@@ -2,8 +2,11 @@ ytool (open-source recreation of xtool by Razor12911) - Linux x86-64 build
 ============================================================================
 ytool: binario principal (precomp/decode/extract/erase/execute/find/replace/generate).
 *.so: plugins de codecs (packjpg, preflate, fast-lzma2, brunsli, packmp3, packpng).
-osrep64: deduplicacion externa (-dd#). Es omega-srep (github.com/YadeWira/omega-srep),
-        pinneado a v1.0.5 -- fork activamente mantenido de Intensity/srep.
+srep64: deduplicacion externa (-dd#). Es Intensity/srep (github.com/Intensity/srep)
+        SREP 3.93a beta, la implementacion de referencia (sin mantenimiento desde 2014),
+        compilada con dos parches de asm inline que el upstream no trae: el clobber
+        "rm"->"qm" del CRC32 en hashes.cpp y los operandos read-write de VMAC en vmac.c.
+        Sin el segundo, el build de 32 bits falla su propio checksum en cruces de arq.
 
 libpackpng.so es de https://github.com/YadeWira/packPNG (mismo autor): PNG/APNG/JNG
 via preflate + WebP-lossless, ratio 45.7% vs el -mpng clasico (~100%, sin modelar

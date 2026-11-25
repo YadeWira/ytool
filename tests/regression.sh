@@ -26,7 +26,7 @@ trap 'rm -rf "$WORK"' EXIT
 # it finds real duplicates, on the rest it passes through (empty dedup, still reversible).
 # "-mlzo1x" exercises the lzo codec (encode+decode) on 50_lzo1x.bin if it was generated (see below).
 # "-mwavpack"/"-mflac" exercise the audio codecs on 60_wav_pcm.bin (RIFF -> lossless recompression).
-# "-mzlib -dd1" exercises EXTERNAL dedup (osrep64/osrep.exe); if the binary isn't present,
+# "-mzlib -dd1" exercises EXTERNAL dedup (srep64/srep.exe); if the binary isn't present,
 # StoreDD silently falls back to -1 (in-memory dedup) -> still reversible, just with
 # less real coverage until it's generated with contrib/build-plugins-{linux,windows}.sh.
 # "-mzlib -r xor"/"-r aes"/"-r rc4" exercise PrecompCrypto.pas (previously with no test):
@@ -168,7 +168,7 @@ fi
 
 # Segunda señal: etapas del pipeline. CODEC_EXPECT de arriba solo ve la PRIMERA
 # etapa -- "Streams: X / Y" cuenta lo que hizo el detector de streams y nada
-# mas. Una etapa posterior que muera es invisible ahi: escondiendo osrep64,
+# mas. Una etapa posterior que muera es invisible ahi: escondiendo srep64,
 # "-mzlib -dd1" seguia reportando "Streams: 90 / 90", exit 0, sin una sola
 # linea de error, y el .pmp cambiaba 76 bytes. El assert de arriba daba verde
 # con el dedup externo muerto.

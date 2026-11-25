@@ -59,56 +59,61 @@ if [ -d "$CSRC/lz4/lib" ]; then
     && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
 fi
 
-# ── srep (dedup -d / StoreDD) — omega-srep, github.com/YadeWira/omega-srep ──
-# Was Intensity/srep (upstream, frozen since 2014) until a real cross-arch
-# bug surfaced (win64-encoded `-dd1` streams failed their own checksum when
-# decoded by the win32 build). Migrated to omega-srep instead of debugging
-# dead upstream code -- actively maintained by the same author. An initial
-# 6/6 cross-arch round-trip gate passed before migrating, but a later, more
-# targeted repro (zero-LZ-match content, `-m1f`) found the bug survived the
-# migration too. Root-caused via live cross-AI collaboration (see the wiki's
-# Known-Issues-and-Limitations page for the full history, including the 4
-# earlier candidates ruled out along the way): vmac.c's __i386__ branch never
-# defines its own ADD128/MUL64/PMUL64, so the 32-bit build fell through to
-# the generic portable-C fallback, whose type-punning GCC's -O2+ strict-aliasing
-# optimizations are entitled to break -- so the defect is in vmac.c, not in GCC,
-# which is also what the chosen fix implies (it changes how that source is
-# compiled, not the compiler). Measured by omega-srep's maintainer, not here:
-# an instrumented dump of the 128-bit accumulator (one 64-bit half off by
-# exactly one, a missed-carry signature) plus a flag bisect -- -O1 clean, -O3
-# broken, -O3 -fno-strict-aliasing clean. Fixed upstream in omega-srep (targeted
-# #pragma GCC optimize("no-strict-aliasing"), no perf cost elsewhere),
-# released as v1.0.0 -- pinned to a tag, not a moving branch.
-# Verified: the full cross-arch regression matrix (357/357) now passes with
-# zero -dd1 failures. Bumped to v1.0.3 afterwards (perf-only: LTO/PGO/thread-
-# count tuning, byte-for-byte identical output verified by upstream). Bumped
-# again to v1.0.5: v1.0.4 fixed a real cross-arch bug in -m1/-m2 (CDC) --
-# PolynomialRollingHash<size_t> used a modulo that differs between 32-bit
-# (2^32) and 64-bit (2^64) builds, so a cross-arch archive silently
-# decompressed to garbage (no error). Fixed by pinning the hash to uint64.
-# Prompted by an external report of a Win7 x64 32-bit decode HANG on `-ddX`
-# (not the same symptom as the CDC bug -- that gave wrong bytes, not a hang
-# -- but garbage chunk-table data could plausibly loop the decoder); verified
-# on real Win7 x64 hardware (VM) with the 32-bit package: -dd1/-dd3, multiple
-# codecs, no hang, bit-exact.
+# ── srep (dedup -d / StoreDD) — Intensity/srep, github.com/Intensity/srep ──
+# Upstream, frozen since 2014 (3.93a beta), and the reference implementation.
+# This port used omega-srep (YadeWira's fork) for a while because of a real
+# cross-architecture bug: a win64-encoded `-dd1` stream failed its own internal
+# checksum when decoded by the win32 build. The root cause was eventually
+# isolated to THIS source -- vmac.c's __i386__ branch never defines its own
+# ADD128/MUL64/PMUL64, so the 32-bit build falls through to the generic
+# portable-C fallback, whose type-punning GCC's -O2+ strict-aliasing
+# optimizations are entitled to break. That is why the fix below patches
+# vmac.c rather than working around it: the defect is in the source, not in
+# GCC. (Measured, not assumed: -O1 clean, -O3 broken,
+# -O3 -fno-strict-aliasing clean.) The same fix went into omega-srep; it is
+# applied here from contrib/patch_srep_vmac.py.
 #
-# BREAKING: omega-srep's on-disk format is a deliberate clean break from
-# upstream (magic bytes "SREP"->"OSRP", extension .srep->.osr) -- any
-# existing .pmp made with `-mzlib -dd1` before this migration can no longer
-# be decoded (the embedded srep sub-stream starts with the old magic).
+# Two source patches are applied to a fresh clone, both with independently
+# confirmed 32-bit failure modes:
+#   1. hashes.cpp: the inline-asm CRC32 declared its operand "rm" while the
+#      asm body can pick a register -- changed to "qm" with a defensive "cc"
+#      clobber. Without it i386 builds can produce a wrong checksum.
+#   2. vmac.c: nh_16_func/poly_step_func advance esi/edi/ecx without
+#      declaring them, so -O2+'s interprocedural register allocator may skip
+#      reloading them between two back-to-back calls (VMAC_TAG_LEN is 128
+#      here, so both functions are always called twice). Fixed by routing the
+#      modified operands through read-write ("+") operands.
+# Both patches are idempotent, so re-running this script is safe.
 #
-# CLI is unchanged for what ytool actually sends (`-m<N>f`, `-d`, stdin/
-# stdout piping via "-") -- confirmed by reading srep.cpp's argument parser,
-# byte-for-byte identical to upstream there. No Pascal-side flag changes.
+# CLI NOTE -- this is the one place the two implementations differ, and it is
+# a real trap: Intensity/srep requires the explicit mode flag on decode,
+# `-d -m<N>f <in> <out>`. Without `-d` it sees two filenames, assumes
+# compression, re-compresses the already-compressed file and exits 0 while
+# emitting 100.04% of its input -- no error at all. PrecompMain.pas passes the
+# `-d` (see the SREP_DECODE_MODE comment there). Also: `-` as decode *input*
+# is rejected ("Not found SREP compressed file footer in file -"), but ytool
+# decodes file -> stdout (`<tmpfile> -`), which works.
 #
-# Kept the plain `srep64`/`srep.exe` filename convention (inherited from the
-# old Intensity/srep dependency) until it was pointed out that omega-srep's
-# own binary is genuinely named `osrep` (its Makefile installs it as such) --
-# renamed here and in PrecompMain.pas's SREPEXE/SREPEXE64 constants to match.
-echo "==> osrep"
-pin_repo https://github.com/YadeWira/omega-srep "$CSRC/omega-srep" v1.0.5
-( cd "$CSRC/omega-srep" && make >/dev/null 2>&1 && cp bin/osrep "$ROOT/osrep64" ) \
-  && echo "   OK -> osrep64" || echo "   (osrep fallo)"
+# On-disk format: upstream writes magic "SREP" and a .srep payload, unlike
+# omega-srep's "OSRP"/.osr clean break. Archives made with either are not
+# interchangeable, and this migration is also a one-way format change: .pmp
+# files produced while omega-srep was pinned cannot be decoded after it.
+echo "==> srep (Intensity/srep)"
+pin_repo https://github.com/Intensity/srep "$CSRC/srep" main
+if [ -d "$CSRC/srep" ]; then
+  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
+  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
+    # Handles both a fresh clone ("rm", unpatched) and one patched by an
+    # earlier version of this script that only did "rm"->"qm" without the
+    # "cc" clobber -- whichever pattern isn't present is a no-op.
+    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
+    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+  fi
+  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
+  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
+fi
+( cd "$CSRC/srep" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
+  && echo "   OK -> srep64" || echo "   (srep fallo)"
 
 # ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the

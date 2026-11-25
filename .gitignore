@@ -20,14 +20,16 @@ ytool-x86
 *.dll
 *.so
 *.so.*
-osrep
-osrep64
-osrep.exe
-osrep-x86.exe
 srep
 srep64
 srep.exe
 srep-x86.exe
+# Restos del pin de omega-srep, ya no se construyen pero pueden seguir en un
+# arbol de trabajo viejo.
+osrep
+osrep64
+osrep.exe
+osrep-x86.exe
 
 # ── Checkouts de terceros descargados por los build scripts ──────────────────
 # contrib/pin-repo.sh los clona aqui; nunca se versionan (580 MB con todo).
