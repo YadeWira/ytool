@@ -267,6 +267,44 @@ for f in "$CORPUS"/*; do
   done
 done
 
+# --- referencias {$L} de las unidades conservadas ----------------------------
+# Existe por un fallo real: al recortar mORMot de 976 archivos a 11 se conservaron
+# los .pas y se borraron los .obj que esos .pas referencian bajo
+# {$ifdef MSWINDOWS}. El build de Linux seguia verde (esa rama no se compila aca)
+# y la CI de Windows estuvo tres commits en rojo por dos objetos que faltaban.
+# Un build local no puede avalar una rama que nunca compila; esto si.
+# Se resuelve en Python porque el patron lleva "$L" literal y escaparlo en bash
+# terminaba comparando la cadena equivocada.
+if command -v python3 >/dev/null 2>&1; then
+  MISSING_L="$(python3 - "$ROOT/contrib/mORMot" <<'PYEOF'
+import os, re, sys
+root = sys.argv[1]
+units = ["SynCommons", "SynCrypto", "SynLZ", "SynTable", "SynKylix",
+         "SynFPCTypInfo", "SynFPCLinux", "SynFPCx64MM"]
+dead = ("padlock", "deflate.obj", "trees.obj", "SynEcc32O2.obj")
+missing = []
+for u in units:
+    f = os.path.join(root, u + ".pas")
+    if not os.path.exists(f):
+        continue
+    src = open(f, encoding="utf-8", errors="replace").read()
+    for ref in re.findall(r"\{\$L\s+([^}]+)\}", src):
+        base = os.path.basename(ref.replace("\\", "/"))
+        if base.startswith(dead) or ref.replace("\\", "/").startswith("static/"):
+            continue
+        if not os.path.exists(os.path.join(root, base)):
+            missing.append(base)
+print(" ".join(sorted(set(missing))))
+PYEOF
+)"
+  if [ -n "$MISSING_L" ]; then
+    echo "-- *** mORMot: faltan objetos referenciados:$MISSING_L *** --"
+    fail=$((fail+1))
+  else
+    echo "-- mORMot: objetos de \{$L\} presentes --"
+  fi
+fi
+
 # --- srep: reproducibilidad y metodos -------------------------------------
 # La suite de arriba prueba reversibilidad; esto prueba dos propiedades que no
 # se ven en un round-trip y que costaron bugs reales:
