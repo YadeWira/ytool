@@ -270,8 +270,9 @@ codes across identical invocations** in testing (likely a latent concurrency iss
 ### Repository layout
 
 197 files live under `contrib/`, and every one of them is either a build input or a build script.
-Third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them on demand into
+Most third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them on demand into
 `contrib/.csrc/`, which is gitignored and reaches 580 MB with every pinned repo checked out.
+The exception is `vendor/srep/` — see below.
 
 | Path | What it is | Versioned? |
 |---|---|---|
@@ -281,7 +282,8 @@ Third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them on dem
 | `contrib/ParseExpression/` | expression parser (`-df` tolerance, `-c` sizes) | yes |
 | `contrib/preflate/` | preflate C++ source, built into `libpreflate.so` | yes |
 | `contrib/mingw-shims/` | a one-line `ShObjIdl.h` redirect for cross-compiling the srep helper with mingw-w64 | yes |
-| `contrib/.csrc/` | lz4, zstd, packJPG, packMP3, packPNG, brunsli, FLAC, WavPack, lzo, srep, preflate, fast-lzma2 checkouts | **no** — cloned by the build scripts |
+| `vendor/srep/` | **Intensity/srep 3.93a beta, vendored in full** (52 files, 3.6 MB). The one dependency whose source is in the repo rather than cloned: it is frozen since 2014, it carries four local patches `ytool` needs, and it is the only one `ytool` may want to modify rather than just call | yes — the patches are a visible diff against upstream, not a `sed` at build time |
+| `contrib/.csrc/` | lz4, zstd, packJPG, packMP3, packPNG, brunsli, FLAC, WavPack, lzo, preflate, fast-lzma2 checkouts | **no** — cloned by the build scripts |
 
 The mORMot tree was trimmed from 976 files to the 11 the binary actually compiles against. That was
 verified by building both trees: the resulting binaries are byte-identical. Do not re-add the samples,

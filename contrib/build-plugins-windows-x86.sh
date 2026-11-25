@@ -118,26 +118,27 @@ fi
 # type-punned and miscompiled by -O2+ strict aliasing. See
 # build-plugins-linux.sh's srep comment for the measurement.
 echo "==> srep (srep-x86.exe)"
-pin_repo https://github.com/Intensity/srep "$CSRC/srep" main
-if [ -d "$CSRC/srep" ]; then
-  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
-    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+# From the vendored tree, patched into a scratch copy -- see the Linux script's
+# srep block for why. The Win32 threading backend upstream never shipped lives in
+# contrib/srep-win32/ and is copied in here.
+if [ -f "$ROOT/vendor/srep/Makefile" ]; then
+  SREPBUILD="$CSRC/srep-build-x86"
+  rm -rf "$SREPBUILD" && cp -a "$ROOT/vendor/srep" "$SREPBUILD"
+  if python3 "$ROOT/contrib/patch_srep.py" "$SREPBUILD" >/dev/null; then
+    cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
+      "$SREPBUILD/Compression/LZMA2/C/"
+    cp "$ROOT/contrib/srep-win32/Handle.h" "$SREPBUILD/Compression/LZMA2/MultiThreading/"
+    ( cd "$SREPBUILD" && "$CXX" -O3 -std=c++17 \
+      -I"$ROOT/contrib/mingw-shims" \
+      -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
+      -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
+      -Wno-write-strings -Wno-unused-result \
+      Compression/Common.cpp Compression/SREP/srep.cpp \
+      -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep-x86.exe" ) \
+      && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
+  else
+    echo "   (srep: los parches no aplicaron)"
   fi
-  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
-  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
-  cp "$ROOT/contrib/srep-win32/ThreadsWin32.h" "$ROOT/contrib/srep-win32/ThreadsWin32.c" \
-    "$CSRC/srep/Compression/LZMA2/C/"
-  cp "$ROOT/contrib/srep-win32/Handle.h" "$CSRC/srep/Compression/LZMA2/MultiThreading/"
-  ( cd "$CSRC/srep" && "$CXX" -O3 -std=c++17 \
-    -I"$ROOT/contrib/mingw-shims" \
-    -ICompression -ICompression/_Encryption -ICompression/_Encryption/headers -ICompression/_Encryption/hashes \
-    -DFREEARC_WIN -DFREEARC_INTEL_BYTE_ORDER -D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE \
-    -Wno-write-strings -Wno-unused-result \
-    Compression/Common.cpp Compression/SREP/srep.cpp \
-    -static-libgcc -static-libstdc++ -lole32 -luuid -o "$ROOT/srep-x86.exe" ) \
-    && echo "   OK -> srep-x86.exe" || echo "   (srep fallo)"
 fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────

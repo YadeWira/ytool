@@ -358,6 +358,15 @@ begin
             if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               if S.Length > 1 then
                 StoreDD := StrToInt(S[2]);
+            // La degradacion a dedup en memoria era silenciosa: pedias -dd1
+            // (srep externo) y obtenias -dd (memoria) sin una linea de aviso,
+            // con la unica pista en el numero de etapas del resumen de tamanos.
+            // Mismo criterio que la suite usa para los codecs: si una etapa no
+            // puede correr, que se vea.
+            if (StoreDD = -1) and (S.Length > 1) then
+              WriteLine(Format('%s: el dedup externo (-dd%s) necesita "%s" junto ' +
+                'a ytool; se usara dedup en memoria (-dd).',
+                ['aviso', S.Substring(1), SREPEXE]));
           end;
         'f':
           begin
@@ -2159,8 +2168,19 @@ begin
         end;
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-          SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + T + ' -t' +
-          Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
+          SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + T +
+          // -temp= unico por worker. El modo future-LZ relee su entrada, asi
+          // que al comprimir desde stdin srep escribe un archivo de trabajo con
+          // un nombre fijo (srep-data.tmp) en el CWD. Con varios workers -t#
+          // metidos en -dd a la vez eso es un archivo compartido por procesos
+          // independientes, y nada lo arbitra. Medido: cuatro encodes en
+          // paralelo desde el mismo CWD no se corrompieron, pero depender de
+          // que srep lo mantenga asi es una apuesta, y el temporal aparece en
+          // el directorio del usuario mientras dura. Nombrarlo por worker lo
+          // saca del CWD y lo hace irrepetible. srep lo borra el mismo.
+          ' -temp=' + ExpandPath(PluginsPath + SREPEXE, True) + '.tmp' +
+          Index.ToString +
+          ' -t' + Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
           ' - -', GetCurrentDir, nil, Output,
           ErrStream), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;

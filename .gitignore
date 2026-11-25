@@ -20,20 +20,26 @@ ytool-x86
 *.dll
 *.so
 *.so.*
-srep
-srep64
-srep.exe
-srep-x86.exe
+# Anclados a la raiz: sin la barra inicial, "srep" tambien excluiria vendor/srep/.
+/srep
+/srep64
+/srep.exe
+/srep-x86.exe
 # Restos del pin de omega-srep, ya no se construyen pero pueden seguir en un
 # arbol de trabajo viejo.
-osrep
-osrep64
-osrep.exe
-osrep-x86.exe
+/osrep
+/osrep64
+/osrep.exe
+/osrep-x86.exe
 
 # ── Checkouts de terceros descargados por los build scripts ──────────────────
 # contrib/pin-repo.sh los clona aqui; nunca se versionan (580 MB con todo).
 contrib/.csrc/
+# copia de trabajo donde se compila srep con sus parches; vendor/srep queda pristino
+contrib/.csrc/srep-build*/
+# temporales de srep (future-LZ relee su entrada y usa un archivo de trabajo)
+srep-data.tmp
+*.tmp
 
 # ── Material de prueba grande o privado ─────────────────────────────────────
 testdata/

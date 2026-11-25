@@ -98,22 +98,24 @@ fi
 # omega-srep's "OSRP"/.osr clean break. Archives made with either are not
 # interchangeable, and this migration is also a one-way format change: .pmp
 # files produced while omega-srep was pinned cannot be decoded after it.
-echo "==> srep (Intensity/srep)"
-pin_repo https://github.com/Intensity/srep "$CSRC/srep" main
-if [ -d "$CSRC/srep" ]; then
-  HASHES="$CSRC/srep/Compression/SREP/hashes.cpp"
-  if ! grep -qF '[value] "qm" (value) : "cc"' "$HASHES" 2>/dev/null; then
-    # Handles both a fresh clone ("rm", unpatched) and one patched by an
-    # earlier version of this script that only did "rm"->"qm" without the
-    # "cc" clobber -- whichever pattern isn't present is a no-op.
-    sed -i 's/\[value\] "rm" (value)/[value] "qm" (value) : "cc"/' "$HASHES"
-    sed -i 's/\[value\] "qm" (value));/[value] "qm" (value) : "cc");/' "$HASHES"
+echo "==> srep (vendor/srep)"
+# Built from the vendored tree, not from a git clone: the source is in the repo,
+# the patches are visible as a diff against upstream in vendor/srep/, and the
+# build no longer depends on a 2014 repository being reachable. Build into a
+# scratch copy so vendor/srep/ itself stays pristine (the patch script is
+# idempotent, but a build should not dirtify a tracked tree).
+if [ -f "$ROOT/vendor/srep/Makefile" ]; then
+  SREPBUILD="$CSRC/srep-build"
+  rm -rf "$SREPBUILD" && cp -a "$ROOT/vendor/srep" "$SREPBUILD"
+  if python3 "$ROOT/contrib/patch_srep.py" "$SREPBUILD"; then
+    ( cd "$SREPBUILD" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
+      && echo "   OK -> srep64" || echo "   (srep fallo)"
+  else
+    echo "   (srep: los parches no aplicaron, build omitido)"
   fi
-  VMAC="$CSRC/srep/Compression/_Encryption/hashes/vmac/vmac.c"
-  [ -f "$VMAC" ] && python3 "$ROOT/contrib/patch_srep_vmac.py" "$VMAC"
+else
+  echo "   (srep: falta vendor/srep/Makefile)"
 fi
-( cd "$CSRC/srep" && make >/dev/null 2>&1 && cp bin/srep "$ROOT/srep64" ) \
-  && echo "   OK -> srep64" || echo "   (srep fallo)"
 
 # ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
 # v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
