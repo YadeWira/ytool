@@ -475,7 +475,11 @@ begin
       Inc(Pos);
       continue;
     end;
-    if (Pos >= 3) and ((Input + Pos - 2)^ and $F = 8) and
+    // The 2-byte zlib header sits at Pos-2..Pos-1, so Pos = 2 is the first
+    // valid position. 0.7.9 required Pos >= 3 and missed a zlib stream that
+    // starts at byte 0 of a block (xtool 0.9.9 finds it: 200/200 vs 199/200
+    // on 21_zlib_many.bin).
+    if (Pos >= 2) and ((Input + Pos - 2)^ and $F = 8) and
       ((Input + Pos - 1)^ and $20 = 0) and
       (EndianSwap(PWord(Input + Pos - 2)^) mod $1F = 0) and
       ((Input + Pos)^ and 7 <> $7) then

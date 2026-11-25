@@ -132,8 +132,8 @@ fi
 CODEC_EXPECT="
 20_zlib_streams.bin|-mzlib|6
 20_zlib_streams.bin|-mpreflate|6
-21_zlib_many.bin|-mzlib|199
-21_zlib_many.bin|-mpreflate|199
+21_zlib_many.bin|-mzlib|200
+21_zlib_many.bin|-mpreflate|200
 22_raw_deflate.bin|-mzlib|1
 23_dup_streams.bin|-mzlib|90
 30_over_chunk_20m.bin|-mzlib|498
