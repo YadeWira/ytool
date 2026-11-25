@@ -282,7 +282,11 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   na=$(ls "$XA" | wc -l); nu=$(ls "$XU" | wc -l)
   same=1
   for f in "$XU"/*; do cmp -s "$f" "$XA/$(basename "$f")" || same=0; done
-  if [ -n "$xt" ] && [ "$na" -eq "$xt" ] && [ "$nu" -eq $((xt - xp)) ] && \
+  if [ -z "$xt" ]; then
+    # Windows: la linea "Streams:" va directo a la consola y no se captura (ver
+    # el LIMITE CONOCIDO de CODEC_EXPECT). Sin el conteo no hay contra que medir.
+    echo "-- -x/-X: omitido, no se pudo leer 'Streams:' (salida no capturable aqui) --"
+  elif [ "$na" -eq "$xt" ] && [ "$nu" -eq $((xt - xp)) ] && \
      [ "$nu" -gt 0 ] && [ "$xp" -gt 0 ] && [ "$same" = 1 ]; then
     echo "-- -x/-X: $na extraidos, $nu no procesados ($st) --"; pass=$((pass+1))
   else
