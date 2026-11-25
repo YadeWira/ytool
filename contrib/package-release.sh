@@ -117,7 +117,7 @@ RM_LINUX="$ROOT/contrib/release-notes/README.linux.txt"
 # Intensity/srep reports itself as "SREP 3.93a beta (October 11, 2014)"; omega-srep
 # used to say "Omega SREP 1.0.5". Match the upstream form.
 SREP_REAL="$(strings -a srep64 2>/dev/null | grep -oE 'SREP [0-9]+\.[0-9]+[a-z]? beta' | head -1)"
-SREP_DOC="$(grep -oE 'Intensity/srep [0-9]+\.[0-9]+[a-z]? beta' "$RM_LINUX" | head -1)"
+SREP_DOC="$(tr '\n' ' ' < "$RM_LINUX" | grep -oE 'SREP [0-9]+\.[0-9]+[a-z]? beta' | head -1)"
 [ -n "$SREP_REAL" ] || die "no se pudo leer la version de srep64"
 [ -n "$SREP_DOC" ] || die "el README no declara la version de Intensity/srep"
 [ "$SREP_REAL" = "$SREP_DOC" ] || die "el README dice '$SREP_DOC' pero el binario reporta '$SREP_REAL'"
