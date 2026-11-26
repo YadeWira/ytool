@@ -83,42 +83,30 @@ fi
 # srep is not part of this repository (SREP 3.93a is "All rights reserved";
 # see THIRD_PARTY.md). Personal builds: github.com/YadeWira/srep-builds.
 
-# ── packjpg (JPEG media codec) — user's fork v5.0d ─────────────────────
-# v4.0f added native arithmetic-coded JPEG support (SOF C9/CA) alongside the
-# existing Huffman path. v5.0 is a support-policy/security bump, not a format
-# break: drops Windows XP, adds a 3-layer decompression-bomb defense
-# (exhaustion detection, blowup-ratio guard, absolute output cap -- default
-# 256mb, `-maxout<MB>`), and adds JPEG-LS recompression as a new capability.
-# format_version_current stays 40 -- verified bidirectionally byte-compatible
-# with v4.0f by upstream. Same 3 source files, no build recipe changes needed.
-# JPEG-LS is NOT enabled here: it needs libcharls-dev + libjxl-dev and is
-# feature-gated behind -DHAVE_JPEGLS (auto no-op without the flag) -- skipped
-# to avoid adding 2 new hard build dependencies for a rare format; revisit if
-# JPEG-LS content shows up in practice.
+# ── PJA (JPEG, JPEG-LS, JPEG 2000) — replaces packJPG since 0.9.9a ──────────
+# github.com/YadeWira/PJA (MIT), packJPG's successor: its own format, smaller
+# and verified before it returns (pja_compress decodes its result and compares
+# it; pja_decompress checks the stored size and BLAKE3 hash). Measured inside
+# ytool on 78 real JPEGs: PJA takes 61 streams and writes 76.54% of the input,
+# packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
-# Bumped to v5.0d, pure hygiene -- no active bug for our targets. v5.0a's
-# `padbit` fix (bare `char` -> `signed char`, a real heap-buffer-overflow on
-# platforms where char is unsigned by default) never manifests on x86/x86_64
-# (char is signed there), the only platforms we ship. v5.0b/c's other fixes
-# (CI glibc pin, sourcelegacy removal, win-x86 posix-compiler requirement,
-# a JPEG-LS-only i686 exit crash) don't touch the 3 files we compile either.
-# v5.0d likewise changes no code we build: .pjg output is byte-identical to
-# v5.0c, and its additions are a build guard on the `lib` target (we build
-# `dll`, which has had that guard since v4.0e), a `-dry` CLI summary line,
-# and header documentation -- including a correction we're already immune to
-# (packjpglib.h used to read as if "unlimited" were pjglib_set_max_output_size's
-# default; the real default is 256 MB and `0` disables the guard, so a consumer
-# "restoring the default" with 0 would silently turn the bomb guard off --
-# ytool never calls the setter at all, so it keeps the 256 MB default).
-# Confirmed our exact build recipe still compiles clean and exports the
-# identical pjglib_* symbol set (nm -D, diffed against the previous v5.0
-# build, zero differences) -- drop-in, no other changes needed.
-echo "==> packjpg (libpackjpg.so)"
-pin_repo https://github.com/YadeWira/packJPG "$CSRC/packJPG" v5.0f
-( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -DBUILD_SO -fPIC \
-  -fvisibility=hidden -shared -Wl,-soname,libpackjpg.so \
-  source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -s -lpthread \
-  -o "$ROOT/libpackjpg.so" ) && echo "   OK -> libpackjpg.so" || echo "   (packjpg fallo)"
+# The library is PJA's released build (FreePascal plus C), downloaded and
+# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
+# below; the version is spelled once.
+PJA_VER="0.9.14"
+PJA_ASSET="pja-${PJA_VER}-lib-linux-x86_64.tar.gz"
+PJA_SHA256="2b8cf9ecbb8e6b0669b4f8d7fc9e760ebb9ea466edbe50f7fff4ce2718410d83"
+echo "==> PJA (libpja.so)"
+if curl -sfL -o "$CSRC/$PJA_ASSET" \
+    "https://github.com/YadeWira/PJA/releases/download/v${PJA_VER}/$PJA_ASSET" \
+  && echo "$PJA_SHA256  $CSRC/$PJA_ASSET" | sha256sum -c --status; then
+  rm -rf "$CSRC/pja-lib" && mkdir -p "$CSRC/pja-lib" \
+    && ( cd "$CSRC/pja-lib" && tar xzf "$CSRC/$PJA_ASSET" ) \
+    && cp "$CSRC/pja-lib/pja-${PJA_VER}-lib-linux-x86_64/pja.so" "$ROOT/libpja.so" \
+    && echo "   OK -> libpja.so" || echo "   (PJA: no se pudo extraer)"
+else
+  rm -f "$CSRC/$PJA_ASSET"; echo "   (PJA: descarga fallida o SHA-256 distinto)"
+fi
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (libpreflate.so)"

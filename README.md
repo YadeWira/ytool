@@ -55,13 +55,13 @@ literal store would produce. See [Testing](#testing).
 | preflate | [deus-libri/preflate](https://github.com/deus-libri/preflate) | ✅ | ✅ |
 | PNG | zlib + preflate | ✅ | ✅ |
 | PNG/APNG/JNG/MNG (alt, `-mpackpng`) | [packPNG](https://github.com/YadeWira/packPNG) (preflate + WebP-lossless) | ✅ | ✅ |
-| JPEG | [packJPG](https://github.com/YadeWira/packJPG) (our own fork, LGPLv3) | ✅ | ✅ |
+| JPEG, JPEG-LS, JPEG 2000 (`-mpja`) | [PJA](https://github.com/YadeWira/PJA) 0.9.14, packJPG's successor (MIT) ⁴ | ✅ | ✅ |
 | JPEG (alt) | [brunsli](https://github.com/google/brunsli) | ✅ | ✅ |
 | FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
 | WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
 | MP3 | [YadeWira/packMP3](https://github.com/YadeWira/packMP3) (successor fork, LGPLv3) | ✅ | ✅ |
 | LZ4 (`lz4f`) | liblz4 1.11.1 | ✅ (`liblz4.so`, shipped) | ✅ (`liblz4.dll`) |
-| LZ4 raw blocks (`lz4`, `lz4hc`) | liblz4 | ⚠️ detects nothing — see below | same |
+| LZ4 raw blocks (`lz4`, `lz4hc`) | liblz4 1.11.1 | ✅ with the block size (`-mlz4:s64kb`) — see below | same |
 | Zstandard | libzstd 1.6.0 | ✅ ¹ (`libzstd.so`, shipped) | ✅ ¹ (`libzstd.dll`) |
 | LZO (`lzo1x`) | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ ² | ✅ ² |
 | raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
@@ -71,7 +71,9 @@ literal store would produce. See [Testing](#testing).
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
 
 **Genuinely closed, no open build possible:** TAK (no open-source encoder exists, anywhere — only a
-reverse-engineered decoder), `jojpeg` (no known public source at all) and `reflate` (`-mreflate`, needs `RAW2HIF_DLL.DLL` / `HIF2RAW_DLL.DLL`, no known public source; without them the codec is disabled and reports 0 / 0 on the same deflate streams where `-mzlib` and `-mpreflate` report 6 / 6). Oodle's *codec* is the same story
+reverse-engineered decoder). `jojpeg` (no known public source at all) and `reflate` (needs the closed
+`RAW2HIF_DLL.DLL` / `HIF2RAW_DLL.DLL`) were removed in 0.9.9a: `-mjojpeg` and `-mreflate` now stop with
+"Method not found" instead of silently doing nothing. Oodle's *codec* is the same story
 (proprietary bitstream, no legally-redistributable open encoder reproduces it) — but the *loader* is open and
 included; if you legally have an `oo2core`/`oo2ext` DLL/.so, drop it next to the binary or point `-oodle<path>`
 at it and the codec activates.
@@ -95,9 +97,20 @@ bytes on all three, and each decodes the others'.
 ³ **External dedup** works when an `srep64`/`srep.exe` is present next to the binary; this repository
 does not ship one (see [Building](#building)).
 
-**LZ4 raw blocks** (`-mlz4`, `-mlz4hc`) report `0 / 0` — not even detection — on raw blocks produced by the
-lz4 library, at every size tried and with a first token byte inside the range the heuristic keys on. Open
-and not yet diagnosed. Framed LZ4 (`-mlz4f`) is unaffected.
+⁴ **PJA replaced packJPG in 0.9.9a.** Measured inside ytool on 78 real JPEGs (15.5 MB): PJA takes 61
+streams and writes 76.54% of the input, packJPG 5.0f took 50 and wrote 80.81%, brunsli takes 47 and writes
+79.71%; every round-trip bit-exact. PJA verifies its own output before returning it and stores a BLAKE3
+hash of the original, which `pja_decompress` checks on decode, on top of ytool's own check. `-mpja` gets a codec number of its
+own: packJPG's stays reserved, so a stream from an earlier pre-release can never reach PJA's decoder. The
+scanner hands it JPEG files today; PJA also takes JPEG-LS and JPEG 2000, which the scanner does not find
+yet.
+
+**LZ4 raw blocks** (`-mlz4`, `-mlz4hc`) need the decompressed block size, as in xtool: `-mlz4:s64kb`. A raw
+block carries no size, so the scanner decodes until it has produced exactly `s` bytes (16 MB by default)
+and only then has a candidate; without `s` it reports `0 / 0`, which an earlier version of this page took
+for a bug. Measured on six 64 KB blocks written by the lz4 library: with `s64kb` the scanner finds the 4
+whose first token is in the `$F0..$F4` range it keys on, `-mlz4` processes 3 and `-mlz4hc` 1, every
+round-trip bit-exact. Framed LZ4 (`-mlz4f`) needs nothing: the frame carries its sizes.
 
 **Linux ships its own `liblz4.so`** and loads it ahead of the system library. Previously the distro's
 `liblz4.so.1` was used, and lz4 1.9.4 and 1.10.0 emit different bytes at the same level (`LZ4HC_CLEVEL_MIN`
@@ -111,6 +124,12 @@ lossless, just without the gain); `-3`..`-9` reproduce from either. `.pmp` files
 pre-releases that hold such streams do not restore with this build. Supporting both at once would mean
 loading two lz4 libraries and recording which one matched, as xtool 0.9.9 does with its library variants.
 Linux and real Windows 10 x64 and x86 give the same `.pmp` bytes for all of these.
+
+**Windows x86 cannot decode some 64-bit `.pmp` files.** lz4 picks its fast-mode hash by word size, so a
+fast-mode frame with linked blocks written by a 64-bit lz4 cannot be reproduced on 32-bit: encoding on x86
+stores it literally, and decoding on x86 a `.pmp` made on 64-bit that holds such a stream fails with
+`Error in the method 'lz4f'` (exit 1, nothing written; never wrong data). Measured on real Windows 10 x86
+with `75_lz4f_fast.bin`. Use x64 on both sides to move archives between machines.
 
 Prebuilt binaries (Linux x64 tarball, Windows x64 zip, Windows x86 zip — all three with every
 buildable plugin library included) are on the [Releases page](https://github.com/YadeWira/ytool/releases).
@@ -169,7 +188,7 @@ Pending from 0.9.9, in the order they would matter:
 | `bink` scanner | **not implemented** | No open Bink encoder exists (Bink 2 audio is a proprietary RAD codec). |
 | `wwise` scanner | **not implemented** | Needs the Wwise Vorbis/Opus/[ADPCM] re-encoders, proprietary. |
 | `-oodle#` multiple libraries | **partial** | `-oodle<path>` can be repeated, and the candidates are tried in order until one loads; that one library is then used for every stream. 0.9.6/0.9.9 instead fall through to the next library *per stream* when one fails. Not measurable here without a real Oodle library. |
-| `packjpg` / `jojpeg` removal | **not done** | We still ship `-mpackjpg` as a working codec. 0.9.9 dropped it; we have an open fork (`YadeWira/packJPG`) that works, so dropping it would lose a working codec for changelog fidelity. `jojpeg` has never been buildable (no public source). |
+| `packjpg` / `jojpeg` removal | **done in 0.9.9a** | `-mpackjpg` is replaced by `-mpja` (PJA, packJPG's successor; see ⁴). `jojpeg` was never buildable (no public source) and is gone. |
 | `mp3` as a *scanner* | **different design** | 0.9.9 scans MP3; we replace MP3 streams through `packMP3` (`-mpackmp3`), which is stronger. Not an omission. |
 
 Its `gdeflate` scanner is **not** pending: gdeflate is DirectStorage-specific (0.9.9 ships `dstorage.dll`
@@ -307,7 +326,7 @@ Most third-party *sources* are not vendored: `contrib/pin-repo.sh` clones them o
 | `contrib/LZ4Delphi/`, `ZSTD4Delphi/`, `XXHASH4Delphi/`, `LZMADelphi/`, `LIBC/`, `WinLibcShim/` | Pascal bindings plus the prebuilt C objects their `{$L}` directives link | yes — these objects are build **inputs** |
 | `contrib/ParseExpression/` | expression parser (`-df` tolerance, `-c` sizes) | yes |
 | `contrib/preflate/` | preflate C++ source, built into `libpreflate.so` | yes |
-| `contrib/.csrc/` | lz4, zstd, packJPG, packMP3, packPNG, brunsli, FLAC, WavPack, lzo, preflate, fast-lzma2 checkouts | **no** — cloned by the build scripts |
+| `contrib/.csrc/` | lz4, zstd, xxHash, LZMA SDK, packMP3, brunsli, FLAC, WavPack, lzo, preflate, ultra-fast-lzma2 checkouts; PJA and packPNG release downloads | **no** — cloned by the build scripts |
 
 The mORMot tree was trimmed from 976 files to the 11 the binary actually compiles against. That was
 verified by building both trees: the resulting binaries are byte-identical. Do not re-add the samples,
@@ -328,7 +347,7 @@ codecs fall back to the distro's library.
 # 1. native objects (lz4/zstd/xxhash/lzma, linked into the binary) — REQUIRED
 bash contrib/build-native-linux.sh
 
-# 2. plugins (liblz4, packjpg, preflate, fast-lzma2, brunsli, packmp3) as .so
+# 2. plugins (liblz4, libzstd, pja, preflate, fast-lzma2, brunsli, packmp3, packpng) as .so
 bash contrib/build-plugins-linux.sh
 
 # 3. the ytool binary

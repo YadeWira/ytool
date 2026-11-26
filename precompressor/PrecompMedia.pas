@@ -5,7 +5,7 @@ unit PrecompMedia;
 interface
 
 uses
-  BrunsliDLL, FLACDLL, PackJPGDLL, PackMP3DLL, JoJpegDLL, WavPackDLL,
+  BrunsliDLL, FLACDLL, PJADLL, PackMP3DLL, WavPackDLL,
   Utils,
   PrecompUtils,
   SysUtils, Classes, Math;
@@ -16,19 +16,21 @@ var
 implementation
 
 const
-  MediaCodecs: array of PChar = ['flac', 'packjpg', 'brunsli', 'jojpeg',
-    'packmp3', 'wavpack'];
-  CODEC_COUNT = 6;
+  // Removed in 0.9.9a, their slots kept empty so no codec number stored in a
+  // container ever means something else: 1 was 'packjpg' (replaced by 'pja',
+  // which has a new number on purpose: an old packJPG stream must not reach
+  // PJA's decoder), 3 was 'jojpeg' (no source or binary available anywhere).
+  MediaCodecs: array of PChar = ['flac', '', 'brunsli', '', 'packmp3',
+    'wavpack', 'pja'];
+  CODEC_COUNT = 7;
   FLAC_CODEC = 0;
-  PACKJPG_CODEC = 1;
   BRUNSLI_CODEC = 2;
-  JOJPEG_CODEC = 3;
   MP3_CODEC = 4;
   WAVPACK_CODEC = 5;
+  PJA_CODEC = 6;
 
 const
   FLAC_LEVEL = 5;
-  J_WORKMEM = 65536;
 
 type
   PFlacEncCD = ^TFlacEncCD;
@@ -63,7 +65,6 @@ var
   dcd: array of TFlacDecCD;
   wvenc: array of TWvEncCD;
   wvdec: array of TWvDecCD;
-  JJInst: TArray<Pointer>;
   FlacLevel: Integer = FLAC_LEVEL;
   CodecAvailable, CodecEnabled: TArray<Boolean>;
   RestoreOut: TArray<_PrecompOutput>;
@@ -697,9 +698,8 @@ begin
     CodecEnabled[X] := False;
   end;
   CodecAvailable[FLAC_CODEC] := FLACDLL.DLLLoaded;
-  CodecAvailable[PACKJPG_CODEC] := PackJPGDLL.DLLLoaded;
+  CodecAvailable[PJA_CODEC] := PJADLL.DLLLoaded;
   CodecAvailable[BRUNSLI_CODEC] := BrunsliDLL.DLLLoaded;
-  CodecAvailable[JOJPEG_CODEC] := JoJpegDLL.DLLLoaded;
   CodecAvailable[MP3_CODEC] := PackMP3DLL.DLLLoaded;
   CodecAvailable[WAVPACK_CODEC] := WavPackDLL.DLLLoaded;
   X := 0;
@@ -712,15 +712,12 @@ begin
       if Funcs^.GetParam(Command, X, 'l') <> '' then
         FlacLevel := StrToInt(Funcs^.GetParam(Command, X, 'l'));
     end
-    else if (CompareText(S, MediaCodecs[PACKJPG_CODEC]) = 0) and PackJPGDLL.DLLLoaded
+    else if (CompareText(S, MediaCodecs[PJA_CODEC]) = 0) and PJADLL.DLLLoaded
     then
-      CodecEnabled[PACKJPG_CODEC] := True
+      CodecEnabled[PJA_CODEC] := True
     else if (CompareText(S, MediaCodecs[BRUNSLI_CODEC]) = 0) and BrunsliDLL.DLLLoaded
     then
       CodecEnabled[BRUNSLI_CODEC] := True
-    else if (CompareText(S, MediaCodecs[JOJPEG_CODEC]) = 0) and JoJpegDLL.DLLLoaded
-    then
-      CodecEnabled[JOJPEG_CODEC] := True
     else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
     then
       CodecEnabled[MP3_CODEC] := True
@@ -755,12 +752,6 @@ begin
       dcd[X].Output := TMemoryStreamEx.Create(False);
     end;
   end;
-  if CodecAvailable[JOJPEG_CODEC] then
-  begin
-    SetLength(JJInst, Count);
-    for X := Low(JJInst) to High(JJInst) do
-      JJInst[X] := nil;
-  end;
 end;
 
 procedure MediaFree(Funcs: PPrecompFuncs);
@@ -786,10 +777,6 @@ begin
       wvenc[X].Output.Free;
       wvdec[X].Input.Free;
     end;
-  if CodecAvailable[JOJPEG_CODEC] then
-    for X := Low(JJInst) to High(JJInst) do
-      if Assigned(JJInst[X]) then
-        FreeMemory(JJInst[X]);
 end;
 
 function MediaParse(Command: PChar; Option: PInteger;
@@ -809,22 +796,16 @@ begin
       SetBits(Option^, FLAC_CODEC, 0, 3);
       Result := True;
     end
-    else if (CompareText(S, MediaCodecs[PACKJPG_CODEC]) = 0) and PackJPGDLL.DLLLoaded
+    else if (CompareText(S, MediaCodecs[PJA_CODEC]) = 0) and PJADLL.DLLLoaded
     then
     begin
-      SetBits(Option^, PACKJPG_CODEC, 0, 3);
+      SetBits(Option^, PJA_CODEC, 0, 3);
       Result := True;
     end
     else if (CompareText(S, MediaCodecs[BRUNSLI_CODEC]) = 0) and BrunsliDLL.DLLLoaded
     then
     begin
       SetBits(Option^, BRUNSLI_CODEC, 0, 3);
-      Result := True;
-    end
-    else if (CompareText(S, MediaCodecs[JOJPEG_CODEC]) = 0) and JoJpegDLL.DLLLoaded
-    then
-    begin
-      SetBits(Option^, JOJPEG_CODEC, 0, 3);
       Result := True;
     end
     else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
@@ -905,8 +886,8 @@ begin
         continue;
       end;
     end;
-    if (CodecEnabled[PACKJPG_CODEC] or CodecEnabled[BRUNSLI_CODEC] or
-      CodecEnabled[JOJPEG_CODEC]) and (PWord(Input + Pos)^ = JPG_HEADER) then
+    if (CodecEnabled[PJA_CODEC] or CodecEnabled[BRUNSLI_CODEC]) and
+      (PWord(Input + Pos)^ = JPG_HEADER) then
     begin
       Y := SizeEx - Pos;
       if GetJPEGInfo(Input + Pos, Y, @data_size, @progressive) then
@@ -933,10 +914,8 @@ begin
         SI.Option := 0;
         if CodecEnabled[BRUNSLI_CODEC] then
           SetBits(SI.Option, BRUNSLI_CODEC, 0, 3)
-        else if CodecEnabled[JOJPEG_CODEC] then
-          SetBits(SI.Option, JOJPEG_CODEC, 0, 3)
-        else if CodecEnabled[PACKJPG_CODEC] then
-          SetBits(SI.Option, PACKJPG_CODEC, 0, 3);
+        else if CodecEnabled[PJA_CODEC] then
+          SetBits(SI.Option, PJA_CODEC, 0, 3);
         SI.Status := TStreamStatus.None;
         Funcs^.LogScan1(MediaCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
           SI.OldSize, -1);
@@ -1008,7 +987,7 @@ begin
         else
           Y := 0;
       end;
-    PACKJPG_CODEC, BRUNSLI_CODEC, JOJPEG_CODEC:
+    PJA_CODEC, BRUNSLI_CODEC:
       begin
         if GetJPEGInfo(Input, Y, @data_size, @progressive) then
           Y := data_size
@@ -1058,6 +1037,8 @@ var
   X, Y: Integer;
   Res: Cardinal;
   Res1, Res2: Integer;
+  PjaOut: Pointer;
+  PjaSize: NativeUInt;
 begin
   Result := False;
   X := GetBits(StreamInfo^.Option, 0, 3);
@@ -1092,25 +1073,24 @@ begin
           Result := True;
         end;
       end;
-    PACKJPG_CODEC:
+    PJA_CODEC:
       begin
-        Buffer := nil;
-        Res := StreamInfo.OldSize;
-        // init_streams + convert must be atomic, and concurrent entry from FP
-        // RTL threads deadlocks a posix-model DLL -- see PJGLock's comment.
-        PJGLock.Acquire;
+        // One thread per stream: ytool already runs streams in parallel.
+        // pja_compress decompresses its result and compares it with the input
+        // before returning PJA_OK; PJA_E_NOT_TAKEN leaves the stream raw.
+        PjaOut := nil;
+        PjaSize := 0;
+        if pja_compress(OldInput, StreamInfo^.OldSize, @PjaOut, @PjaSize, 1)
+          = PJA_OK then
         try
-          pjglib_init_streams(OldInput, pjglib_memory, StreamInfo^.OldSize,
-            Buffer, pjglib_memory);
-          if pjglib_convert_stream2mem(@Buffer, @Res, nil) and
-            (Res < StreamInfo^.NewSize) then
+          if PjaSize < NativeUInt(StreamInfo^.NewSize) then
           begin
-            Move(Buffer^, NewInput^, Res);
-            StreamInfo^.NewSize := Res;
+            Move(PjaOut^, NewInput^, PjaSize);
+            StreamInfo^.NewSize := PjaSize;
             Result := True;
           end;
         finally
-          PJGLock.Release;
+          pja_free(PjaOut);
         end;
       end;
     BRUNSLI_CODEC:
@@ -1132,60 +1112,6 @@ begin
           end;
         finally
           brunsli_free_JPEGData(ctx);
-        end;
-      end;
-    JOJPEG_CODEC:
-      begin
-        if not Assigned(JJInst[Instance]) then
-          JJInst[Instance] := GetMemory(jojpeg_Size);
-        ctx := JJInst[Instance];
-        FillChar(ctx^, jojpeg_Size, 0);
-        Buffer := Funcs^.Allocator(Instance, J_WORKMEM * 2);
-        I := 0;
-        J := 0;
-        Y := 0;
-        jojpeg_Init(ctx, jojpeg_Compress);
-        try
-          jojpeg_Addbuf(ctx, jojpeg_Compress, Buffer, J_WORKMEM,
-            jojpeg_enc_Output1);
-          jojpeg_Addbuf(ctx, jojpeg_Compress, Buffer + J_WORKMEM, J_WORKMEM,
-            jojpeg_enc_Output2);
-          while True do
-          begin
-            Res1 := jojpeg_Loop(ctx, jojpeg_Compress);
-            if (Res1 = 1) then
-            begin
-              Res2 := Min(StreamInfo^.OldSize - I, J_WORKMEM);
-              jojpeg_Addbuf(ctx, jojpeg_Compress, PByte(OldInput) + I, Res2,
-                jojpeg_enc_Input);
-              Inc(I, Res2);
-            end;
-            if (Res1 in [0, 2]) then
-            begin
-              Res2 := jojpeg_Getvalue(ctx, jojpeg_Compress, jojpeg_enc_Output1);
-              Move(Buffer^, (PByte(NewInput) + J)^, Res2);
-              Inc(J, Res2);
-              jojpeg_Addbuf(ctx, jojpeg_Compress, Buffer, J_WORKMEM,
-                jojpeg_enc_Output1);
-            end;
-            if (Res1 = 3) or (Res1 = 0) then
-            begin
-              Res2 := jojpeg_Getvalue(ctx, jojpeg_Compress, jojpeg_enc_Output2);
-              Output(Instance, Buffer + J_WORKMEM, Res2);
-              Inc(Y, Res2);
-              jojpeg_Addbuf(ctx, jojpeg_Compress, Buffer + J_WORKMEM, J_WORKMEM,
-                jojpeg_enc_Output2);
-              if Res1 = 0 then
-                break;
-            end;
-          end;
-          if I = StreamInfo^.OldSize then
-          begin
-            StreamInfo^.NewSize := J;
-            Result := True;
-          end;
-        finally
-          jojpeg_Quit(ctx, jojpeg_Compress);
         end;
       end;
     MP3_CODEC:
@@ -1217,6 +1143,8 @@ var
   X, Y: Integer;
   Res: Cardinal;
   Res1, Res2: Integer;
+  PjaOut: Pointer;
+  PjaSize: NativeUInt;
 begin
   Result := False;
   X := GetBits(StreamInfo.Option, 0, 3);
@@ -1260,21 +1188,22 @@ begin
         if Result then
           Output(Instance, Buffer, Res);
       end;
-    PACKJPG_CODEC:
+    PJA_CODEC:
       begin
-        Buffer := nil;
-        // Same pairing/serialization requirement as the encode side above.
-        PJGLock.Acquire;
+        // max_size: the original's size, so a damaged .pja cannot make the
+        // library allocate more; it also checks the stored size and hash.
+        PjaOut := nil;
+        PjaSize := 0;
+        if pja_decompress(Input, StreamInfo.NewSize, @PjaOut, @PjaSize,
+          StreamInfo.OldSize, 1) = PJA_OK then
         try
-          pjglib_init_streams(Input, pjglib_memory, StreamInfo.NewSize, Buffer,
-            pjglib_memory);
-          Res := StreamInfo.OldSize;
-          Result := pjglib_convert_stream2mem(@Buffer, @Res, nil);
+          Result := PjaSize = NativeUInt(StreamInfo.OldSize);
+          if Result then
+            Output(Instance, PjaOut, PjaSize);
         finally
-          PJGLock.Release;
+          pja_free(PjaOut);
         end;
-        if Result then
-          Output(Instance, Buffer, Res);
+        Res := PjaSize;
       end;
     BRUNSLI_CODEC:
       begin
@@ -1297,55 +1226,6 @@ begin
           brunsli_free_JPEGData(ctx);
         end;
         Res := RestoreSize[Instance];
-      end;
-    JOJPEG_CODEC:
-      begin
-        if not Assigned(JJInst[Instance]) then
-          JJInst[Instance] := GetMemory(jojpeg_Size);
-        ctx := JJInst[Instance];
-        FillChar(ctx^, jojpeg_Size, 0);
-        Buffer := Funcs^.Allocator(Instance, J_WORKMEM);
-        I := 0;
-        J := 0;
-        Y := 0;
-        jojpeg_Init(ctx, jojpeg_Decompress);
-        try
-          jojpeg_Addbuf(ctx, jojpeg_Decompress, Buffer, J_WORKMEM,
-            jojpeg_dec_Output);
-          while True do
-          begin
-            Res1 := jojpeg_Loop(ctx, jojpeg_Decompress);
-            if (Res1 = jojpeg_dec_Input1) then
-            begin
-              Res2 := Min(StreamInfo.NewSize - I, J_WORKMEM);
-              jojpeg_Addbuf(ctx, jojpeg_Decompress, PByte(Input) + I, Res2,
-                jojpeg_dec_Input1);
-              Inc(I, Res2);
-            end;
-            if (Res1 = jojpeg_dec_Input2) then
-            begin
-              Res2 := Min(StreamInfo.ExtSize - J, J_WORKMEM);
-              jojpeg_Addbuf(ctx, jojpeg_Decompress, PByte(InputExt) + J, Res2,
-                jojpeg_dec_Input2);
-              Inc(J, Res2);
-            end;
-            if (Res1 in [0, jojpeg_dec_Output]) then
-            begin
-              Res2 := jojpeg_Getvalue(ctx, jojpeg_Decompress,
-                jojpeg_dec_Output);
-              Output(Instance, Buffer, Res2);
-              Inc(Y, Res2);
-              jojpeg_Addbuf(ctx, jojpeg_Decompress, Buffer, J_WORKMEM,
-                jojpeg_dec_Output);
-              if Res1 = 0 then
-                break;
-            end;
-          end;
-          Res := Y;
-          Result := Y = StreamInfo.OldSize;
-        finally
-          jojpeg_Quit(ctx, jojpeg_Decompress);
-        end;
       end;
     MP3_CODEC:
       begin

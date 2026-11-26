@@ -451,7 +451,7 @@ def main():
     # --- The following 3 are OPTIONAL: they require an external tool
     #     present on the machine generating the corpus (not at ytool runtime).
     #     If missing, the file simply isn't written and the corresponding method
-    #     (-mlz4f/-mpackjpg+-mbrunsli/-mpackmp3 in regression.sh) still runs but
+    #     (-mlz4f/-mpja+-mbrunsli/-mpackmp3 in regression.sh) still runs but
     #     without finding the real stream -> trivial reversibility, codec coverage = 0
     #     for that run (same criterion already used with 50_lzo1x.bin/gcc+liblzo2).
     lz4f = make_lz4f(SEED)
@@ -489,7 +489,7 @@ def main():
         write(d, '71_jpeg_min.bin', jpeg)
     else:
         print('aviso: Pillow (PIL) no disponible, se omite 71_jpeg_min.bin '
-              '(sin cobertura real de -mpackjpg/-mbrunsli)', file=sys.stderr)
+              '(sin cobertura real de -mpja/-mbrunsli)', file=sys.stderr)
 
     mp3 = make_mp3(SEED)
     if mp3 is not None:

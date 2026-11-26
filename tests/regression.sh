@@ -43,7 +43,7 @@ trap 'rm -rf "$WORK"' EXIT
 # 20_zlib_streams.bin; preflate DOES have a .so in this repo -> real coverage. "-mreflate"
 # is left as-is in case that lib is ever added: if missing, it falls back to 0 streams (trivially
 # reversible), same criterion as "-dd1" with srep.
-# "-mlz4f"/"-mpackjpg"/"-mbrunsli"/"-mpackmp3" depend on OPTIONAL corpus files
+# "-mlz4f"/"-mpja"/"-mbrunsli"/"-mpackmp3" depend on OPTIONAL corpus files
 # (see gen_corpus.py: they require the python module "lz4", Pillow, and the "lame"
 # binary respectively). If missing, those files aren't generated and the method runs over 0
 # streams -> trivially reversible, no real coverage until the machine has them.
@@ -60,7 +60,7 @@ trap 'rm -rf "$WORK"' EXIT
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpackpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpackjpg" "-mbrunsli" \
+  "-mpng" "-mpackpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" \
   "-mpackmp3" "-mlzma")
 
 fail=0; pass=0; err=0; dead=0
@@ -152,7 +152,7 @@ CODEC_EXPECT="
 76_zstd_levels.bin|-mzstd|4
 77_zstd_nocheck.bin|-mzstd|1
 50_lzo1x.bin|-mlzo1x|1
-71_jpeg_min.bin|-mpackjpg|1
+71_jpeg_min.bin|-mpja|1
 71_jpeg_min.bin|-mbrunsli|1
 72_mp3_min.bin|-mpackmp3|1
 "

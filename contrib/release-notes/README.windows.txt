@@ -10,8 +10,8 @@ DLLs incluidas (todas cross-compiladas con mingw-w64 desde fuente abierta,
 ver contrib/build-plugins-windows.sh):
   zlib1.dll            - zlib 1.4 (unidad ZLib de FPC)
   lzo2.dll             - LZO (Oberhumer, lzo1x/lzo1c/lzo2a)
-  packjpg_dll.dll      - packJPG (JPEG)
-  brunsli.dll          - brunsli (JPEG, alternativa a packjpg)
+  pja.dll              - PJA 0.9.14 (JPEG; sucesor de packJPG, -mpja)
+  brunsli.dll          - brunsli (JPEG, alternativa a PJA)
   packmp3_dll.dll      - packMP3 (MP3)
   libFLAC_dynamic.dll  - FLAC (WAV lossless)
   wavpackdll.dll       - WavPack (WAV lossless, alternativa a FLAC)
@@ -37,6 +37,10 @@ camino rapido emite otros bytes. Esos streams se guardan literales: el
 round-trip sigue siendo bit-exacto, solo comprime menos. Los niveles 3..12
 (camino HC) no estan afectados y enganchan igual en x86 y x64. Medido sobre una
 matriz de tamano de bloque x nivel x dependencia de bloques en Windows real.
+La otra cara: un .pmp hecho en 64 bits (Linux o Windows x64) que contiene uno de
+esos streams NO se puede decodificar con el build x86: decode sale con error
+("Error in the method 'lz4f'", exit 1) y no escribe nada. Nunca da datos
+incorrectos. Para mover archivos entre arquitecturas, usa x64 en los dos lados.
 
 La version de lz4 esta pinneada a proposito (1.11.1). Cada version comprime
 distinto en varios niveles (1.11 cambia el modo rapido y los niveles 1, 2 y 10-12
@@ -44,11 +48,11 @@ respecto de 1.10); como el .pmp guarda el nivel y no el stream original, mezclar
 versiones entre codificar y restaurar puede dar salida incorrecta. Un .lz4 escrito
 por lz4 1.10 en modo rapido (-1, el default del CLI) o en -12 se guarda literal.
 
-NO incluido: jojpeg (sin fuente abierta conocida), oodle (propietario, requiere que
+NO incluido: oodle (propietario, requiere que
 el usuario aporte su propia oo2core/oo2ext DLL).
 
 Verificado: round-trip bit-exacto en la VM Windows para CADA codec de esta lista
-(packjpg, brunsli, packmp3, flac, wavpack, lzo1x, preflate, fast-lzma2 final,
+(pja, brunsli, packmp3, flac, wavpack, lzo1x, preflate, fast-lzma2 final,
 dedup en memoria -dd, reassign -r, packpng).
 
 Uso:

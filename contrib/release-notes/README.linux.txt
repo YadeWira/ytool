@@ -1,7 +1,7 @@
 ytool (open-source recreation of xtool by Razor12911) - Linux x86-64 build
 ============================================================================
 ytool: binario principal (precomp/decode/extract/erase/execute/find/replace/generate).
-*.so: plugins de codecs (packjpg, preflate, fast-lzma2, brunsli, packmp3, packpng,
+*.so: plugins de codecs (pja, preflate, fast-lzma2, brunsli, packmp3, packpng,
      liblz4, libzstd 1.6.0).
 srep64 NO viene incluido. La deduplicacion externa (-dd#) necesita SREP 3.93a
         (Bulat Ziganshin, "All rights reserved": no se puede redistribuir). Si lo

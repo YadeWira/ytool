@@ -139,111 +139,30 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2.dll" ) \
   && echo "   OK -> lzo2.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0d (bomb-guard hardening) ──
-# Format-stable bump (format_version_current unchanged, v4.0f-compatible) --
-# see build-plugins-linux.sh's packjpg comment for the full story, including
-# why v5.0d is pure hygiene here (no active bug on x86/x86_64, identical
-# pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
-# no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
-# opt into here.
+# ── PJA (JPEG, JPEG-LS, JPEG 2000) — replaces packJPG since 0.9.9a ──────────
+# github.com/YadeWira/PJA (MIT), packJPG's successor: its own format, smaller
+# and verified before it returns (pja_compress decodes its result and compares
+# it; pja_decompress checks the stored size and BLAKE3 hash). Measured inside
+# ytool on 78 real JPEGs: PJA takes 61 streams and writes 76.54% of the input,
+# packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
-# Thread model: stays on the DEFAULT (win32-model) $CXX here, deliberately,
-# even though packJPG's own Makefile mandates -posix for its `dll` target.
-# That mandate is correct for their usage and wrong for ours, and the
-# difference was established by measuring all four combinations on real
-# Windows 10 (x64 and x86), with `precomp -mpackjpg` on a JPEG that Linux
-# compresses 2024 -> 246 bytes:
-#
-#   model  -static  LoadLibrary   codec runs   outcome
-#   win32  no       ok            yes (246)    EAccessViolation at teardown
-#   win32  yes      ok            yes (246)    EAccessViolation at teardown
-#   posix  no       FAILS (126)   no           silently stores literal
-#   posix  yes      ok            no           HANGS (~0% CPU, deadlock)
-#
-# So -posix is not a fix here, it is a downgrade: it trades a cosmetic
-# teardown crash for either a silently disabled codec or an unkillable
-# deadlock. The EAccessViolation is genuinely cosmetic -- it fires after
-# the work is done, exit code is 0, and the decoded output is bit-exact
-# (hash-verified) -- whereas the posix hang wedges the process hard enough
-# that Stop-Process cannot reap it and the DLL file stays locked until the
-# VM is restarted. packJPG's CLI never hits any of this because it links
-# the codec statically at process launch instead of LoadLibrary-ing it into
-# a non-C++ (FPC) host at runtime.
-#
-# `-static` is kept regardless of model: without it the posix driver imports
-# libwinpthread-1.dll, which ships with mingw-w64 and exists on NO stock
-# Windows install, so LoadLibrary fails with ERROR_MOD_NOT_FOUND (126),
-# DLLLoaded stays False, and ytool's codec-unavailable fallback silently
-# stores every JPEG stream literally -- round-trips still pass bit-exact
-# and the regression suite stays green, because the codec simply never
-# runs. That is exactly how one release shipped: the EAccessViolation
-# "went away" because the DLL had stopped loading at all. Same masking
-# pattern as the earlier -mflac 32-bit bug (libFLAC_dynamic.dll needing
-# libgcc_s_dw2-1.dll). -static makes the DLL self-contained under either
-# model, so that failure cannot recur.
-#
-# To verify, read the PE import table, NOT `strings`: the i686 build keeps a
-# literal "libgcc_s_dw2-1.dll" string inside statically-linked libgcc (a
-# fallback path that is never taken), so grepping strings reports a
-# dependency that does not exist. The import table of both DLLs must list
-# exactly KERNEL32.dll and msvcrt.dll.
-#
-# Never accept "the crash is gone" as evidence on its own: check that the
-# .pmp actually got smaller (codec ran) in the same test.
-#
-# REPRODUCIBLE TRIGGER for the posix row, found with packJPG's maintainer and
-# reproduced in pure C (no FreePascal involved). Deliberately not called a
-# root cause: what was measured is that the hang appears when the calling
-# threads are created BEFORE LoadLibrary and disappears when they are created
-# after -- 6/6 vs 0/6, thread count and concurrency held constant. The
-# mechanism behind that was never confirmed.
-#
-# What is verified alongside it: packjpg.cpp has 87 `static thread_local`
-# variables and the built DLL carries a real static TLS directory (a .tls
-# section), and the fault lands in libstdc++'s __cxa_thread_atexit walker.
-# Static TLS in a LoadLibrary'd DLL is a known-awkward area on Windows/mingw,
-# which is consistent with the trigger but is not evidence for any particular
-# failure mode inside the loader -- nothing here inspected what the loader
-# does for pre-existing threads.
-#
-# IMPORTANT: that C reproduction does NOT explain ytool's own hang, and an
-# earlier version of this comment wrongly claimed it did. ytool loads the
-# codec DLL from PackJPGDLL.pas's `initialization` block, which FPC runs at
-# program startup, while the TTask workers that call into it are created
-# later inside Encode (PrecompMain.pas). ytool's calling threads are
-# therefore POST-load -- the column that is clean in every C measurement --
-# yet ytool still deadlocks against a posix build. So ytool's hang has some
-# other, still-unidentified cause; only the pre-existing-thread defect below
-# is established.
-#
-# Measured on Windows 10 Enterprise LTSC 21H2, build 19044.7291 x64, threads
-# created BEFORE LoadLibrary, 6 runs per cell (4 and 8 threads both):
-#
-#   win32-model build ....................... 0/6 hung
-#   posix, packJPG's published v5.0d DLL .... 6/6 hung
-#   posix, built here with -static .......... 5/6 hung
-#
-# Threads created AFTER the load exit clean on every build. On Windows 7
-# SP1 x64 the same host and the same published DLL do NOT hang (~3 runs,
-# measured by packJPG's maintainer), so this is not a general property of
-# static TLS in dynamically loaded DLLs: on the evidence it needs the posix
-# model AND pre-existing threads AND (apparently) Windows 10. Do not
-# restate it more broadly than that.
-#
-# The hang is in thread_local destructor teardown, not the codec: every
-# thread reports success with correct output first. Under ytool it surfaces
-# mid-run rather than at exit, because a pool worker hits teardown while the
-# pipeline is still running, which is why no output file ever appeared.
-# The win32-model build is clean in both thread-order columns, which is the
-# whole reason it stays.
-#
-# Repro harness (4 C hosts, no dependencies): /home/forum/packjpg-dll-harness
-echo "==> packjpg (packjpg_dll.dll)"
-pin_repo https://github.com/YadeWira/packJPG "$CSRC/packJPG" v5.0f
-( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
-  source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
-  -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll.dll" ) \
-  && echo "   OK -> packjpg_dll.dll" || echo "   (packjpg fallo)"
+# The library is PJA's released build (FreePascal plus C), downloaded and
+# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
+# below; the version is spelled once.
+PJA_VER="0.9.14"
+PJA_ASSET="pja-${PJA_VER}-lib-windows-x64.zip"
+PJA_SHA256="a1529e2b5ff9884899de3b7852aef876e7f4d196c7770c9f8af21450a756b354"
+echo "==> PJA (pja.dll)"
+if curl -sfL -o "$CSRC/$PJA_ASSET" \
+    "https://github.com/YadeWira/PJA/releases/download/v${PJA_VER}/$PJA_ASSET" \
+  && echo "$PJA_SHA256  $CSRC/$PJA_ASSET" | sha256sum -c --status; then
+  rm -rf "$CSRC/pja-lib" && mkdir -p "$CSRC/pja-lib" \
+    && ( cd "$CSRC/pja-lib" && unzip -q -o "$CSRC/$PJA_ASSET" ) \
+    && cp "$CSRC/pja-lib/pja-${PJA_VER}-lib-windows-x64/pja.dll" "$ROOT/pja.dll" \
+    && echo "   OK -> pja.dll" || echo "   (PJA: no se pudo extraer)"
+else
+  rm -f "$CSRC/$PJA_ASSET"; echo "   (PJA: descarga fallida o SHA-256 distinto)"
+fi
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (preflate_dll.dll)"

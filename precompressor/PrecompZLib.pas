@@ -3,7 +3,7 @@ unit PrecompZLib;
 interface
 
 uses
-  ZLibDLL, ReflateDLL, PreflateDLL,
+  ZLibDLL, PreflateDLL,
   Utils,
   PrecompUtils,
   SysUtils, StrUtils, Classes, Math;
@@ -14,10 +14,13 @@ var
 implementation
 
 const
-  ZlibCodecs: array of PChar = ['zlib', 'reflate', 'preflate', 'png'];
+  // Slot 1 was 'reflate' (needs RAW2HIF_DLL/HIF2RAW_DLL, closed and not
+  // available anywhere). Removed in 0.9.9a; the slot stays so the codec
+  // numbers stored in the container do not move.
+  ZlibCodecs: array of PChar = ['zlib', '', 'preflate', 'png'];
   CODEC_COUNT = 4;
   ZLIB_CODEC = 0;
-  REFLATE_CODEC = 1;
+  // 1: reserved, was REFLATE_CODEC (see ZlibCodecs)
   PREFLATE_CODEC = 2;
   PNG_CODEC = 3;
 
@@ -27,8 +30,6 @@ const
   Z_WORKMEM = 65536;
   Z_MINSIZE = 128;
   Z_BLKSIZE = 512;
-  R_LEVEL = 6;
-  R_WORKMEM = 65536;
   P_HIFSIZE = 1048576;
 
 var
@@ -36,8 +37,6 @@ var
   ZStream1: array of array [1 .. 9, 1 .. 9, 1 .. 7] of z_stream;
   ZStream2: array of array [0 .. 7] of z_stream;
   ZWinBits: Integer = Z_WINBITS;
-  RefInst1, RefInst2: TArray<Pointer>;
-  RLevel: Integer = R_LEVEL;
   CodecAvailable, CodecEnabled: TArray<Boolean>;
   Scan2Pos: TArray<Integer>;
   Scan2SI: TArray<PStrInfo2>;
@@ -246,10 +245,8 @@ begin
     CodecEnabled[X] := False;
   end;
   CodecAvailable[ZLIB_CODEC] := ZLibDLL.DLLLoaded;
-  CodecAvailable[REFLATE_CODEC] := ReflateDLL.DLLLoaded;
   CodecAvailable[PREFLATE_CODEC] := PreflateDLL.DLLLoaded;
-  CodecAvailable[PNG_CODEC] := ZLibDLL.DLLLoaded or ReflateDLL.DLLLoaded or
-    PreflateDLL.DLLLoaded;
+  CodecAvailable[PNG_CODEC] := ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded;
   X := 0;
   while Funcs^.GetCodec(Command, X, False) <> '' do
   begin
@@ -264,13 +261,6 @@ begin
       if Funcs^.GetParam(Command, X, 'w') <> '' then
         ZWinBits := EnsureRange(StrToInt(Funcs^.GetParam(Command, X, 'w'))
           - 8, 1, 7);
-    end
-    else if (CompareText(S, ZlibCodecs[REFLATE_CODEC]) = 0) and ReflateDLL.DLLLoaded
-    then
-    begin
-      CodecEnabled[REFLATE_CODEC] := True;
-      if Funcs^.GetParam(Command, X, 'l') <> '' then
-        RLevel := StrToInt(Funcs^.GetParam(Command, X, 'l'));
     end
     else if (CompareText(S, ZlibCodecs[PREFLATE_CODEC]) = 0) and PreflateDLL.DLLLoaded
     then
@@ -287,16 +277,6 @@ begin
         for Y := Low(ZStream1[W, X]) to High(ZStream1[W, X]) do
           for Z := Low(ZStream1[W, X, Y]) to High(ZStream1[W, X, Y]) do
             FillChar(ZStream1[W, X, Y, Z], SizeOf(z_stream), 0);
-  end;
-  if CodecAvailable[REFLATE_CODEC] then
-  begin
-    SetLength(RefInst1, Count);
-    SetLength(RefInst2, Count);
-    for X := Low(RefInst1) to High(RefInst1) do
-    begin
-      RefInst1[X] := nil;
-      RefInst2[X] := nil;
-    end;
   end;
   if not BoolArray(CodecAvailable, False) then
   begin
@@ -350,16 +330,6 @@ begin
             if Assigned(ZStream1[W, X, Y, Z].zalloc) then
               deflateEnd(ZStream1[W, X, Y, Z]);
   end;
-  if CodecAvailable[REFLATE_CODEC] then
-  begin
-    for X := Low(RefInst1) to High(RefInst1) do
-    begin
-      if Assigned(RefInst1[X]) then
-        raw2hif_Free(RefInst1[X]);
-      if Assigned(RefInst2[X]) then
-        hif2raw_Free(RefInst2[X]);
-    end;
-  end;
   if not BoolArray(CodecAvailable, False) then
   begin
     for X := Low(ZStream2) to High(ZStream2) do
@@ -390,14 +360,6 @@ begin
       if Funcs^.GetParam(Command, I, 'w') <> '' then
         SetBits(Option^, EnsureRange(StrToInt(Funcs^.GetParam(Command, I, 'w'))
           - 8, 1, 7), 10, 3);
-      Result := True;
-    end
-    else if (CompareText(S, ZlibCodecs[REFLATE_CODEC]) = 0) and ReflateDLL.DLLLoaded
-    then
-    begin
-      SetBits(Option^, REFLATE_CODEC, 0, 3);
-      if Funcs^.GetParam(Command, I, 'l') <> '' then
-        SetBits(Option^, StrToInt(Funcs^.GetParam(Command, I, 'l')), 3, 7);
       Result := True;
     end
     else if (CompareText(S, ZlibCodecs[PREFLATE_CODEC]) = 0) and PreflateDLL.DLLLoaded
@@ -457,7 +419,6 @@ begin
         end;
       end;
       if (CodecEnabled[ZLIB_CODEC] = False) and
-        (CodecEnabled[REFLATE_CODEC] = False) and
         (CodecEnabled[PREFLATE_CODEC] = False) then
       begin
         Inc(Pos);
@@ -651,7 +612,6 @@ var
   I, J: Integer;
   X: Integer;
   ZStream: z_streamp;
-  HR: Pointer;
   Verified: Boolean;
   CRC: Cardinal;
 begin
@@ -726,107 +686,11 @@ begin
         end;
         if Result = False then
         begin
-          if CodecEnabled[REFLATE_CODEC] or CodecEnabled[PREFLATE_CODEC] then
+          if CodecEnabled[PREFLATE_CODEC] then
           begin
-            if CodecEnabled[REFLATE_CODEC] then
-              SetBits(StreamInfo^.Option, REFLATE_CODEC, 0, 3)
-            else if CodecEnabled[PREFLATE_CODEC] then
-              SetBits(StreamInfo^.Option, PREFLATE_CODEC, 0, 3);
+            SetBits(StreamInfo^.Option, PREFLATE_CODEC, 0, 3);
             Result := ZlibProcess(Instance, Depth, OldInput, NewInput,
               StreamInfo, Output, Funcs);
-          end;
-        end;
-      end;
-    REFLATE_CODEC:
-      begin
-        Buffer := Funcs^.Allocator(Instance, R_WORKMEM * 2);
-        J := 0;
-        if not Assigned(RefInst1[Instance]) then
-          RefInst1[Instance] := raw2hif_Alloc;
-        HR := RefInst1[Instance];
-        if StreamInfo^.Status >= TStreamStatus.Predicted then
-          L := GetBits(StreamInfo^.Option, 3, 7)
-        else
-          L := RLevel;
-        if L > 9 then
-          L := L div 10;
-        L := EnsureRange(L, 1, 9);
-        M := 0;
-        I := 0;
-        Params := 'l' + L.ToString;
-        raw2hif_Init(HR, L);
-        while True do
-        begin
-          Res1 := raw2hif_Loop(HR);
-          if (Res1 in [0, 2]) or (Res1 > 3) then
-          begin
-            Res2 := raw2hif_getoutlen(HR);
-            Output(Instance, Buffer, Res2);
-            Inc(J, Res2);
-            raw2hif_addbuf(HR, Buffer, R_WORKMEM);
-          end;
-          if (Res1 = 3) or (Res1 = 0) then
-          begin
-            Res2 := raw2hif_getou2len(HR);
-            Inc(M, Res2);
-            raw2hif_addbuf(HR, Buffer + R_WORKMEM, R_WORKMEM);
-            if Res1 = 0 then
-              break;
-          end;
-          if (Res1 = 1) then
-          begin
-            Res2 := Min(StreamInfo^.OldSize - I, R_WORKMEM);
-            raw2hif_addbuf(HR, PByte(OldInput) + I, Res2);
-            Inc(I, Res2);
-          end;
-        end;
-        Funcs^.LogProcess(ZlibCodecs[GetBits(StreamInfo^.Option, 0, 3)],
-          PChar(Params), StreamInfo^.OldSize, StreamInfo^.NewSize + J,
-          StreamInfo^.OldSize, M = StreamInfo^.NewSize);
-        if M = StreamInfo^.NewSize then
-        begin
-          if GetBits(StreamInfo^.Option, 13, 1) = 1 then
-          begin
-            if not Assigned(RefInst2[Instance]) then
-              RefInst2[Instance] := hif2raw_Alloc;
-            HR := RefInst2[Instance];
-            I := 0;
-            J := 0;
-            M := 0;
-            CRC := 0;
-            Ptr := Funcs^.Storage(Instance, @M);
-            hif2raw_Init(HR, L);
-            while True do
-            begin
-              Res1 := hif2raw_Loop(HR);
-              if (Res1 in [0, 2]) or (Res1 > 3) then
-              begin
-                Res2 := hif2raw_getoutlen(HR);
-                if Res2 > 0 then
-                  CRC := Hash32(CRC, Buffer, Res2);
-                hif2raw_addbuf(HR, Buffer, R_WORKMEM);
-                if Res1 = 0 then
-                  break;
-              end;
-              if Res1 = 1 then
-              begin
-                Res2 := Min(M - J, R_WORKMEM);
-                hif2raw_addbuf(HR, Ptr + J, Res2);
-                Inc(J, Res2);
-              end;
-              if Res1 = 3 then
-              begin
-                Res2 := Min(StreamInfo^.NewSize - I, R_WORKMEM);
-                hif2raw_addbuf(HR, PByte(NewInput) + I, Res2);
-                Inc(I, Res2);
-              end;
-            end;
-          end;
-          if (GetBits(StreamInfo^.Option, 13, 1) = 0) or
-            (CRC = Hash32(0, OldInput, StreamInfo^.OldSize)) then
-          begin
-            SetBits(StreamInfo^.Option, L, 3, 7);
-            Result := True;
           end;
         end;
       end;
@@ -868,7 +732,6 @@ var
   I, J: Integer;
   X: Integer;
   ZStream: z_streamp;
-  HR: Pointer;
 begin
   Result := False;
   X := GetBits(StreamInfo.Option, 0, 3);
@@ -904,46 +767,6 @@ begin
           PChar(Params), StreamInfo.OldSize, StreamInfo.NewSize,
           ZStream^.total_out, True);
         Result := True;
-      end;
-    REFLATE_CODEC:
-      begin
-        Buffer := Funcs^.Allocator(Instance, R_WORKMEM);
-        if not Assigned(RefInst2[Instance]) then
-          RefInst2[Instance] := hif2raw_Alloc;
-        HR := RefInst2[Instance];
-        I := 0;
-        J := 0;
-        M := 0;
-        Params := 'l' + GetBits(StreamInfo.Option, 3, 7).ToString;
-        hif2raw_Init(HR, GetBits(StreamInfo.Option, 3, 7));
-        while True do
-        begin
-          Res1 := hif2raw_Loop(HR);
-          if (Res1 in [0, 2]) or (Res1 > 3) then
-          begin
-            Res2 := hif2raw_getoutlen(HR);
-            Inc(M, Res2);
-            Output(Instance, Buffer, Res2);
-            hif2raw_addbuf(HR, Buffer, R_WORKMEM);
-            if Res1 = 0 then
-              break;
-          end;
-          if Res1 = 1 then
-          begin
-            Res2 := Min(StreamInfo.ExtSize - J, R_WORKMEM);
-            hif2raw_addbuf(HR, PByte(InputExt) + J, Res2);
-            Inc(J, Res2);
-          end;
-          if Res1 = 3 then
-          begin
-            Res2 := Min(StreamInfo.NewSize - I, R_WORKMEM);
-            hif2raw_addbuf(HR, PByte(Input) + I, Res2);
-            Inc(I, Res2);
-          end;
-        end;
-        Result := StreamInfo.OldSize = M;
-        Funcs^.LogRestore(ZlibCodecs[GetBits(StreamInfo.Option, 0, 3)],
-          PChar(Params), StreamInfo.OldSize, StreamInfo.NewSize + J, M, Result);
       end;
     PREFLATE_CODEC:
       begin

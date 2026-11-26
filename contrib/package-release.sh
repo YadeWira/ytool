@@ -56,8 +56,8 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
-WIN_DLLS="zlib1 lzo2 packjpg_dll brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4 libzstd"
+LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpackmp3.so libpackpng.so libpreflate.so"
+WIN_DLLS="zlib1 lzo2 pja brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4 libzstd"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
 # de imports es una dependencia que el usuario no tiene.
@@ -150,7 +150,7 @@ smoke() { # codec archivo
   if [ "$r" = "$l" ]; then echo "   FALLA -m$m sobre $f: no engancho (pmp=$r == literal=$l)"; FAILED=1; return; fi
   printf '   ok: -m%-9s %-20s pmp=%-8s literal=%s\n' "$m" "$f" "$r" "$l"
 }
-smoke packjpg 71_jpeg_min.bin
+smoke pja     71_jpeg_min.bin
 smoke brunsli 71_jpeg_min.bin
 smoke packpng 62_png_photo.bin
 smoke packmp3 72_mp3_min.bin

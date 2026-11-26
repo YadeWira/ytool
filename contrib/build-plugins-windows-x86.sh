@@ -134,32 +134,30 @@ fi
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2-x86.dll" ) \
   && echo "   OK -> lzo2-x86.dll" || echo "   (lzo2 fallo)"
 
-# ── packjpg (JPEG media codec) — user's fork v5.0d (bomb-guard hardening) ──
-# Format-stable bump (format_version_current unchanged, v4.0f-compatible) --
-# see build-plugins-linux.sh's packjpg comment for the full story, including
-# why v5.0d is pure hygiene here (no active bug on x86/x86_64, identical
-# pjglib_* symbol set). JPEG-LS (new in v5.0) never reaches Windows anyway:
-# no MinGW builds of its libcharls/libjxl deps exist upstream, so nothing to
-# opt into here.
+# ── PJA (JPEG, JPEG-LS, JPEG 2000) — replaces packJPG since 0.9.9a ──────────
+# github.com/YadeWira/PJA (MIT), packJPG's successor: its own format, smaller
+# and verified before it returns (pja_compress decodes its result and compares
+# it; pja_decompress checks the stored size and BLAKE3 hash). Measured inside
+# ytool on 78 real JPEGs: PJA takes 61 streams and writes 76.54% of the input,
+# packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
-# Thread model: deliberately stays on the DEFAULT (win32-model) $CXX, NOT
-# the -posix variant that packJPG's own Makefile mandates for its `dll`
-# target -- see build-plugins-windows.sh's packjpg comment for the measured
-# four-way comparison. Short version: -posix either fails to load (no
-# -static) or deadlocks the process unkillably (with -static), while win32
-# runs the codec correctly and only leaves a cosmetic EAccessViolation at
-# teardown (exit 0, output hash-verified bit-exact).
-#
-# `-static` is kept so the DLL has no non-system imports: without it a
-# -posix build pulls in libwinpthread-1.dll, which no stock Windows has, so
-# LoadLibrary fails with 126 and the codec silently degrades to literal
-# storage while every round-trip still passes. See the fuller comment there.
-echo "==> packjpg (packjpg_dll-x86.dll)"
-pin_repo https://github.com/YadeWira/packJPG "$CSRC/packJPG" v5.0f
-( cd "$CSRC/packJPG" && "$CXX" -O3 -std=c++17 -DBUILD_DLL -Wl,--export-all-symbols \
-  source/aricoder.cpp source/bitops.cpp source/packjpg.cpp -shared \
-  -static -static-libgcc -static-libstdc++ -o "$ROOT/packjpg_dll-x86.dll" ) \
-  && echo "   OK -> packjpg_dll-x86.dll" || echo "   (packjpg fallo)"
+# The library is PJA's released build (FreePascal plus C), downloaded and
+# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
+# below; the version is spelled once.
+PJA_VER="0.9.14"
+PJA_ASSET="pja-${PJA_VER}-lib-windows-x86.zip"
+PJA_SHA256="36a3bde0e0546cb5de65a765ed4f51f028a108515b907682eed3b1c0c14ba4ac"
+echo "==> PJA (pja-x86.dll)"
+if curl -sfL -o "$CSRC/$PJA_ASSET" \
+    "https://github.com/YadeWira/PJA/releases/download/v${PJA_VER}/$PJA_ASSET" \
+  && echo "$PJA_SHA256  $CSRC/$PJA_ASSET" | sha256sum -c --status; then
+  rm -rf "$CSRC/pja-lib" && mkdir -p "$CSRC/pja-lib" \
+    && ( cd "$CSRC/pja-lib" && unzip -q -o "$CSRC/$PJA_ASSET" ) \
+    && cp "$CSRC/pja-lib/pja-${PJA_VER}-lib-windows-x86/pja.dll" "$ROOT/pja-x86.dll" \
+    && echo "   OK -> pja-x86.dll" || echo "   (PJA: no se pudo extraer)"
+else
+  rm -f "$CSRC/$PJA_ASSET"; echo "   (PJA: descarga fallida o SHA-256 distinto)"
+fi
 
 # ── preflate (improves the zlib codec: reconstructs deflate from any encoder) ─
 echo "==> preflate (preflate_dll-x86.dll)"

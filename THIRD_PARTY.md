@@ -29,7 +29,7 @@ found, and no grant of rights should be read into the silence.
 | preflate | `contrib/preflate/`, github.com/deus-libri/preflate | Dirk Steinke | Apache 2.0 |
 | fast-lzma2 1.2.0 | github.com/YadeWira/ultra-fast-lzma2 (its `fast-lzma2/` folder), maintained fork of github.com/conor42/fast-lzma2 | Conor McCarthy; fork by YadeWira | BSD 3-Clause (dual GPL-2.0; used under BSD) |
 | brunsli | github.com/google/brunsli | Google LLC | MIT |
-| packJPG | github.com/YadeWira/packJPG (fork) | HTW Aalen University and Matthias Stirner; fork by YadeWira | LGPL 3.0 |
+| PJA (`libpja`, released binary) | github.com/YadeWira/PJA | Yade E. Bravo (YadeWira) | MIT. Its `NOTICE`: the arithmetic-coded JPEG coder follows libjpeg (IJG); JPEG-LS follows CharLS 2.4.2 (BSD 3-Clause) |
 | packMP3 | github.com/YadeWira/packMP3 (fork) | Ratisbon University and Matthias Stirner; fork by YadeWira | LGPL 3.0 |
 | libFLAC | github.com/xiph/flac | Josh Coalson, Xiph.Org Foundation | BSD 3-Clause (Xiph) for libFLAC |
 | WavPack | github.com/dbry/WavPack | David Bryant | BSD 3-Clause |
