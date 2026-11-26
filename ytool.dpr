@@ -70,6 +70,8 @@ uses
   ZSTDDLL in 'imports\ZSTDDLL.pas',
   lz4 in 'sources\lz4.pas',
   PrecompMain in 'precompressor\PrecompMain.pas',
+  PrecompHelp in 'precompressor\PrecompHelp.pas',
+  CliUI in 'common\CliUI.pas',
   PrecompUtils in 'precompressor\PrecompUtils.pas',
   PrecompCrypto in 'precompressor\PrecompCrypto.pas',
   PrecompZLib in 'precompressor\PrecompZLib.pas',
@@ -115,38 +117,87 @@ const
 
 procedure ProgramInfo;
 begin
-  WriteLine('ytool ' + YTOOL_VERSION + ' - open-source recreation of xtool, by YadeWira');
+  WriteLine(UIBold('ytool ' + YTOOL_VERSION) +
+    ' - open-source recreation of xtool, by YadeWira');
   WriteLine('');
 end;
 
 procedure ListCommands;
+
+  procedure Cmd(const Name, Text: string);
+  begin
+    WriteLine('  ' + UIPad(UICyan(Name), 10) + ' ' + Text);
+  end;
+
 begin
-  WriteLine('Available commands:');
+  WriteLine('Usage: ytool <command> [options] <files>');
+  HelpSection('Commands');
+  Cmd(CommandPrecomp, 'find compressed streams and unpack them into a .ytp file');
+  Cmd(CommandDecode, 'rebuild the original from a .ytp file, byte for byte');
+  Cmd(CommandAnalyze, 'try each codec on a file and recommend a -m combination');
+  Cmd(CommandGenerate, 'build a database of streams for a precomp run');
+  Cmd(CommandFind, 'search for sectors within files');
+  Cmd(CommandExtract, 'extract sectors from files');
+  Cmd(CommandErase, 'blank out sectors within files');
+  Cmd(CommandReplace, 'replace sectors with another within files');
+  Cmd(CommandExecute, 'run a program on chunks of a file, in parallel');
+  HelpSection('Examples');
+  WriteLine('  ytool precomp -mzlib+zstd+pja game.pak game.ytp');
+  WriteLine('  ytool decode game.ytp game.pak');
   WriteLine('');
-  WriteLine('  ' + CommandAnalyze);
-  WriteLine('  ' + CommandDecode);
-  WriteLine('  ' + CommandErase);
-  WriteLine('  ' + CommandExecute);
-  WriteLine('  ' + CommandExtract);
-  WriteLine('  ' + CommandFind);
-  WriteLine('  ' + CommandGenerate);
-  WriteLine('  ' + CommandPrecomp);
-  WriteLine('  ' + CommandReplace);
-  WriteLine('');
-  WriteLine('Launch program with command to see its usage');
+  WriteLine('''ytool help <command>'' or ''ytool <command> -h'' shows its options;');
+  WriteLine('''ytool --version'' prints the version.');
   WriteLine('');
 end;
 
-procedure DecodePrintHelp;
+function IsHelpFlag(const S: string): Boolean;
 begin
-  WriteLine('decode - restores data processed by ytool');
-  WriteLine('');
-  WriteLine('Usage:');
-  WriteLine('  ytool decode input [decode_data] output');
-  WriteLine('');
-  WriteLine('Parameters:');
-  WriteLine('  t# - number of working threads [Threads/2]');
-  WriteLine('');
+  Result := (S = '-h') or (S = '--help') or (S = '-help') or (S = '/?');
+end;
+
+// Help of one command, matched by prefix like the commands themselves.
+// False when Name is no command.
+function CommandHelp(const Name: string): Boolean;
+begin
+  Result := True;
+  if Name.StartsWith(CommandPrecomp, True) then
+    PrecompMain.PrintHelp
+  else if Name.StartsWith(CommandDecode, True) then
+    PrecompHelp.DecodePrintHelp
+  else if Name.StartsWith(CommandAnalyze, True) then
+    PrecompAnalyze.PrintHelp
+  else if Name.StartsWith(CommandGenerate, True) then
+    DbgMain.PrintHelp
+  else if Name.StartsWith(CommandFind, True) then
+    IOFind.PrintHelp
+  else if Name.StartsWith(CommandErase, True) then
+    IOErase.PrintHelp
+  else if Name.StartsWith(CommandReplace, True) then
+    IOReplace.PrintHelp
+  else if Name.StartsWith(CommandExtract, True) then
+    IODecode.PrintHelpExtract
+  else if Name.StartsWith(CommandExecute, True) then
+    IOExecute.PrintHelp
+  else
+    Result := False;
+end;
+
+// Size of the input file and the stream to read its position from, for the
+// progress line. Nothing for stdin, a URL or a directory.
+procedure SetProgressInput(Stream: TStream);
+begin
+  PrecompMain.UIInputTotal := 0;
+  PrecompMain.UIInputStream := nil;
+  if (Stream is TBufferedStream) and
+    (TBufferedStream(Stream).Instance is TFileStream) then
+  begin
+    PrecompMain.UIInputStream := TBufferedStream(Stream).Instance;
+    try
+      PrecompMain.UIInputTotal := PrecompMain.UIInputStream.Size;
+    except
+      PrecompMain.UIInputTotal := 0;
+    end;
+  end;
 end;
 
 function GetInStream(Input: string): TStream;
@@ -407,11 +458,25 @@ begin
   end;
   ProgramInfo;
   try
-    if ParamCount = 0 then
+    if (ParamCount = 0) or (IsHelpFlag(ParamStr(1)) and (ParamCount = 1)) then
     begin
       ListCommands;
       exit;
     end;
+    // ytool help <command>, ytool -h <command>, ytool <command> -h
+    if SameText(ParamStr(1), 'help') or IsHelpFlag(ParamStr(1)) then
+    begin
+      if (ParamCount < 2) or not CommandHelp(ParamStr(2)) then
+      begin
+        if ParamCount >= 2 then
+          WriteLine(UIRed('Unknown command: ') + ParamStr(2) + sLineBreak);
+        ListCommands;
+      end;
+      exit;
+    end;
+    for I := 2 to ParamCount do
+      if IsHelpFlag(ParamStr(I)) and CommandHelp(ParamStr(1)) then
+        exit;
     IsParam := True;
     for I := 2 to ParamCount do
     begin
@@ -433,6 +498,7 @@ begin
       begin
         Input := TBufferedStream.Create(GetInStream(ParamArgSafe(1, 0)), True,
           BufferSize);
+        SetProgressInput(Input);
         // -scan (detect-only, no output) is checked here, raw, before
         // GetOutStream: that call's fmCreate truncates whatever real path
         // the caller passed immediately on open, before Encode ever runs --
@@ -539,11 +605,12 @@ begin
       end;
     if ParamStr(1).StartsWith(CommandDecode, True) then
       if (Length(ParamArg[0]) = 0) and (Length(ParamArg[1]) = 0) then
-        DecodePrintHelp
+        PrecompHelp.DecodePrintHelp
       else
       begin
         Input := TBufferedStream.Create(GetInStream(ParamArgSafe(1, 0)), True,
           BufferSize);
+        SetProgressInput(Input);
         try
           Input.ReadBuffer(I, I.Size);
           case I of
@@ -551,6 +618,7 @@ begin
               begin
                 Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)
                   ), False, BufferSize);
+                PrecompMain.UIOutputStream := Output;
                 WriteLine('Processing input: ' + ParamArgSafe(1, 0));
                 WriteLine('');
                 try

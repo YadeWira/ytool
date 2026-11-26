@@ -6,10 +6,10 @@ interface
 
 uses
   InitCode,
-  Threading, Utils, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
+  Threading, Utils, CliUI, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
   PrecompOodle, PrecompMedia, PrecompReserved, PrecompLZMA, PrecompINI, PrecompINIEx,
-  PrecompSearch, PrecompDLL, PrecompEXE,
+  PrecompSearch, PrecompDLL, PrecompEXE, PrecompHelp,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
 {$ENDIF}
@@ -67,6 +67,15 @@ type
     DThreads: Integer;
     DMem: Int64;
   end;
+
+var
+  // Set by the caller before Encode/Decode, for the progress line: the input
+  // file's size (0 when unknown, as for stdin) and the stream to read the
+  // position from.
+  UIInputTotal: Int64 = 0;
+  UIInputStream: TStream = nil;
+  // decode's output, whose Size is the bytes written so far
+  UIOutputStream: TStream = nil;
 
 procedure PrintHelp;
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);
@@ -234,67 +243,8 @@ begin
 end;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLine('precomp - data precompressor');
-  WriteLine('');
-  WriteLine('Usage:');
-  WriteLine('  ytool precomp [parameters] input output');
-  WriteLine('');
-  WriteLine('');
-  WriteLine('Parameters:');
-  WriteLine(
-    '  -m#  - codecs to use for precompression (separate with "+" if more than one)');
-  WriteLine('  -c#  - scanning range of precompressor [16mb]');
-  WriteLine('  -t#  - number of working threads [50p]');
-  WriteLine('  -d#  - scan depth [0]');
-  WriteLine('  -dd  - use stream deduplication');
-  WriteLine(
-    '  -l#  - compression level for fast lzma2 (separate params with ":") [0]');
-  WriteLine('               d# - dictionary size');
-  WriteLine('  -lm# - low memory mode (0-3) [0]');
-  WriteLine('  -s   - skip stream verification');
-  WriteLine('  -v   - enables verbose mode');
-  WriteLine('  -b[#][:n#][:s#] - brute: search lz4/lz4f parameters, process nothing');
-  WriteLine('               [5p: share of candidates; n5: matches per stream]');
-  WriteLine('  -cfg<codec>[:key#]... - zlib st; zstd wl hl cl sl mm; lz4 x b ac ds af');
-  WriteLine(
-    '  -bar - emit machine-parseable "PROGRESS done total" lines to stderr,');
-  WriteLine(
-    '               flushed per-line (bytes for precomp, streams for decode)');
-  WriteLine(
-    '  -scan - detect only, no output: prints "SCAN n streams" to stderr');
-  WriteLine(
-    '               and exits. Cheaper than a real precomp pass --');
-  WriteLine(
-    '               skips every codec''s actual recompression, just the');
-  WriteLine(
-    '               magic/structural scan that finds candidates. Depth-0 only');
-  WriteLine(
-    '               (streams nested inside another compressed container are');
-  WriteLine(
-    '               not found without doing the real pass).');
-  WriteLine(
-    '               Needs -m<codecs> like a real precomp pass -- without');
-  WriteLine(
-    '               it, nothing is enabled to detect and it reports 0.');
-  WriteLine('  -df# - set patching threshold to accept streams [5p]');
-  WriteLine('               l# - patch compression level (1-22) [1]');
-  WriteLine('  -x#  - extract streams to directory path');
-  WriteLine('  -dm# - deduplication memory usage limit (#=size) [75p]');
-  WriteLine('  -db# - decode block size [512mb]');
-  WriteLine('  -sp# - srep parameters (separate params with ":")');
-  WriteLine('  -p#  - prefetch cache [0mb]');
-  WriteLine('  -r#  - reassign streams detected to another codec');
-  WriteLine('  -f   - full scan (disables early-exit in dedup hash search)');
-  WriteLine('  -pa  - patch all streams the level search could not reproduce');
-  WriteLine('  -o   - optimise decode (drop already-verified codec variants)');
-  WriteLine('  -T#  - process/thread priority (0=idle .. 6=time critical) [3]');
-  WriteLine('');
-  WriteLine('  -lz4#, -zstd#, -oodle# - specify custom library name');
-  WriteLine('');
+  PrecompPrintHelp;
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);
@@ -2516,7 +2466,6 @@ begin
       begin
         if Depth = 0 then
         begin
-          Inc(EncInfo.InSize, TDataStore1(DataStore).Size(I));
           while Processed[I] = False do
           begin
             if Length(Tasks) > 1 then
@@ -2534,6 +2483,9 @@ begin
                     Tasks[X].RaiseLastError;
               Sleep(10);
             end;
+          // Counted once the slot is processed, not when its wait starts: the
+          // progress line reads it as the bytes done.
+          Inc(EncInfo.InSize, TDataStore1(DataStore).Size(I));
         end
         else if I <> Index then
           continue;
@@ -3599,241 +3551,255 @@ begin
   end;
 end;
 
+// Windows only: the process's CPU time, appended to the Time line.
+function CPUTimeStr: string;
+{$IFDEF MSWINDOWS}
+var
+  CreationTime, ExitTime, KernelTime, UserTime: TFileTime;
+  TT: TSystemTime;
+{$ENDIF}
+begin
+  Result := '';
+{$IFDEF MSWINDOWS}
+  GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
+    UserTime);
+  FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
+  Result := ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
+    [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute, TT.wSecond]) + ')';
+{$ENDIF}
+end;
+
+function TimeLine: string;
+var
+  TS: TTimeSpan;
+begin
+  TS := Stopwatch.Elapsed;
+  Result := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
+    [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds]) + CPUTimeStr;
+end;
+
+function SpeedStr(Bytes: Int64): string;
+var
+  Secs: Double;
+begin
+  Secs := Stopwatch.Elapsed.TotalMilliseconds / 1000;
+  if (Secs >= 0.5) and (Bytes > 0) then
+    Result := UISize(Round(Bytes / Secs)) + '/s'
+  else
+    Result := '';
+end;
+
+// The line that redraws itself while a terminal watches:
+// [=========>     ]  45%  12.3 MB/s  ETA 0:12  streams 340/512  out 45.2 MB
+// Without a known input size (stdin) it shows the bytes read instead of a bar.
+var
+  // When Done last moved. precomp's counter moves a block at a time, so the
+  // speed is taken at that moment instead of sagging until the next block.
+  StatusDone: Int64 = 0;
+  StatusSecs: Double = 0;
+
+function StatusLine(Done, Total, OutSize: Int64; Processed, Count: Integer;
+  const OutLabel: string): string;
+var
+  Secs, Speed: Double;
+begin
+  Secs := Stopwatch.Elapsed.TotalMilliseconds / 1000;
+  if Done <> StatusDone then
+  begin
+    StatusDone := Done;
+    StatusSecs := Secs;
+  end;
+  if StatusSecs >= 0.5 then
+    Speed := StatusDone / StatusSecs
+  else
+    Speed := 0;
+  if Total > 0 then
+    Result := UIBar(Done / Total, 24) + Format(' %3d%%',
+      [Min(100, Done * 100 div Total)])
+  else
+    Result := UISize(Done);
+  if Speed >= 1 then
+    Result := Result + '  ' + UISize(Round(Speed)) + '/s';
+  if (Total > 0) and (Speed >= 1) and (Done < Total) and (Done > 0) then
+    Result := Result + '  ETA ' + UIDuration(Ceil((Total - Done) / Speed))
+  else
+    Result := Result + '  ' + UIDuration(Trunc(Secs));
+  Result := Result + Format('  streams %d/%d', [Processed, Count]);
+  if OutSize > 0 then
+    Result := Result + '  ' + OutLabel + ' ' + UISize(OutSize);
+end;
+
+// Bytes read so far from the input file, for decode, whose own counters are
+// streams, not bytes. 0 when it cannot be read (stdin).
+function InputDone: Int64;
+begin
+  Result := 0;
+  if UIInputStream = nil then
+    exit;
+  try
+    Result := UIInputStream.Position;
+  except
+    Result := 0;
+  end;
+  if Result < 0 then
+    Result := 0;
+end;
+
+function OutputDone: Int64;
+begin
+  Result := 0;
+  if UIOutputStream <> nil then
+    try
+      Result := UIOutputStream.Size;
+    except
+      Result := 0;
+    end;
+end;
+
+// Closing summary of precomp. "Streams: X / Y", "  - codec = n (p%)" and
+// "Size: A >> B" keep the wording scripts and the test suite read.
+procedure EncodeSummary;
+var
+  I, J: Integer;
+  Order: TArray<Integer>;
+  Pct: Double;
+  S: string;
+begin
+  if EncInfo.InSize > 0 then
+    S := Format(' (%.2f%%)', [EncInfo.CovSize / EncInfo.InSize * 100])
+  else
+    S := '';
+  WriteLine(UIBold('Streams: ' + EncInfo.Processed.ToString + ' / ' +
+    EncInfo.Count.ToString + S));
+  CompSync.Acquire;
+  try
+    SetLength(Order, Length(CompNames));
+    for I := Low(Order) to High(Order) do
+    begin
+      // insertion sort by first position; a handful of rows
+      J := I;
+      while (J > 0) and (CompFirst[Order[Pred(J)]] > CompFirst[I]) do
+      begin
+        Order[J] := Order[Pred(J)];
+        Dec(J);
+      end;
+      Order[J] := I;
+    end;
+    for J := Low(Order) to High(Order) do
+      if CompCounts[Order[J]] > 0 then
+      begin
+        if EncInfo.InSize > 0 then
+          Pct := CompSizes[Order[J]] / EncInfo.InSize * 100
+        else
+          Pct := 0;
+        WriteLine(Format('  - %s = %d (%.2f%%)', [CompNames[Order[J]],
+          CompCounts[Order[J]], Pct]));
+      end;
+  finally
+    CompSync.Release;
+  end;
+  if EncInfo.PatchCount > 0 then
+    WriteLine('Patched: ' + EncInfo.PatchCount.ToString + ' (' +
+      ConvertKB2TB(EncInfo.PatchSize div 1024) + ')');
+  if StoreDD > -2 then
+    WriteLine('Duplicates: ' + EncInfo.DupCount.ToString + ' (' +
+      ConvertKB2TB(EncInfo.DecMem2 div 1024) + ') [' +
+      ConvertKB2TB(EncInfo.DupSize1 div 1024) + ' >> ' +
+      ConvertKB2TB(EncInfo.DupSize2 div 1024) + ']');
+  WriteLine(UIBold('Size: ' + ConvertKB2TB(EncInfo.InSize div 1024) +
+    IfThen(StoreDD > -2, ' >> ' + ConvertKB2TB((EncInfo.InflSize +
+    EncInfo.DupSize2) div 1024), '') + ' >> ' +
+    ConvertKB2TB(EncInfo.InflSize div 1024) + IfThen(StoreDD > 0,
+    ' >> ' + ConvertKB2TB((EncInfo.SrepSize) div 1024), '') +
+    IfThen(COMPRESS > 0, ' >> ' + ConvertKB2TB((EncInfo.CompSize) div 1024),
+    '')));
+  S := SpeedStr(EncInfo.InSize);
+  WriteLine(TimeLine + IfThen(S <> '', ', ' + S, ''));
+  WriteLine('');
+end;
+
+procedure DecodeSummary;
+var
+  S: string;
+begin
+  WriteLine(UIBold('Streams: ' + EncInfo.Processed.ToString + ' / ' +
+    EncInfo.Count.ToString));
+  if OutputDone > 0 then
+    WriteLine(UIBold('Size: ' + ConvertKB2TB(InputDone div 1024) + ' >> ' +
+      ConvertKB2TB(OutputDone div 1024)));
+  S := SpeedStr(OutputDone);
+  WriteLine(TimeLine + IfThen(S <> '', ', ' + S, ''));
+  WriteLine('');
+end;
+
+// Runs on its own thread while precomp works. On a terminal it redraws one
+// status line every half second; elsewhere it stays quiet. Either way the
+// summary is printed once, at the end. -bar's PROGRESS lines are for a
+// program reading stderr, so with -bar there is no status line to mix in.
 procedure EncodeStats;
 var
-  FHandle: THandle;
-{$IFDEF MSWINDOWS}
-  SBInfo: TConsoleScreenBufferInfo;
-  Coords: TCoord;
-  ulLength: Cardinal;
-{$ENDIF}
-  CLine: Integer;
-  SL: TStringList;
-
-  procedure Update;
-  var
-    I: Integer;
-    TS: TTimeSpan;
-{$IFDEF MSWINDOWS}
-    CreationTime, ExitTime, KernelTime, UserTime: TFileTime;
-    TT: TSystemTime;
-{$ENDIF}
-    I64: Int64;
-    CovStr: string;
-    Rows: TStringList;
-    Order: TArray<Integer>;
-    J: Integer;
-    Pct: Double;
-  begin
-    // stderr (not stdout): "-" as input/output means real stdin/stdout piping
-    // of the actual payload -- stdout must stay clean for that. Bytes, not
-    // stream count: a wrapping tool spawning one process per file can sum
-    // done/total across processes for a global percentage.
-    if SHOWPROGRESS then
-      WriteLine(Format('PROGRESS %d %d', [EncInfo.CovSize, EncInfo.InSize]));
-{$IFDEF MSWINDOWS}
-    GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
-      UserTime);
-    FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
-{$ENDIF}
-    // stream coverage (0.9.6): % of the file that were streams vs raw data.
-    // Explicit guard: IfThen is NOT lazy and would evaluate the division with InSize=0.
-    if EncInfo.InSize > 0 then
-      CovStr := Format(' (%.2f%%)',
-        [EncInfo.CovSize / EncInfo.InSize * 100])
-    else
-      CovStr := '';
-    SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
-      EncInfo.Count.ToString + CovStr;
-    SL[1] := 'Patched: ' + EncInfo.PatchCount.ToString + ' (' +
-      ConvertKB2TB(EncInfo.PatchSize div 1024) + ')';
-    TS := Stopwatch.Elapsed;
-    SL[2] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
-{$IFDEF MSWINDOWS}
-      + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute, TT.wSecond]) + ')'
-{$ENDIF}
-      ;
-    I64 := EncInfo.DecMem0 + EncInfo.DecMem1;
-    I64 := I64 div 1024;
-    if StoreDD > -2 then
-    begin
-      I := 5;
-      SL[3] := 'Duplicates: ' + EncInfo.DupCount.ToString + ' (' +
-        ConvertKB2TB(EncInfo.DecMem2 div 1024) + ') [' +
-        ConvertKB2TB(EncInfo.DupSize1 div 1024) + ' >> ' +
-        ConvertKB2TB(EncInfo.DupSize2 div 1024) + ']     ';
-    end
-    else
-      I := 4;
-    SL[I] := 'Size: ' + ConvertKB2TB(EncInfo.InSize div 1024) +
-      IfThen(StoreDD > -2,
-      ' >> ' + ConvertKB2TB((EncInfo.InflSize + EncInfo.DupSize2) div 1024), '')
-      + ' >> ' + ConvertKB2TB(EncInfo.InflSize div 1024) +
-      IfThen(StoreDD > 0, ' >> ' + ConvertKB2TB((EncInfo.SrepSize) div 1024),
-      '') + IfThen(COMPRESS > 0, ' >> ' + ConvertKB2TB((EncInfo.CompSize)
-      div 1024), '') + '      ';
-    Rows := TStringList.Create;
-    try
-      Rows.Assign(SL);
-      CompSync.Acquire;
-      try
-        SetLength(Order, Length(CompNames));
-        for I := Low(Order) to High(Order) do
-        begin
-          // insertion sort by first position; a handful of rows
-          J := I;
-          while (J > 0) and (CompFirst[Order[Pred(J)]] > CompFirst[I]) do
-          begin
-            Order[J] := Order[Pred(J)];
-            Dec(J);
-          end;
-          Order[J] := I;
-        end;
-        for J := High(Order) downto Low(Order) do
-          if CompCounts[Order[J]] > 0 then
-          begin
-            // Not IfThen: it evaluates both branches, and InSize is still 0
-            // while a -t1 run processes, so the division raised and killed
-            // the stats thread before its last block.
-            if EncInfo.InSize > 0 then
-              Pct := CompSizes[Order[J]] / EncInfo.InSize * 100
-            else
-              Pct := 0;
-            Rows.Insert(1, Format('  - %s = %d (%.2f%%)',
-              [CompNames[Order[J]], CompCounts[Order[J]], Pct]));
-          end;
-      finally
-        CompSync.Release;
-      end;
-{$IFDEF MSWINDOWS}
-      // Rows shift down as the composition grows, so each one must cover
-      // whatever longer row was drawn at its position before.
-      for I := 0 to Rows.Count - 1 do
-        Rows[I] := Rows[I] + StringOfChar(' ', Max(0, 48 - Length(Rows[I])));
-      SetConsoleCursorPosition(FHandle, Coords);
-      WriteConsole(FHandle, PChar(Rows.Text), Length(Rows.Text), ulLength, nil);
-{$ELSE}
-      // Up to the first row, then clear to the end of the screen: rows shift
-      // down as the composition grows.
-      if CLine > 0 then
-        Write(ErrOutput, #27'[', CLine, 'A'#27'[J');
-      CLine := Rows.Count;
-      Write(ErrOutput, Rows.Text);
-      Flush(ErrOutput);
-{$ENDIF}
-    finally
-      Rows.Free;
-    end;
-  end;
-
+  Live: Boolean;
+  Tick: Integer;
 begin
-  // -scan prints its own one-line report at the end (see Encode) instead of
-  // this periodic progress display.
+  // -scan prints its own one-line report at the end (see Encode).
   if SCANONLY then
     exit;
-  FHandle := 0;
-{$IFDEF MSWINDOWS}
-  FHandle := GetStdHandle(STD_ERROR_HANDLE);
-  GetConsoleScreenBufferInfo(FHandle, SBInfo);
-  Coords.X := 0;
-  Coords.Y := SBInfo.dwCursorPosition.Y;
-{$ENDIF}
-  CLine := 0;
-  SL := TStringList.Create;
-  SL.Add('Streams: 0 / 0');
-  SL.Add('Patched: 0 (0.00 MB)');
-  SL.Add('Time: 00:00:00');
-  if StoreDD > -2 then
-  begin
-    SL.Add('Duplicates: 0 (0.00 MB) [0.00 MB  >> 0.00 MB]');
-  end;
-  SL.Add('');
-  SL.Add('Size: ');
-  SL.Add('');
+  Live := UIIsTTY and not SHOWPROGRESS and not VERBOSE;
+  Tick := 0;
+  StatusDone := 0;
+  StatusSecs := 0;
   while Stopwatch.IsRunning do
   begin
-    Update;
-    Sleep(500);
+    if Tick mod 5 = 0 then
+    begin
+      // stderr (not stdout): "-" as input/output means real stdin/stdout
+      // piping of the actual payload -- stdout must stay clean for that.
+      if SHOWPROGRESS then
+        WriteLine(Format('PROGRESS %d %d', [EncInfo.CovSize, EncInfo.InSize]));
+      if Live then
+        UIStatus(StatusLine(EncInfo.InSize, UIInputTotal, EncInfo.InflSize,
+          EncInfo.Processed, EncInfo.Count, 'out'));
+    end;
+    Inc(Tick);
+    Sleep(100);
   end;
-  Update;
-  SL.Free;
+  if SHOWPROGRESS then
+    WriteLine(Format('PROGRESS %d %d', [EncInfo.CovSize, EncInfo.InSize]));
+  if Live then
+    UIStatusClear;
+  EncodeSummary;
 end;
 
 procedure DecodeStats;
 var
-  FHandle: THandle;
-{$IFDEF MSWINDOWS}
-  SBInfo: TConsoleScreenBufferInfo;
-  Coords: TCoord;
-  ulLength: Cardinal;
-{$ENDIF}
-  CLine: Integer;
-  SL: TStringList;
-
-  procedure Update;
-  var
-    TS: TTimeSpan;
-{$IFDEF MSWINDOWS}
-    CreationTime, ExitTime, KernelTime, UserTime: TFileTime;
-    TT: TSystemTime;
-{$ENDIF}
-  begin
-    // Stream count, not bytes: unlike encode's EncInfo.InSize (the whole input
-    // file's size, known upfront), decode reads the .ytp in sequential blocks
-    // (required to stay pipe/stdin-friendly, no seeking) -- a byte-accurate
-    // total isn't available before the last block is reached. stderr, same
-    // reasoning as encode's Update: stdout must stay clean for "-" piping.
-    if SHOWPROGRESS then
-      WriteLine(Format('PROGRESS %d %d', [EncInfo.Processed, EncInfo.Count]));
-{$IFDEF MSWINDOWS}
-    GetProcessTimes(GetCurrentProcess, CreationTime, ExitTime, KernelTime,
-      UserTime);
-    FileTimeToSystemTime(TFileTime(Int64(UserTime) + Int64(KernelTime)), TT);
-{$ENDIF}
-    SL[0] := 'Streams: ' + EncInfo.Processed.ToString + ' / ' +
-      EncInfo.Count.ToString;
-    TS := Stopwatch.Elapsed;
-    SL[1] := 'Time: ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TS.Hours + TS.Days * 24, TS.Minutes, TS.Seconds])
-{$IFDEF MSWINDOWS}
-      + ' (CPU ' + Format('%0:.2d:%1:.2d:%2:.2d',
-      [TT.wHour + Pred(TT.wDay) * 24, TT.wMinute, TT.wSecond]) + ')'
-{$ENDIF}
-      ;
-{$IFDEF MSWINDOWS}
-    SetConsoleCursorPosition(FHandle, Coords);
-    WriteConsole(FHandle, PChar(SL.Text), Length(SL.Text), ulLength, nil);
-{$ELSE}
-    if CLine > 0 then
-      Write(ErrOutput, #27'[', CLine, 'A');
-    CLine := SL.Count;
-    Write(ErrOutput, SL.Text);
-    Flush(ErrOutput);
-{$ENDIF}
-  end;
-
+  Live: Boolean;
+  Tick: Integer;
 begin
-  FHandle := 0;
-{$IFDEF MSWINDOWS}
-  FHandle := GetStdHandle(STD_ERROR_HANDLE);
-  GetConsoleScreenBufferInfo(FHandle, SBInfo);
-  Coords.X := 0;
-  Coords.Y := SBInfo.dwCursorPosition.Y;
-{$ENDIF}
-  CLine := 0;
-  SL := TStringList.Create;
-  SL.Add('Streams: 0 / 0');
-  SL.Add('Time: 00:00:00');
-  SL.Add('');
+  Live := UIIsTTY and not SHOWPROGRESS and not VERBOSE;
+  Tick := 0;
+  StatusDone := 0;
+  StatusSecs := 0;
   while Stopwatch.IsRunning do
   begin
-    Update;
-    Sleep(500);
+    if Tick mod 5 = 0 then
+    begin
+      // Stream count, not bytes: decode reads the .ytp in sequential blocks
+      // (pipe/stdin-friendly, no seeking), so a byte total of what it will
+      // write is not known before the last block.
+      if SHOWPROGRESS then
+        WriteLine(Format('PROGRESS %d %d', [EncInfo.Processed, EncInfo.Count]));
+      if Live then
+        UIStatus(StatusLine(InputDone, UIInputTotal, OutputDone,
+          EncInfo.Processed, EncInfo.Count, 'out'));
+    end;
+    Inc(Tick);
+    Sleep(100);
   end;
-  Update;
-  SL.Free;
+  if SHOWPROGRESS then
+    WriteLine(Format('PROGRESS %d %d', [EncInfo.Processed, EncInfo.Count]));
+  if Live then
+    UIStatusClear;
+  DecodeSummary;
 end;
 
 // One line to stderr, machine-parseable like -bar's PROGRESS lines: the

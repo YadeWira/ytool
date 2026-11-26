@@ -245,8 +245,6 @@ end;
 
 procedure PrintHelp;
 begin
-  WriteLine('ytool - open-source recreation of xtool, by YadeWira');
-  WriteLine('');
   WriteLine('analyze - tries each precompression codec separately on a file');
   WriteLine('          (real compression, not just detection) and recommends');
   WriteLine('          the -m combination that gives the best result. Produces');

@@ -24,8 +24,13 @@ ytool decode output.ytp restored                 # the original, byte for byte
 ```
 
 Common options: `-m<codecs>` (joined with `+`), `-t#` threads, `-l#` final LZMA2 compression, `-dd`
-deduplication, `-v` verbose. `ytool precomp` with no arguments lists them all; the
+deduplication, `-v` verbose. `ytool help precomp` (or `ytool precomp -h`) lists them all, by group,
+with the codecs whose library was found; the
 [CLI reference](https://github.com/YadeWira/ytool/wiki/CLI-Reference) explains each.
+
+On a terminal, precomp and decode show one progress line (bar, speed, time left, streams) and then a
+summary. Redirected to a file or a pipe they print only the summary, as plain text; `-bar` prints
+`PROGRESS done total` lines for programs. Colours follow `NO_COLOR`; Windows 7 has none.
 
 ## Codecs
 
