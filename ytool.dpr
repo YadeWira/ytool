@@ -659,6 +659,13 @@ begin
     on E: Exception do
     begin
       WriteLine(E.ClassName + ': ' + E.Message);
+      // A decode through srep that stops early shows up here as a read
+      // error; srep's own line says why.
+      if Assigned(PrecompMain.SrepDecodeErr) and
+        (Pos('ERROR!', PrecompMain.SrepDecodeErr.DataString) > 0) and
+        (Pos('srep failed', E.Message) = 0) then
+        WriteLine('srep: ' + Trim(Copy(PrecompMain.SrepDecodeErr.DataString,
+          Pos('ERROR!', PrecompMain.SrepDecodeErr.DataString), 300)));
       if DEBUG then
         ShowMessage(E.ClassName + ': ' + E.Message);
       ExitCode := 1;

@@ -295,6 +295,7 @@ type
     FWorkDir: String;
     FEnvironment: TStringArray;
     FInSize, FOutSize: Int64;
+    FExitCode: Integer;
     procedure ExecReadTask;
     procedure ExecWriteTask;
     procedure ExecErrorTask;
@@ -311,6 +312,8 @@ type
     function Running: Boolean;
     property InSize: Int64 read FInSize;
     property OutSize: Int64 read FOutSize;
+    // The program's exit code, once Done returned; -1 before.
+    property ExitCode: Integer read FExitCode;
   end;
 
   TStoreStream = class(TMemoryStreamEx)
@@ -2152,6 +2155,7 @@ begin
   FExecutable := AExecutable;
   FCommandLine := ACommandLine;
   FWorkDir := AWorkDir;
+  FExitCode := -1;
   FInSize := 0;
   FOutSize := 0;
   FTask := TTask.Create;
@@ -2340,6 +2344,7 @@ begin
   WaitForSingleObject(FProcessInfo.hProcess, INFINITE);
   GetExitCodeProcess(FProcessInfo.hProcess, dwExitCode);
   CloseHandleEx(FProcessInfo.hProcess);
+  FExitCode := Integer(dwExitCode);
   if FTask.Status <> TThreadStatus.tsErrored then
     FTask.RaiseLastError;
   Result := dwExitCode = 0;
@@ -2482,6 +2487,8 @@ begin
   FTask.Wait;
   FTask2.Wait;
   FProcess.WaitOnExit;
+  // ExitStatus is the raw wait() status (4 << 8 for exit 4); ExitCode is it.
+  FExitCode := FProcess.ExitCode;
   if FTask.Status <> TThreadStatus.tsErrored then
     FTask.RaiseLastError;
   Result := FProcess.ExitStatus = 0;

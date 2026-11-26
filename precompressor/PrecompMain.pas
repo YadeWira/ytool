@@ -76,6 +76,9 @@ var
   UIInputStream: TStream = nil;
   // decode's output, whose Size is the bytes written so far
   UIOutputStream: TStream = nil;
+  // srep's stderr during a decode, for the top-level error message: when srep
+  // fails mid-stream, ytool's own error is only a read error.
+  SrepDecodeErr: TStringStream = nil;
 
 procedure PrintHelp;
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);
@@ -124,6 +127,8 @@ function EncData(Input, Output: TStream; Index, Depth: Integer)
 procedure DecInit(Input, Output: TStream; Options: PDecodeOptions); forward;
 procedure DecFree; forward;
 procedure DecChunk(Input, Output: TStream; Index, Depth: Integer); forward;
+procedure SrepCheckVersion; forward;
+procedure SrepDirRemove; forward;
 
 type
   TEncInfo = record
@@ -325,7 +330,11 @@ begin
             StoreDD := -1;
             if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               if S.Length > 1 then
+              begin
                 StoreDD := StrToInt(S[2]);
+                if StoreDD > 0 then
+                  SrepCheckVersion;
+              end;
             // El digito ES el metodo de srep (-dd3 -> srep -m3f), y srep solo
             // tiene del 0 al 5. Con -dd9 el helper sale con error, ytool no
             // mira su exit code, y el resultado era un .ytp de 34 bytes con
@@ -2278,6 +2287,142 @@ begin
     ThreadSync[I].Free;
 end;
 
+// --- srep as an external program (-dd1..-dd5) -------------------------------
+//
+// srep names its own scratch files: srep-data.tmp (future-LZ re-reads its input,
+// so compressing from stdin keeps a copy) and srep-virtual-memory.tmp (decode,
+// when matches spill to disk), both in its working directory. Several workers,
+// or two ytool runs in the same folder, would share them. Each run gets its own
+// directory under the system temp dir, every srep starts there, and it is
+// removed at the end. It used to be ytool's own folder for -temp= (often not
+// writable: Program Files) and the user's current directory for the rest.
+var
+  SrepDirLock: TCriticalSection;
+  SrepDirName: String = '';
+  SrepVersionChecked: Boolean = False;
+
+function SrepDir: String;
+begin
+  SrepDirLock.Acquire;
+  try
+    if SrepDirName = '' then
+    begin
+      SrepDirName := IncludeTrailingPathDelimiter(GetTempDir) + 'ytool-srep-' +
+        GetProcessID.ToString + '-' + IntToHex(Random($7FFFFFFF), 8);
+      ForceDirectories(SrepDirName);
+    end;
+    Result := IncludeTrailingPathDelimiter(SrepDirName);
+  finally
+    SrepDirLock.Release;
+  end;
+end;
+
+procedure SrepDirRemove;
+var
+  SR: TSearchRec;
+begin
+  if SrepDirName = '' then
+    exit;
+  if FindFirst(IncludeTrailingPathDelimiter(SrepDirName) + '*', faAnyFile, SR) = 0
+  then
+  begin
+    repeat
+      if (SR.Attr and faDirectory) = 0 then
+        DeleteFile(IncludeTrailingPathDelimiter(SrepDirName) + SR.Name);
+    until FindNext(SR) <> 0;
+    FindClose(SR);
+  end;
+  RemoveDir(SrepDirName);
+  SrepDirName := '';
+end;
+
+// The line srep reports a failure with ("ERROR! ..."), or its last line.
+function SrepMessage(Err: TStringStream): String;
+var
+  S: String;
+  I: Integer;
+begin
+  Result := '';
+  if Err = nil then
+    exit;
+  S := StringReplace(Err.DataString, #13, #10, [rfReplaceAll]);
+  I := Pos('ERROR!', S);
+  if I > 0 then
+    S := Copy(S, I, MaxInt);
+  S := Trim(S);
+  I := Pos(#10, S);
+  if I > 0 then
+    S := Trim(Copy(S, 1, I - 1));
+  Result := S;
+end;
+
+// srep's exit code used to go unread: a failed srep left a broken .ytp with
+// exit 0, or a decode that stopped at a read error with no word of why.
+procedure SrepFinish(P: TProcessStream; Err: TStringStream; const What: String);
+begin
+  if not P.Done then
+    raise Exception.CreateFmt('srep failed while %s (exit %d)%s',
+      [What, P.ExitCode, IfThen(SrepMessage(Err) <> '', ': ' +
+      SrepMessage(Err), '')]);
+end;
+
+// SREP 3.93a can write a Future-LZ archive that does not decompress (a block
+// with another block's checksum, exit 0); 3.94 fixes it. ytool's own stream
+// digests catch it at decode, too late, so an older srep gets a warning up
+// front. Once per run; an srep whose banner it cannot read is left alone.
+procedure SrepCheckVersion;
+var
+  P: TProcessStream;
+  InS: TMemoryStream;
+  OutS: TNullStream;
+  Err: TStringStream;
+  S: String;
+  I, Major, Minor: Integer;
+begin
+  if SrepVersionChecked or IsLibrary then
+    exit;
+  SrepVersionChecked := True;
+  InS := TMemoryStream.Create;
+  OutS := TNullStream.Create;
+  Err := TStringStream.Create;
+  try
+    try
+      P := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True), '- -',
+        SrepDir, InS, OutS, Err);
+      try
+        P.Execute;
+        P.Done;
+      finally
+        P.Free;
+      end;
+    except
+      exit;
+    end;
+    S := Err.DataString;
+    I := Pos('SREP ', S);
+    if I = 0 then
+      exit;
+    S := Copy(S, I + 5, 10);
+    Major := StrToIntDef(Copy(S, 1, Pos('.', S) - 1), -1);
+    Delete(S, 1, Pos('.', S));
+    I := 1;
+    while (I <= Length(S)) and CharInSet(S[I], ['0' .. '9']) do
+      Inc(I);
+    Minor := StrToIntDef(Copy(S, 1, I - 1), -1);
+    if (Major < 0) or (Minor < 0) then
+      exit;
+    if (Major < 3) or ((Major = 3) and (Minor < 94)) then
+      WriteLine(Format('warning: %s is SREP %d.%d, which can write archives ' +
+        'that do not decompress (-dd3..-dd5); use 3.94 or later: ' +
+        'https://github.com/YadeWira/srep-builds/releases', [SREPEXE, Major,
+        Minor]));
+  finally
+    Err.Free;
+    OutS.Free;
+    InS.Free;
+  end;
+end;
+
 function EncData(Input, Output: TStream; Index, Depth: Integer): Boolean;
 
   function FSMode(OpenAndUse: Boolean): Word;
@@ -2307,6 +2452,7 @@ var
   DupTyp1: TDuplicate2;
   DupTyp2: TDuplicate3;
   ErrStream: TStringStream;
+  SrepProc: TProcessStream;
   LOutput, LCache: TStream;
   List: TStringDynArray;
   procedure SaveResources;
@@ -2376,19 +2522,13 @@ begin
         LOutput := TBufferedStream.Create
           (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
           SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + T +
-          // -temp= unico por worker. El modo future-LZ relee su entrada, asi
-          // que al comprimir desde stdin srep escribe un archivo de trabajo con
-          // un nombre fijo (srep-data.tmp) en el CWD. Con varios workers -t#
-          // metidos en -dd a la vez eso es un archivo compartido por procesos
-          // independientes, y nada lo arbitra. Medido: cuatro encodes en
-          // paralelo desde el mismo CWD no se corrompieron, pero depender de
-          // que srep lo mantenga asi es una apuesta, y el temporal aparece en
-          // el directorio del usuario mientras dura. Nombrarlo por worker lo
-          // saca del CWD y lo hace irrepetible. srep lo borra el mismo.
-          ' -temp=' + ExpandPath(PluginsPath + SREPEXE, True) + '.tmp' +
-          Index.ToString +
+          // -temp= one per worker, in this run's own directory (SrepDir):
+          // future-LZ re-reads its input, so compressing from stdin keeps a
+          // copy, named srep-data.tmp in the working directory unless told
+          // otherwise. srep deletes it itself.
+          ' "-temp=' + SrepDir + 'srep' + Index.ToString + '.tmp"' +
           ' -t' + Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
-          ' - -', GetCurrentDir, nil, Output,
+          ' - -', SrepDir, nil, Output,
           ErrStream, SrepSeedEnv), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
       end
@@ -2834,8 +2974,12 @@ begin
           TProcessStream(TBufferedStream(LOutput).Instance)
             .WriteBuffer(StoreDD, 0);
           TProcessStream(TBufferedStream(LOutput).Instance).Wait;
-          TProcessStream(TBufferedStream(LOutput).Instance).Done;
-          AtomicDecrement(OsrepActive);
+          try
+            SrepFinish(TProcessStream(TBufferedStream(LOutput).Instance),
+              ErrStream, 'compressing');
+          finally
+            AtomicDecrement(OsrepActive);
+          end;
           UpdateInfo;
           LOutput.Free;
         end;
@@ -2855,26 +2999,33 @@ begin
             for I := Low(List) to High(List) do
               T := T + ' -' + List[I];
           end;
-          with TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-            '-m' + StoreDD.ToString + 'f' + T + ' -t' +
+          // S is relative to the user's directory; srep starts in SrepDir.
+          SrepProc := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE,
+            True), '-m' + StoreDD.ToString + 'f' + T + ' -t' +
             Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
-            ' ' + S + ' -', GetCurrentDir,
-            nil, Output, ErrStream, SrepSeedEnv) do
-            try
-              if Execute then
-              begin
-                while Running do
-                begin
-                  EncInfo.SrepSize := OutSize;
-                  Sleep(100);
-                end;
-                Done;
-                EncInfo.SrepSize := OutSize;
-              end;
-            finally
-              AtomicDecrement(OsrepActive);
-              Free;
+            ' "' + ExpandFileName(S) + '" -', SrepDir,
+            nil, Output, ErrStream, SrepSeedEnv);
+          try
+            if not SrepProc.Execute then
+              raise Exception.Create('srep could not be started: ' +
+                ExpandPath(PluginsPath + SREPEXE, True));
+            while SrepProc.Running do
+            begin
+              EncInfo.SrepSize := SrepProc.OutSize;
+              Sleep(100);
             end;
+            SrepFinish(SrepProc, ErrStream, 'compressing');
+            EncInfo.SrepSize := SrepProc.OutSize;
+          finally
+            AtomicDecrement(OsrepActive);
+            SrepProc.Free;
+            // also when srep failed: the scratch copy is not left behind
+            if ExceptObject <> nil then
+            begin
+              LOutput.Free;
+              DeleteFile(S);
+            end;
+          end;
         end
         else
           Output.CopyFrom(TBufferedStream(LOutput).Instance, 0);
@@ -3336,6 +3487,7 @@ var
   I, J: Integer;
   LStream1: TStream;
   LStream2: TProcessStream;
+  SrepErr: TStringStream;
   LCache: TStream;
   T: String;
   List: TStringDynArray;
@@ -3408,8 +3560,12 @@ begin
         for I := Low(List) to High(List) do
           T := T + ' -' + List[I];
       end;
+      SrepCheckVersion;
+      // stderr kept: srep says why it failed ("checksum ... is not the same").
+      SrepErr := TStringStream.Create;
+      SrepDecodeErr := SrepErr;
       LStream2 := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-        '-d' + T + ' - -', GetCurrentDir, Input, nil, nil, SrepSeedEnv);
+        '-d' + T + ' - -', SrepDir, Input, nil, SrepErr, SrepSeedEnv);
       if not LStream2.Execute then
         raise EReadError.CreateRes(@SReadError);
       if Assigned(LCache) then
@@ -3534,11 +3690,8 @@ begin
     end;
     if (Depth = 0) and (StoreDD > 0) then
     begin
-      with LStream2 do
-      begin
-        Wait;
-        Done;
-      end;
+      LStream2.Wait;
+      SrepFinish(LStream2, SrepErr, 'decompressing');
     end;
     if Depth = 0 then
     begin
@@ -4020,6 +4173,7 @@ end;
 initialization
 
 CompSync := TCriticalSection.Create;
+SrepDirLock := TCriticalSection.Create;
 
 PrecompFunctions.GetCodec := @PrecompGetCodec;
 PrecompFunctions.GetParam := @PrecompGetParam;
@@ -4069,5 +4223,10 @@ PrecompFunctions.AddResourceEx := PrecompAddResourceEx;
 if FileExists(ExpandPath(PluginsPath + SREPEXE64, True)) then
   SREPEXE := SREPEXE64;
 {$ENDIF}
+
+finalization
+
+SrepDirRemove;
+FreeAndNil(SrepDecodeErr);
 
 end.

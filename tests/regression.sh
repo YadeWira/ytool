@@ -703,6 +703,24 @@ if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
   else
     echo "-- srep: -dd9 rechazado --"
   fi
+  # srep que falla: hasta 2026-11-26 ytool no miraba su codigo de salida y
+  # dejaba un .ytp roto con exit 0. Un srep falso (exit 4, mensaje en stderr)
+  # junto a una copia de ytool tiene que dar exit != 0 y el mensaje de srep.
+  if [ "$(uname -s)" = Linux ] && [ -f "$XTOOL" ]; then
+    FK="$WORK/fakesrep"; rm -rf "$FK"; mkdir -p "$FK"
+    cp "$XTOOL" "$FK/ytool"; cp "$ROOT"/*.so "$FK/" 2>/dev/null
+    printf '#!/bin/sh\necho "  ERROR! simulated failure" >&2\nexit 4\n' > "$FK/srep64"
+    chmod +x "$FK/srep64"
+    # desde $FK: ytool-dd.tmp (la copia que srep lee) va al directorio actual
+    if ( cd "$FK" && ./ytool precomp -mzlib -dd3 "$CORPUS/23_dup_streams.bin" o.ytp > log 2>&1 ); then
+      echo "-- srep: *** un srep que falla dio exit 0 *** --"; fail=$((fail+1))
+    elif grep -q "simulated failure" "$FK/log"; then
+      echo "-- srep: un srep que falla hace fallar a precomp, con su mensaje --"
+    else
+      echo "-- srep: *** fallo sin el mensaje de srep *** --"; fail=$((fail+1))
+    fi
+    [ -e "$FK/ytool-dd.tmp" ] && { echo "-- srep: *** quedo ytool-dd.tmp *** --"; fail=$((fail+1)); }
+  fi
 fi
 
 echo "-- resumen: $pass OK, $fail FAIL ($err por exit code != 0, $dead por codec muerto) --"
