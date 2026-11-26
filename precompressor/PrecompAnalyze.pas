@@ -66,7 +66,7 @@ begin
     Proc.Parameters.Add(InputPath);
     Proc.Parameters.Add(OutputPath);
     Proc.Options := [poUsePipes];
-    Proc.Execute;
+    {$IFDEF UNIX}StartProcess(Proc){$ELSE}Proc.Execute{$ENDIF};
     // No intermediate shell (avoids cmd.exe quoting hell with
     // nested paths/quotes); the child's stdout/stderr pipes are drained
     // to discard its output without blocking if the buffer fills up.

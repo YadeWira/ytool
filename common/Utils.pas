@@ -20,6 +20,9 @@ uses
 procedure ShowMessage(Msg: string; Caption: string = '');
 procedure WriteLine(S: String);
 function GetModuleName: string;
+{$IFDEF UNIX}
+procedure StartProcess(Proc: TProcess);
+{$ENDIF}
 
 type
   TInt8_BitCount = 1 .. 8;
@@ -622,6 +625,42 @@ function GetCmdStr(CommandLine: String; Index: Integer;
 function GetCmdCount(CommandLine: String): Integer;
 
 implementation
+
+{$IFDEF UNIX}
+var
+  SpawnLock: TCriticalSection;
+
+// Every child process ytool starts goes through here. TProcess leaves the
+// parent's ends of its pipes inheritable, so a process started by one worker
+// thread kept a copy of the stdin pipe of a process another worker had just
+// started: that one never saw the end of its input, and both waited forever
+// (an <stdin>/<stdout> plugin codec at -t4 hung). Starting them one at a time
+// and marking the parent's ends close-on-exec before the next start keeps
+// each pipe in the one process it belongs to.
+procedure StartProcess(Proc: TProcess);
+
+  procedure NoInherit(S: THandleStream);
+  begin
+    if Assigned(S) then
+      FpFcntl(S.Handle, F_SETFD, 1); // FD_CLOEXEC
+  end;
+
+begin
+  SpawnLock.Acquire;
+  try
+    Proc.Execute;
+    if poUsePipes in Proc.Options then
+    begin
+      NoInherit(Proc.Input);
+      NoInherit(Proc.Output);
+      if not(poStderrToOutPut in Proc.Options) then
+        NoInherit(Proc.Stderr);
+    end;
+  finally
+    SpawnLock.Release;
+  end;
+end;
+{$ENDIF}
 
 function GetBits(Data: Int64; Index: TInt64_BitIndex;
   Count: TInt64_BitCount): Int64;
@@ -2404,7 +2443,7 @@ begin
   if Length(FEnvironment) > 0 then
     for I := 0 to High(FEnvironment) do
       FProcess.Environment.Add(FEnvironment[I]);
-  FProcess.Execute;
+  StartProcess(FProcess);
   FTask2.Perform(ExecErrorTask);
   FTask2.Start;
   if Assigned(FOutput) and not Assigned(FInput) then
@@ -5097,7 +5136,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     Proc.CloseInput;
     LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
     LTaskOut.Perform(ExecDrainDiscard);
@@ -5123,7 +5162,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
     LTaskOut.Perform(ExecDrainDiscard);
     LTaskOut.Start;
@@ -5155,7 +5194,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)));
     LTaskOut.Perform(ExecDrainDiscard);
     LTaskOut.Start;
@@ -5191,7 +5230,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     Proc.CloseInput;
     LTaskErr := TTask.Create(IntPtr(Pointer(Proc.Stderr)));
     LTaskErr.Perform(ExecDrainDiscard);
@@ -5219,7 +5258,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)), Instance,
       IntPtr(@@Output), IntPtr(@LDone));
     LTaskOut.Perform(ExecReadCallbackTask);
@@ -5253,7 +5292,7 @@ begin
   Proc := TProcess.Create(nil);
   try
     ExecPrepareProcess(Proc, Executable, CommandLine, WorkDir);
-    Proc.Execute;
+    StartProcess(Proc);
     LTaskOut := TTask.Create(IntPtr(Pointer(Proc.Output)), Instance,
       IntPtr(@@Output), IntPtr(@LDone));
     LTaskOut.Perform(ExecReadCallbackTask);
@@ -5332,5 +5371,12 @@ begin
   while GetCmdStr(CommandLine, Result, True) <> '' do
     Inc(Result);
 end;
+
+{$IFDEF UNIX}
+initialization
+
+// Not freed: a process can still be started while other units finalize.
+SpawnLock := TCriticalSection.Create;
+{$ENDIF}
 
 end.

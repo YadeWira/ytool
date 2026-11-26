@@ -198,6 +198,11 @@ var
   EXTRACT_UNPROCESSED: Boolean = False;
   NOVERIFY: Boolean = False;
   REASSIGN: String = '';
+  // -rA=B (0.9.7+): streams detected by codec A are processed with B instead
+  // of A; entries separated by ';' as xtool's help shows
+  // (-rzstd=zstd157;ue3=lz4hc). An entry without '=' is ytool's own: a codec
+  // to retry a stream with when its detecting codec fails (REASSIGN).
+  RMapSrc, RMapDst: TArray<String>;
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
   SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
@@ -580,7 +585,20 @@ begin
       COMPRESS := 2;
     // 0.9.7: the reassign stream feature now uses -r (was -a). -r became free when
     // recompress stream was removed in 0.9.1 (see task #18).
-    REASSIGN := ReplaceStr(ArgParse.AsString('-r'), SPrecompSep3, SPrecompSep2);
+    REASSIGN := '';
+    SetLength(RMapSrc, 0);
+    SetLength(RMapDst, 0);
+    for S in ArgParse.AsString('-r').Split([';']) do
+      if System.Pos('=', S) > 0 then
+      begin
+        Insert(Trim(Copy(S, 1, Pred(System.Pos('=', S)))), RMapSrc,
+          Length(RMapSrc));
+        Insert(ReplaceStr(Trim(Copy(S, Succ(System.Pos('=', S)), MaxInt)),
+          SPrecompSep3, SPrecompSep2), RMapDst, Length(RMapDst));
+      end
+      else if Trim(S) <> '' then
+        REASSIGN := IfThen(REASSIGN = '', '', REASSIGN + SPrecompSep1) +
+          ReplaceStr(Trim(S), SPrecompSep3, SPrecompSep2);
   finally
     ArgParse.Free;
     ExpParse.Free;
@@ -776,7 +794,7 @@ begin
   end;
 end;
 
-procedure CodecInit(Count: Integer; Method: String);
+procedure CodecInit(Count: Integer; Method: String; Strict: Boolean = True);
 var
   I, X, Y: Integer;
   S: String;
@@ -790,7 +808,18 @@ begin
   begin
     S := PrecompGetCodec(PChar(Method), I, False);
     if IndexText(PrecompGetCodec(PChar(Method), I, False), List) < 0 then
-      raise Exception.CreateFmt(SPrecompError1, [S]);
+      // Decode reads the method list from the container, and it names every
+      // method the encode had (an INI plugin's codec among them) whether
+      // a stream used it or not. Stopping there made a container nothing
+      // in it needed the method for undecodable ("Method 'x' not found",
+      // exit 1, no output). xtool 0.8.x: "executable plugins are no longer
+      // required when decoding if they were never used". A stream that does
+      // need it still fails, in its own Restore.
+      if Strict then
+        raise Exception.CreateFmt(SPrecompError1, [S])
+      else
+        WriteLine(Format('warning: method ''%s'' is not available; only '
+          + 'streams that used it would need it', [S]));
     Inc(I);
   end;
   for X := Low(Codecs) to High(Codecs) do
@@ -1585,7 +1614,7 @@ var
   LValid: Boolean;
   LCodec: Byte;
   LOption: Integer;
-  I: Integer;
+  I, RIdx: Integer;
 
 begin
   Result := False;
@@ -1623,6 +1652,33 @@ begin
           SI1.Status := TStreamStatus.Database;
         end;
       end;
+    end;
+    // -rA=B: a stream A detected goes to B, and A is not tried at all
+    // (measured on xtool 0.9.9: -mzlib -rzlib=preflate gives "preflate = 6"
+    // where plain -mzlib gives four zlib rows). A B that cannot be used
+    // leaves the stream as it is, as 0.9.9 does (-rzlib=lzo1x: 0 / 6).
+    if (not Reassigned) and (Length(RMapSrc) > 0) then
+    begin
+      I := GetBits(SI2.Option, 0, 3);
+      if not InRange(I, 0, Pred(Length(Codecs[SI2.Codec].Names))) then
+        I := 0;
+      for RIdx := Low(RMapSrc) to High(RMapSrc) do
+        if (Length(Codecs[SI2.Codec].Names) > 0) and
+          SameText(Codecs[SI2.Codec].Names[I], RMapSrc[RIdx]) then
+        begin
+          if not PrecompGetCodecIndex(PChar(RMapDst[RIdx]), @LCodec, @LOption)
+          then
+            exit;
+          SI2.Codec := LCodec;
+          SI2.Option := LOption;
+          if System.Pos(SPrecompSep2, RMapDst[RIdx]) > 0 then
+            SI2.Status := TStreamStatus.Predicted
+          else
+            SI2.Status := TStreamStatus.None;
+          InfoStore1[ThreadIndex][StreamIndex] := SI2;
+          Result := Process(ThreadIndex, StreamIndex, Index, Depth, True);
+          exit;
+        end;
     end;
     CurPos1[Index] := MemOutput1[Index].Position;
     CurCodec[Index] := SI2.Codec;
@@ -2060,7 +2116,14 @@ begin
           LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
           '_' + Random($7FFFFFFF).ToHexString + '-storage.tmp')));
         IntArray[0] := Options^.ChunkSize;
-        IntArray[1] := I;
+        // The number of chunk slots. This was "I", the variable of the for
+        // loop just above, whose value after the loop is undefined; it came
+        // out as the last index, 0 at -t1, and PrecompAddStream's
+        // "(Position div IntArray[0]) mod IntArray[1]" then divided by
+        // zero: every stream a plugin passed on for Scan2 was lost at -t1
+        // ("Scan1 codec ... failed: Division by zero"), and at -tN they were
+        // spread over N-1 slots instead of N.
+        IntArray[1] := Length(InfoStore1);
       end
       else
         DataStore := TDataStore2.Create(Length(InfoStore1));
@@ -2095,6 +2158,8 @@ begin
   Output.WriteBuffer(Options^.Depth, Options^.Depth.Size);
   if REASSIGN <> '' then
     AddMethod(REASSIGN);
+  for I := Low(RMapDst) to High(RMapDst) do
+    AddMethod(RMapDst[I]);
   DoScan2 := True;
   for J := 0 to ExternalMethods.Count - 1 do
   begin
@@ -3174,7 +3239,7 @@ begin
     WorkStream[I] := TMemoryStreamEx2.Create;
     WorkLastSize[I] := 0;
   end;
-  CodecInit(Options^.Threads, Options^.Method);
+  CodecInit(Options^.Threads, Options^.Method, False);
   SetLength(ComVars2, Options^.Depth);
   for J := Low(ComVars2) to High(ComVars2) do
     with ComVars2[J] do
@@ -3507,6 +3572,7 @@ var
     Rows: TStringList;
     Order: TArray<Integer>;
     J: Integer;
+    Pct: Double;
   begin
     // stderr (not stdout): "-" as input/output means real stdin/stdout piping
     // of the actual payload -- stdout must stay clean for that. Bytes, not
@@ -3576,10 +3642,17 @@ var
         end;
         for J := High(Order) downto Low(Order) do
           if CompCounts[Order[J]] > 0 then
+          begin
+            // Not IfThen: it evaluates both branches, and InSize is still 0
+            // while a -t1 run processes, so the division raised and killed
+            // the stats thread before its last block.
+            if EncInfo.InSize > 0 then
+              Pct := CompSizes[Order[J]] / EncInfo.InSize * 100
+            else
+              Pct := 0;
             Rows.Insert(1, Format('  - %s = %d (%.2f%%)',
-              [CompNames[Order[J]], CompCounts[Order[J]],
-              IfThen(EncInfo.InSize > 0, CompSizes[Order[J]] / EncInfo.InSize
-              * 100, 0.0)]));
+              [CompNames[Order[J]], CompCounts[Order[J]], Pct]));
+          end;
       finally
         CompSync.Release;
       end;

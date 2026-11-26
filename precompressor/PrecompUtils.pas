@@ -1525,7 +1525,8 @@ begin
     CloseHandleEx(ProcessInfo.hThread);
     CloseHandleEx(hstdinr);
     CloseHandleEx(hstdoutw);
-    LTask := TTask.Create(Instance, hstdoutr, NativeInt(@Output),
+    // @@Output, not @Output: see PrecompEXE's ExecStdioProcess.
+    LTask := TTask.Create(Instance, hstdoutr, NativeInt(@@Output),
       NativeInt(@LDone));
     LTask.Perform(ExecReadTask);
     LTask.Start;

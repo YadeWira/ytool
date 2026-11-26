@@ -223,7 +223,12 @@ begin
         end
         else
         begin
-          FTask.Update(FInstance, hstdoutr, NativeInt(@Output));
+          // @@Output: the address of the Output variable, which ExecReadTask
+          // dereferences (PExecOutput(Stream)^), as the Linux path does.
+          // "@Output" on a procedure variable is the procedure itself, so
+          // the reader called through its code bytes and every <stdin>/
+          // <stdout> plugin codec on Windows produced nothing.
+          FTask.Update(FInstance, hstdoutr, NativeInt(@@Output));
           FTask.Start;
           try
             FileWriteBuffer(hstdinw, InBuff^, InSize);
@@ -386,14 +391,19 @@ begin
       Proc.Parameters.Add('"' + FExecutable + '" ' + FCommandLine);
       Proc.CurrentDirectory := FWorkDir;
       Proc.Options := [poUsePipes];
-      Proc.Execute;
+      StartProcess(Proc);
       if FLib then
         Result := ProcessLib(FInstance, Proc)
       else
       begin
         if not Assigned(FTask) then
           FTask := TTask.Create;
-        FTask.Update(IntPtr(Pointer(Proc.Output)), FInstance,
+        // Same order as ExecReadTask(Instance, Handle, Stream). The stream
+        // and the instance were swapped, so the reader thread read from
+        // "TStream(FInstance)", an address made of the worker number: an
+        // access violation on every <stdin>/<stdout> plugin codec on Linux,
+        // which then processed no stream at all.
+        FTask.Update(FInstance, IntPtr(Pointer(Proc.Output)),
           IntPtr(@@Output));
         FTask.Perform(ExecReadTask);
         FTask.Start;
