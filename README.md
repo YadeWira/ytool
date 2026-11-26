@@ -46,7 +46,7 @@ summary. Redirected to a file or a pipe they print only the summary, as plain te
 | raw LZMA | `lzma` | LZMA SDK 26.06 |
 | WAV | `flac`, `wavpack` | libFLAC, WavPack |
 | Oodle | `kraken`, `mermaid`, … | proprietary: bring your own `oo2core` |
-| duplicates | `-dd` | in memory; `-dd1`…`-dd5` use srep, not included ¹ |
+| duplicates | `-dd` | in memory; `-dd1`…`-dd5` use srep, not included ¹; `-ddo` uses OSREP (preview) ² |
 | final stage | `-l#` | fast-lzma2 1.2.0 ([ultra-fast-lzma2](https://github.com/YadeWira/ultra-fast-lzma2)) |
 
 ### Coming soon: the new pack family
@@ -70,6 +70,14 @@ packJPG, packPNG and packMP3 were retired in 0.9.9a in favour of this family.
 ytool to use `-dd1`…`-dd5` ([personal builds](https://github.com/YadeWira/srep-builds), 3.94 or later:
 3.93a can write archives that do not decompress, and ytool warns about it); without it ytool says so and
 uses `-dd`. If srep fails, precomp and decode fail with srep's own message.
+
+² **`-ddo` (preview in 0.9.9b)**: [OSREP](https://github.com/YadeWira/omega-srep) (MIT) as the external
+deduplicator, its parameters in `-osp<params>` (joined with `:`, each passed with a `-`: `-ospm3:l64`).
+Put the release binary next to ytool, renamed `osrep` (Linux) or `osrep.exe` (Windows):
+[0.0.17](https://github.com/YadeWira/omega-srep/releases/tag/v0.0.17) or later, which spills what comes
+through a pipe to a temporary file. With 0.0.16 it works but holds the whole deduplicated stream in memory
+when decoding, and ytool warns. Its format v7 (`-m6`, the default) is frozen, so `.ytp` files made with it
+will keep decoding.
 
 ## Differences from xtool 0.9.9
 

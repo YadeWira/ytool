@@ -294,6 +294,25 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   fi
 fi
 
+# --- -ddo: OSREP como dedup externo -----------------------------------------
+# Corre si hay un osrep junto a ytool (no viene en el repo; releases de
+# YadeWira/omega-srep). Ida y vuelta con y sin -osp, y un .ytp hecho con -ddo
+# tiene que pedir osrep al decodificar si falta, no fallar con un error mudo.
+if [ -x "$XTOOL" ] && [ -x "$ROOT/osrep" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
+  DO="$CORPUS/23_dup_streams.bin"; dok=1
+  for o in "-ddo" "-ddo -ospm3:l64"; do
+    "$XTOOL" precomp -mzlib $o "$DO" "$WORK/do.ytp" >/dev/null 2>&1 && \
+      "$XTOOL" decode "$WORK/do.ytp" "$WORK/do.out" >/dev/null 2>&1 && \
+      cmp -s "$DO" "$WORK/do.out" || { dok=0; echo "-- *** -ddo [$o]: fallo *** --"; }
+  done
+  FK="$WORK/noosrep"; rm -rf "$FK"; mkdir -p "$FK"; cp "$XTOOL" "$FK/ytool"; cp "$ROOT"/*.so "$FK/" 2>/dev/null
+  "$FK/ytool" decode "$WORK/do.ytp" "$FK/x.out" > "$FK/log" 2>&1 && dok=0
+  grep -q 'put "osrep" next to ytool' "$FK/log" || { dok=0; echo "-- *** -ddo sin osrep: sin el mensaje *** --"; }
+  if [ "$dok" = 1 ]; then echo "-- -ddo: ida y vuelta (con y sin -osp), y pide osrep si falta --"; pass=$((pass+1)); else fail=$((fail+1)); fi
+else
+  echo "-- -ddo: omitido (sin osrep junto a ytool) --"
+fi
+
 # --- -p (prefetch) en el borde de 4 MB --------------------------------------
 # -p8mb fallaba (access violation, exit 1, .ytp de 22 bytes): la mitad de -p es
 # la cache de escritura, y con exactamente 4 MB (su bloque) TCacheWriteStream

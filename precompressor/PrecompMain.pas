@@ -136,6 +136,9 @@ procedure DecInit(Input, Output: TStream; Options: PDecodeOptions); forward;
 procedure DecFree; forward;
 procedure DecChunk(Input, Output: TStream; Index, Depth: Integer); forward;
 procedure SrepCheckVersion; forward;
+procedure OsrepCheckVersion; forward;
+function DDName: String; forward;
+function DDExe: String; forward;
 procedure SrepDirRemove; forward;
 
 type
@@ -175,6 +178,7 @@ const
   { Metodo mas alto que srep conoce (SREP_METHOD_LAST en su srep.cpp). El digito
     de -dd<N> ES el metodo, asi que esto es el limite de -dd. }
   SREP_METHOD_MAX = 5;
+  DD_OSREP = 16;
 
 var
   GlobalSync: TCriticalSection;
@@ -228,6 +232,10 @@ var
   COMPRESS: Byte = 0;
   EXTCOMP: String = '';
   SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
+  // -ddo: OSREP (omega-srep, MIT) instead of srep, its parameters in -osp.
+  // StoreDD = DD_OSREP in the container, so decode knows which to run.
+  OSREPEXE: String = {$IFDEF MSWINDOWS}'osrep.exe'{$ELSE}'osrep'{$ENDIF};
+  OsrepCfg: String = '';
   { Semilla fija para srep (SREP_SEED_HEX, parche propio en contrib/patch_srep.py).
     Sin ella cada ejecucion produce bytes distintos: la clave VMAC sale de
     systemRandomData()+time(). Con ella, el mismo input da el mismo .ytp, que es
@@ -336,7 +344,20 @@ begin
         'd':
           begin
             StoreDD := -1;
-            if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
+            if S.StartsWith('do') then
+            begin
+              // -ddo: OSREP. Without it next to ytool, the same fallback as
+              // srep's: say so and deduplicate in memory.
+              if FileExists(ExpandPath(PluginsPath + OSREPEXE, True)) then
+              begin
+                StoreDD := DD_OSREP;
+                OsrepCheckVersion;
+              end
+              else
+                WriteLine(Format('%s: -ddo needs "%s" next to ytool; using ' +
+                  'in-memory dedup (-dd).', ['warning', OSREPEXE]));
+            end
+            else if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               if S.Length > 1 then
               begin
                 StoreDD := StrToInt(S[2]);
@@ -349,7 +370,8 @@ begin
             // exit 0: el unico sintoma, tres "0.00 MB" en el resumen. Un valor
             // fuera de rango es un error de linea de comandos, no algo que
             // degradar, asi que se rechaza antes de empezar.
-            if (StoreDD >= 0) and (StoreDD > SREP_METHOD_MAX) then
+            if (StoreDD >= 0) and (StoreDD <> DD_OSREP) and
+              (StoreDD > SREP_METHOD_MAX) then
               raise Exception.CreateFmt
                 ('-dd%d no existe: srep solo tiene los metodos 1..%d ' +
                 '(el numero es el metodo: -dd3 = srep -m3f).',
@@ -359,7 +381,7 @@ begin
             // con la unica pista en el numero de etapas del resumen de tamanos.
             // Mismo criterio que la suite usa para los codecs: si una etapa no
             // puede correr, que se vea.
-            if (StoreDD = -1) and (S.Length > 1) then
+            if (StoreDD = -1) and (S.Length > 1) and not S.StartsWith('do') then
               WriteLine(Format('%s: el dedup externo (-dd%s) necesita "%s" junto ' +
                 'a ytool; se usara dedup en memoria (-dd).',
                 ['aviso', S.Substring(1), SREPEXE]));
@@ -502,6 +524,7 @@ begin
       end;
     end;
     SCANONLY := ArgParse.AsBoolean('-scan');
+    OsrepCfg := ArgParse.AsString('-osp', 0, '');
     SrepSeed := ArgParse.AsString('-seed', 0, '').ToLower;
     if SrepSeed <> '' then
     begin
@@ -644,6 +667,7 @@ begin
     if B then
       Options.DedupSysMem := -Options.DedupSysMem;
     SrepCfg := ArgParse.AsString('-sp', 0, '').ToLower;
+    OsrepCfg := ArgParse.AsString('-osp', 0, '');
     // -seed<hex>: semilla fija para srep. Se valida aca y no alla porque srep
     // ignora en silencio una semilla malformada (vuelve a la aleatoria), y
     // entonces el usuario creeria que su build es reproducible cuando no lo es.
@@ -2344,7 +2368,8 @@ begin
   SrepDirName := '';
 end;
 
-// The line srep reports a failure with ("ERROR! ..."), or its last line.
+// The line srep ("ERROR! ...") or osrep ("OSREP: ...") reports a failure with,
+// or the last line.
 function SrepMessage(Err: TStringStream): String;
 var
   S: String;
@@ -2354,7 +2379,9 @@ begin
   if Err = nil then
     exit;
   S := StringReplace(Err.DataString, #13, #10, [rfReplaceAll]);
-  I := Pos('ERROR!', S);
+  I := Pos('ERROR!', S);            // srep
+  if I = 0 then
+    I := Pos('OSREP:', S);          // osrep
   if I > 0 then
     S := Copy(S, I, MaxInt);
   S := Trim(S);
@@ -2369,8 +2396,8 @@ end;
 procedure SrepFinish(P: TProcessStream; Err: TStringStream; const What: String);
 begin
   if not P.Done then
-    raise Exception.CreateFmt('srep failed while %s (exit %d)%s',
-      [What, P.ExitCode, IfThen(SrepMessage(Err) <> '', ': ' +
+    raise Exception.CreateFmt('%s failed while %s (exit %d)%s',
+      [DDName, What, P.ExitCode, IfThen(SrepMessage(Err) <> '', ': ' +
       SrepMessage(Err), '')]);
 end;
 
@@ -2429,6 +2456,155 @@ begin
     OutS.Free;
     InS.Free;
   end;
+end;
+
+var
+  OsrepChecked: Boolean = False;
+  OsrepTemp: Boolean = False;   // osrep 0.0.17+: --temp=<dir>
+
+// osrep --version, once. 0.0.17 added --temp=<dir>: what comes through a pipe
+// beyond 32 MiB goes to a file there instead of memory. Older ones keep the
+// whole stream in memory (and do not know the option), so they get a warning.
+procedure OsrepCheckVersion;
+var
+  P: TProcessStream;
+  InS: TMemoryStream;
+  OutS: TStringStream;
+  S: String;
+  A, B, C: Integer;
+  Parts: TStringDynArray;
+begin
+  if OsrepChecked or IsLibrary then
+    exit;
+  OsrepChecked := True;
+  InS := TMemoryStream.Create;
+  OutS := TStringStream.Create;
+  try
+    try
+      P := TProcessStream.Create(ExpandPath(PluginsPath + OSREPEXE, True),
+        '--version', SrepDir, InS, OutS, nil);
+      try
+        P.Execute;
+        P.Done;
+      finally
+        P.Free;
+      end;
+    except
+      exit;
+    end;
+    S := OutS.DataString;
+    A := Pos('OSREP ', S);
+    if A = 0 then
+      exit;
+    S := Copy(S, A + 6, 20);
+    A := Pos(' ', S);
+    if A > 0 then
+      S := Copy(S, 1, A - 1);
+    Parts := DecodeStr(S, '.');
+    if Length(Parts) < 3 then
+      exit;
+    A := StrToIntDef(Parts[0], -1);
+    B := StrToIntDef(Parts[1], -1);
+    C := StrToIntDef(Parts[2], -1);
+    if (A < 0) or (B < 0) or (C < 0) then
+      exit;
+    OsrepTemp := (A > 0) or (B > 0) or (C >= 17);
+    if not OsrepTemp then
+      WriteLine(Format('warning: %s is OSREP %s, which holds what comes ' +
+        'through a pipe in memory (decode: the whole deduplicated stream); ' +
+        'use 0.0.17 or later: https://github.com/YadeWira/omega-srep/releases',
+        [OSREPEXE, S]));
+  finally
+    OutS.Free;
+    InS.Free;
+  end;
+end;
+
+// srep or OSREP, whichever the container (StoreDD) says.
+function DDExe: String;
+begin
+  if StoreDD = DD_OSREP then
+    Result := OSREPEXE
+  else
+    Result := SREPEXE;
+end;
+
+function DDName: String;
+begin
+  if StoreDD = DD_OSREP then
+    Result := 'osrep'
+  else
+    Result := 'srep';
+end;
+
+// -sp / -osp: parameters joined with ':', each passed with a '-' in front
+// (-osp-align=1:l64 -> --align=1 -l64).
+function DDParams(const Cfg: String): String;
+var
+  List: TStringDynArray;
+  I: Integer;
+  T: String;
+begin
+  Result := '';
+  T := ReplaceText(Cfg, SPrecompSep3, SPrecompSep2);
+  if T = '' then
+    exit;
+  List := DecodeStr(T, SPrecompSep2);
+  for I := Low(List) to High(List) do
+    if List[I] <> '' then
+      Result := Result + ' -' + List[I];
+end;
+
+// Encode command line, after the executable. Input is '-' (stdin) or a
+// quoted path; output is stdout. srep: -m<N>f, -sp, -temp= (stdin only).
+// OSREP: its default method (-m6) unless -osp names one, --seed from -seed.
+function DDEncodeArgs(Index, Threads: Integer; const Input: String): String;
+begin
+  if StoreDD = DD_OSREP then
+  begin
+    OsrepCheckVersion;
+    Result := Trim(DDParams(OsrepCfg));
+    if OsrepTemp then
+      Result := Result + ' "--temp=' + ExcludeTrailingPathDelimiter(SrepDir) + '"';
+    if SrepSeed <> '' then
+      Result := Result + ' --seed=0x' + Copy(SrepSeed, 1, 16);
+    Result := Result + ' -t' + Threads.ToString + ' ' + Input + ' -';
+  end
+  else
+  begin
+    Result := SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + DDParams(SrepCfg);
+    // -temp= one per worker, in this run's own directory (SrepDir):
+    // future-LZ re-reads its input, so compressing from stdin keeps a copy,
+    // named srep-data.tmp in the working directory unless told otherwise.
+    if Input = '-' then
+      Result := Result + ' "-temp=' + SrepDir + 'srep' + Index.ToString +
+        '.tmp"';
+    Result := Result + ' -t' + Threads.ToString + ' ' + Input + ' -';
+  end;
+end;
+
+function DDDecodeArgs: String;
+begin
+  if StoreDD = DD_OSREP then
+  begin
+    OsrepCheckVersion;
+    if OsrepTemp then
+      Result := '-d "--temp=' + ExcludeTrailingPathDelimiter(SrepDir) + '" - -'
+    else
+      Result := '-d - -';
+  end
+  else
+    Result := '-d' + DDParams(SrepCfg) + ' - -';
+end;
+
+// The program a container made with -dd1..5 / -ddo needs, with a message that
+// says so when it is missing (it used to be a bare read error).
+procedure DDRequire;
+begin
+  if not FileExists(ExpandPath(PluginsPath + DDExe, True)) then
+    raise Exception.CreateFmt('this file was made with %s (-dd%s): put "%s" ' +
+      'next to ytool to decode it', [DDName, IfThen(StoreDD = DD_OSREP, 'o',
+      StoreDD.ToString), DDExe]);
 end;
 
 function EncData(Input, Output: TStream; Index, Depth: Integer): Boolean;
@@ -2521,24 +2697,10 @@ begin
     begin
       if StoreDD > 0 then
       begin
-        T := ReplaceText(SrepCfg, SPrecompSep3, SPrecompSep2);
-        if (T <> '') then
-        begin
-          List := DecodeStr(T, SPrecompSep2);
-          T := '';
-          for I := Low(List) to High(List) do
-            T := T + ' -' + List[I];
-        end;
         LOutput := TBufferedStream.Create
-          (TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-          SREP_ENCODE_METHOD + StoreDD.ToString + 'f' + T +
-          // -temp= one per worker, in this run's own directory (SrepDir):
-          // future-LZ re-reads its input, so compressing from stdin keeps a
-          // copy, named srep-data.tmp in the working directory unless told
-          // otherwise. srep deletes it itself.
-          ' "-temp=' + SrepDir + 'srep' + Index.ToString + '.tmp"' +
-          ' -t' + Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
-          ' - -', SrepDir, nil, Output,
+          (TProcessStream.Create(ExpandPath(PluginsPath + DDExe, True),
+          DDEncodeArgs(Index, Max(1, Length(Tasks) div
+          AtomicIncrement(OsrepActive)), '-'), SrepDir, nil, Output,
           ErrStream, SrepSeedEnv), False, YTOOL_BSIZE);
         TProcessStream(TBufferedStream(LOutput).Instance).Execute;
       end
@@ -3014,24 +3176,15 @@ begin
         TBufferedStream(LOutput).Flush;
         if StoreDD > 0 then
         begin
-          T := ReplaceText(SrepCfg, SPrecompSep3, SPrecompSep2);
-          if (T <> '') then
-          begin
-            List := DecodeStr(T, SPrecompSep2);
-            T := '';
-            for I := Low(List) to High(List) do
-              T := T + ' -' + List[I];
-          end;
           // S is relative to the user's directory; srep starts in SrepDir.
-          SrepProc := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE,
-            True), '-m' + StoreDD.ToString + 'f' + T + ' -t' +
-            Max(1, Length(Tasks) div AtomicIncrement(OsrepActive)).ToString +
-            ' "' + ExpandFileName(S) + '" -', SrepDir,
-            nil, Output, ErrStream, SrepSeedEnv);
+          SrepProc := TProcessStream.Create(ExpandPath(PluginsPath + DDExe,
+            True), DDEncodeArgs(Index, Max(1, Length(Tasks) div
+            AtomicIncrement(OsrepActive)), '"' + ExpandFileName(S) + '"'),
+            SrepDir, nil, Output, ErrStream, SrepSeedEnv);
           try
             if not SrepProc.Execute then
-              raise Exception.Create('srep could not be started: ' +
-                ExpandPath(PluginsPath + SREPEXE, True));
+              raise Exception.Create(DDName + ' could not be started: ' +
+                ExpandPath(PluginsPath + DDExe, True));
             while SrepProc.Running do
             begin
               EncInfo.SrepSize := SrepProc.OutSize;
@@ -3621,20 +3774,14 @@ begin
   begin
     if (Depth = 0) and (StoreDD > 0) then
     begin
-      T := ReplaceText(SrepCfg, SPrecompSep3, SPrecompSep2);
-      if (T <> '') then
-      begin
-        List := DecodeStr(T, SPrecompSep2);
-        T := '';
-        for I := Low(List) to High(List) do
-          T := T + ' -' + List[I];
-      end;
-      SrepCheckVersion;
+      DDRequire;
+      if StoreDD <> DD_OSREP then
+        SrepCheckVersion;
       // stderr kept: srep says why it failed ("checksum ... is not the same").
       SrepErr := TStringStream.Create;
       SrepDecodeErr := SrepErr;
-      LStream2 := TProcessStream.Create(ExpandPath(PluginsPath + SREPEXE, True),
-        '-d' + T + ' - -', SrepDir, Input, nil, SrepErr, SrepSeedEnv);
+      LStream2 := TProcessStream.Create(ExpandPath(PluginsPath + DDExe, True),
+        DDDecodeArgs, SrepDir, Input, nil, SrepErr, SrepSeedEnv);
       if not LStream2.Execute then
         raise EReadError.CreateRes(@SReadError);
       if Assigned(LCache) then

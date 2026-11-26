@@ -685,10 +685,15 @@ begin
       // A decode through srep that stops early shows up here as a read
       // error; srep's own line says why.
       if Assigned(PrecompMain.SrepDecodeErr) and
-        (Pos('ERROR!', PrecompMain.SrepDecodeErr.DataString) > 0) and
-        (Pos('srep failed', E.Message) = 0) then
-        WriteLine('srep: ' + Trim(Copy(PrecompMain.SrepDecodeErr.DataString,
-          Pos('ERROR!', PrecompMain.SrepDecodeErr.DataString), 300)));
+        (Pos(' failed while ', E.Message) = 0) then
+      begin
+        I := Pos('ERROR!', PrecompMain.SrepDecodeErr.DataString);
+        if I = 0 then
+          I := Pos('OSREP:', PrecompMain.SrepDecodeErr.DataString);
+        if I > 0 then
+          WriteLine('dedup: ' + Trim(Copy(PrecompMain.SrepDecodeErr.DataString,
+            I, 300)));
+      end;
       if DEBUG then
         ShowMessage(E.ClassName + ': ' + E.Message);
       ExitCode := 1;

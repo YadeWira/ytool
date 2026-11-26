@@ -25,7 +25,8 @@ ytool-x86
 /srep64
 /srep.exe
 /srep-x86.exe
-# Restos del pin de omega-srep, ya no se construyen pero pueden seguir en un
+# osrep (omega-srep, MIT) para -ddo: quien lo use deja su binario en la raiz.
+# Antes: restos del pin de omega-srep, ya no se construyen pero pueden seguir en un
 # arbol de trabajo viejo.
 /osrep
 /osrep64
