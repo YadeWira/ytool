@@ -21,6 +21,6 @@ srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan
 pones srep64 junto a ytool (builds: https://github.com/YadeWira/srep-builds); sin el,
 ytool avisa y usa la dedup en memoria (-dd).
 
-Uso:
+Uso (todas las opciones: ./ytool help precomp):
   ./ytool precomp -mzlib+zstd+pja entrada salida.ytp
   ./ytool decode salida.ytp restaurado

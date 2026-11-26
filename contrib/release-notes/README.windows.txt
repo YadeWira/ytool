@@ -1,4 +1,4 @@
-ytool - Windows (x64 y x86)
+ytool - Windows (x64 y x86), desde Windows 7
 Recreacion open-source de xtool (Razor12911). https://github.com/YadeWira/ytool
 ==================================================================================
 
@@ -28,6 +28,6 @@ pones srep.exe junto a ytool.exe (builds: https://github.com/YadeWira/srep-build
 sin el, ytool avisa y usa la dedup en memoria (-dd).
 Oodle tampoco: es propietario; si tienes oo2core/oo2ext, ponla junto a ytool.exe.
 
-Uso:
+Uso (todas las opciones: ytool.exe help precomp):
   ytool.exe precomp -mzlib+zstd+pja entrada salida.ytp
   ytool.exe decode salida.ytp restaurado
