@@ -67,8 +67,9 @@ each one reaches a stable release:
 packJPG, packPNG and packMP3 were retired in 0.9.9a in favour of this family.
 
 ¹ SREP's sources are "All rights reserved", so ytool does not ship it. Put `srep64`/`srep.exe` next to
-ytool to use `-dd1`…`-dd5` ([personal builds](https://github.com/YadeWira/srep-builds)); without it ytool
-says so and uses `-dd`.
+ytool to use `-dd1`…`-dd5` ([personal builds](https://github.com/YadeWira/srep-builds), 3.94 or later:
+3.93a can write archives that do not decompress, and ytool warns about it); without it ytool says so and
+uses `-dd`. If srep fails, precomp and decode fail with srep's own message.
 
 ## Differences from xtool 0.9.9
 
