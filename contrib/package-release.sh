@@ -262,7 +262,6 @@ step "listo"
 echo "   commit: $COMMIT"
 ls -1 "$OUT" | sed 's/^/   /'
 echo
-echo "   NOTA: el engagement de los binarios de Windows NO se verifica aca."
-echo "   La salida de ytool en Windows va directo a la consola y no se puede leer"
-echo "   por SSH, asi que hay que correr el smoke a mano en la VM comparando el"
-echo "   tamano del .ytp contra la referencia de Linux impresa arriba."
+echo "   NOTA: el engagement de los binarios de Windows NO se verifica aca: correr"
+echo "   tests/smoke-windows.cmd en la VM (Windows 10 y 7, x64 y x86) con el corpus"
+echo "   de tests/gen_corpus.py y la lista CODEC_EXPECT de tests/regression.sh."

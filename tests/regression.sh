@@ -16,6 +16,9 @@ ROOT="$(pwd)"
 XTOOL="${XTOOL:-$ROOT/ytool}"
 # ytool looks for srep and osrep next to itself, so that is where to check
 XDIR="$(cd "$(dirname "$XTOOL")" && pwd)"
+# the binary by an absolute path, for tests that run it from another folder
+# (CI gives XTOOL=./ytool.exe)
+XABS="$XDIR/$(basename "$XTOOL")"
 WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
 # Failure artifacts must live OUTSIDE $WORK: the trap below wipes $WORK on exit,
@@ -302,12 +305,12 @@ fi
 # del otro y el .ytp no decodificaba (encontrado corriendo dos suites juntas).
 if [ -x "$XTOOL" ] && [ -f "$CORPUS/11_text_8m.bin" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
   CC="$WORK/concurrent"; rm -rf "$CC"; mkdir -p "$CC"; cok=1
-  ( cd "$CC" && "$XTOOL" precomp -mzlib -dd "$CORPUS/11_text_8m.bin" a.ytp >/dev/null 2>&1 ) &
-  ( cd "$CC" && "$XTOOL" precomp -mzlib -dd "$CORPUS/23_dup_streams.bin" b.ytp >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XABS" precomp -mzlib -dd "$CORPUS/11_text_8m.bin" a.ytp >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XABS" precomp -mzlib -dd "$CORPUS/23_dup_streams.bin" b.ytp >/dev/null 2>&1 ) &
   wait
   # decode a la vez tambien, desde la misma carpeta (ytool-vm.tmp era fijo)
-  ( cd "$CC" && "$XTOOL" decode a.ytp a.out >/dev/null 2>&1 ) &
-  ( cd "$CC" && "$XTOOL" decode b.ytp b.out >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XABS" decode a.ytp a.out >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XABS" decode b.ytp b.out >/dev/null 2>&1 ) &
   wait
   cmp -s "$CORPUS/11_text_8m.bin" "$CC/a.out" || cok=0
   cmp -s "$CORPUS/23_dup_streams.bin" "$CC/b.out" || cok=0
