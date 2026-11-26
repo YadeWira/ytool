@@ -122,6 +122,8 @@ fi
 # entrada+~50 bytes, uno enganchado no. Es equivalente en poder pero hay que
 # hacerlo a mano; si alguien encuentra como capturar esa salida, este assert
 # se puede activar tambien alla y conviene hacerlo.
+# 2026-11-26: desde la CLI nueva la salida redirigida SI se captura en Windows
+# (ya no va por WriteConsole), asi que este assert ya se puede activar alla.
 CODEC_EXPECT="
 20_zlib_streams.bin|-mzlib|6
 20_zlib_streams.bin|-mpreflate|6
@@ -278,6 +280,11 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
     # Windows: la linea "Streams:" va directo a la consola y no se captura (ver
     # el LIMITE CONOCIDO de CODEC_EXPECT). Sin el conteo no hay contra que medir.
     echo "-- -x/-X: omitido, no se pudo leer 'Streams:' (salida no capturable aqui) --"
+  elif [ "$xt" -eq 0 ] && [ "${ALLOW_MISSING_CODECS:-0}" = "1" ]; then
+    # Sin libreria de zlib (el CI de Windows) no hay streams que extraer. Hasta
+    # 2026-11-26 este caso no llegaba aqui: en Windows "Streams:" no se podia
+    # capturar y la prueba se omitia arriba.
+    echo "-- -x/-X: omitido, zlib no detecto nada ($st) y ALLOW_MISSING_CODECS=1 --"
   elif [ "$na" -eq "$xt" ] && [ "$nu" -eq $((xt - xp)) ] && \
      [ "$nu" -gt 0 ] && [ "$xp" -gt 0 ] && [ "$same" = 1 ]; then
     echo "-- -x/-X: $na extraidos, $nu no procesados ($st) --"; pass=$((pass+1))
