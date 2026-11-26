@@ -131,6 +131,10 @@ EX="$STAGE/extract"; mkdir -p "$EX"
 tar xzf "$OUT/ytool-linux-x64.tar.gz" -C "$EX"
 P="$EX/ytool-linux-x64"
 CORPUS="$STAGE/corpus"
+# Como en tests/regression.sh: 75_lz4f_fast.bin tiene que salir del lz4 que
+# ytool carga. Sin LZ4_LIB lo escribe el modulo de python, otra version de lz4,
+# y el modo rapido de cada version da bytes distintos: el smoke fallaba por eso.
+if [ -f "$ROOT/liblz4.so" ]; then export LZ4_LIB="$ROOT/liblz4.so"; else unset LZ4_LIB; fi
 python3 tests/gen_corpus.py "$CORPUS" >/dev/null 2>&1 || die "no se pudo generar el corpus"
 FAILED=0
 smoke() { # codec archivo
