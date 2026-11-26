@@ -26,7 +26,10 @@
 #                         sobre el paquete ya extraido.
 #
 # Uso:
-#   contrib/package-release.sh <outdir> [--win-bin <dir-con-ytool.exe-y-ytool-x86.exe>]
+#   contrib/package-release.sh <outdir> [--x86] [--win-bin <dir-con-ytool.exe-y-ytool-x86.exe>]
+#
+# --x86 tambien arma ytool-linux-x86.tar.gz con contrib/build-linux-x86.sh
+# (hace falta FPC386=<FPC 3.2.2 i386-linux>, y ZLIB32 si no hay lib32z1-dev).
 #
 # Sin --win-bin arma solo Linux. Los binarios de Windows no se pueden construir
 # desde aca (hace falta FPC nativo en Windows), asi que se pasan ya compilados y
@@ -40,9 +43,11 @@ ok()   { echo "   ok: $*"; }
 [ $# -ge 1 ] || die "uso: $0 <outdir> [--win-bin <dir>]"
 OUT="$1"; shift
 WINBIN=""
+X86=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --win-bin) WINBIN="${2:-}"; shift 2 ;;
+    --x86) X86=1; shift ;;
     *) die "argumento desconocido: $1" ;;
   esac
 done
@@ -116,27 +121,45 @@ RM_LINUX="$ROOT/contrib/release-notes/README.linux.txt"
 grep -q "srep" "$RM_LINUX" || die "el README linux no explica que srep no viene incluido"
 ok "README linux revisado"
 
-step "armar tarball linux"
-D="$STAGE/ytool-linux-x64"; mkdir -p "$D"
-for f in $LINUX_FILES; do cp "$f" "$D/"; done
-cp "$RM_LINUX" "$D/README.txt"
-chmod +x "$D/ytool"
-( cd "$STAGE" && tar czf "$OUT/ytool-linux-x64.tar.gz" ytool-linux-x64 ) || die "tar fallo"
-DEPTH="$(tar tzf "$OUT/ytool-linux-x64.tar.gz" | awk '{n=gsub("/","/",$0); print n}' | sort -u | tr '\n' ' ')"
-[ "$DEPTH" = "1 " ] || die "el tarball tiene anidamiento '$DEPTH', se esperaba un solo nivel"
-ok "ytool-linux-x64.tar.gz ($(stat -c %s "$OUT/ytool-linux-x64.tar.gz") bytes, un nivel)"
+# Arma ytool-linux-<arch>.tar.gz desde <dir> (donde estan ytool y sus .so) y
+# prueba el paquete ya extraido: engagement, no solo round-trip.
+package_linux() { # arch dir
+  local arch="$1" src="$2"
+  step "armar tarball linux $arch"
+  local D="$STAGE/ytool-linux-$arch"; mkdir -p "$D"
+  for f in $LINUX_FILES; do
+    [ -f "$src/$f" ] || die "falta $src/$f"
+    cp "$src/$f" "$D/"
+  done
+  cp "$RM_LINUX" "$D/README.txt"
+  chmod +x "$D/ytool"
+  ( cd "$STAGE" && tar czf "$OUT/ytool-linux-$arch.tar.gz" "ytool-linux-$arch" ) || die "tar fallo"
+  local DEPTH
+  DEPTH="$(tar tzf "$OUT/ytool-linux-$arch.tar.gz" | awk '{n=gsub("/","/",$0); print n}' | sort -u | tr '\n' ' ')"
+  [ "$DEPTH" = "1 " ] || die "el tarball tiene anidamiento '$DEPTH', se esperaba un solo nivel"
+  ok "ytool-linux-$arch.tar.gz ($(stat -c %s "$OUT/ytool-linux-$arch.tar.gz") bytes, un nivel)"
 
-step "smoke del paquete linux ya extraido: engagement, no solo round-trip"
-EX="$STAGE/extract"; mkdir -p "$EX"
-tar xzf "$OUT/ytool-linux-x64.tar.gz" -C "$EX"
-P="$EX/ytool-linux-x64"
+  step "smoke del paquete linux $arch ya extraido: engagement, no solo round-trip"
+  local EX="$STAGE/extract-$arch"; mkdir -p "$EX"
+  tar xzf "$OUT/ytool-linux-$arch.tar.gz" -C "$EX"
+  P="$EX/ytool-linux-$arch"
+  FAILED=0
+  smoke pja     71_jpeg_min.bin
+  smoke brunsli 71_jpeg_min.bin
+  smoke lz4f    74_lz4f_64k.bin
+  smoke lz4f    75_lz4f_fast.bin
+  smoke zstd    76_zstd_levels.bin
+  smoke zlib    20_zlib_streams.bin
+  smoke preflate 20_zlib_streams.bin
+  [ "$FAILED" = 0 ] || die "el smoke del paquete linux $arch fallo"
+}
+
 CORPUS="$STAGE/corpus"
 # Como en tests/regression.sh: 75_lz4f_fast.bin tiene que salir del lz4 que
 # ytool carga. Sin LZ4_LIB lo escribe el modulo de python, otra version de lz4,
 # y el modo rapido de cada version da bytes distintos: el smoke fallaba por eso.
 if [ -f "$ROOT/liblz4.so" ]; then export LZ4_LIB="$ROOT/liblz4.so"; else unset LZ4_LIB; fi
 python3 tests/gen_corpus.py "$CORPUS" >/dev/null 2>&1 || die "no se pudo generar el corpus"
-FAILED=0
 smoke() { # codec archivo
   local m="$1" f="$2"
   [ -f "$CORPUS/$f" ] || { echo "   (sin material para -m$m, salteado)"; return; }
@@ -154,18 +177,23 @@ smoke() { # codec archivo
   if [ "$r" = "$l" ]; then echo "   FALLA -m$m sobre $f: no engancho (pmp=$r == literal=$l)"; FAILED=1; return; fi
   printf '   ok: -m%-9s %-20s pmp=%-8s literal=%s\n' "$m" "$f" "$r" "$l"
 }
-smoke pja     71_jpeg_min.bin
-smoke brunsli 71_jpeg_min.bin
-smoke lz4f    74_lz4f_64k.bin
-smoke lz4f    75_lz4f_fast.bin
-smoke zstd    76_zstd_levels.bin
-smoke zlib    20_zlib_streams.bin
-smoke preflate 20_zlib_streams.bin
-[ "$FAILED" = 0 ] || die "el smoke del paquete linux fallo"
+
+package_linux x64 "$ROOT"
+
+if [ "$X86" = 1 ]; then
+  step "build linux x86"
+  bash contrib/build-linux-x86.sh > "$STAGE/build-x86.log" 2>&1 || { tail -15 "$STAGE/build-x86.log" >&2; die "build-linux-x86.sh fallo"; }
+  [ build-x86/ytool -nt "$NEWEST_SRC" ] || die "build-x86/ytool es mas viejo que $NEWEST_SRC"
+  ok "construido"
+  # Un host x86-64 suele no tener libz de 32 bits instalada: la que se uso
+  # para enlazar sirve para correr el smoke.
+  [ -n "${ZLIB32:-}" ] && export LD_LIBRARY_PATH="$ZLIB32${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  package_linux x86 "$ROOT/build-x86"
+fi
 
 if [ -z "$WINBIN" ]; then
   step "listo (solo linux)"
-  echo "   $OUT/ytool-linux-x64.tar.gz"
+  ls -1 "$OUT" | sed 's/^/   /'
   echo "   para los zips de Windows: volver a correr con --win-bin <dir>"
   exit 0
 fi

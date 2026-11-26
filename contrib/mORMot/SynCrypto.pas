@@ -167,9 +167,7 @@ uses
           {$define AES_PASCAL} // as reported by alf
         {$endif DARWIN}
         {$ifdef LINUX}
-          {$ifndef AES_PASCAL}
-            {$define SHA512_X86} // external linux32/sha512-x86.o
-          {$endif AES_PASCAL}
+          // ytool: no linux32 sha512-x86.o shipped; Linux i386 uses the Pascal SHA512
         {$endif}
       {$endif FPC}
       {$ifndef AES_PASCAL}

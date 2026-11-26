@@ -6,6 +6,7 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   IOCommon,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -38,16 +39,17 @@ procedure Extract(Input1: TStream; Input2, Output: String;
 implementation
 
 procedure PrintHelpExtract;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'extract - extract sectors from files');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput,
-    '  ytool extract decode_data original_data extracted_streams ');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('extract') + ' - copy out the files a map points to');
+  WriteLine('');
+  WriteLine('Usage: ytool extract map original folder');
+  WriteLine('');
+  WriteLine('  Reads the map find or erase wrote and copies each byte range it lists');
+  WriteLine('  from original into folder, one file per entry, with its name.');
+  HelpSection('Examples');
+  WriteLine('  ytool find streams game.pak game.map');
+  WriteLine('  ytool extract game.map game.pak streams2');
+  WriteLine('');
 end;
 
 procedure ParseDecode(ParamArg: TArray<string>; out Options: TDecodeOptions);
@@ -154,12 +156,15 @@ begin
     BaseDir1 := IncludeTrailingPathDelimiter(TPath.GetFullPath(Input2))
   else
     BaseDir1 := ExtractFilePath(TPath.GetFullPath(Input2));
+  // A folder that did not exist used to send every file to its parent.
   if FileExists(Output) then
     BaseDir2 := ExtractFilePath(TPath.GetFullPath(Output))
-  else if DirectoryExists(Output) then
-    BaseDir2 := IncludeTrailingPathDelimiter(TPath.GetFullPath(Output))
   else
-    BaseDir2 := ExtractFilePath(TPath.GetFullPath(Output));
+  begin
+    if not DirectoryExists(Output) and not ForceDirectories(Output) then
+      raise Exception.CreateFmt('cannot create the folder %s', [Output]);
+    BaseDir2 := IncludeTrailingPathDelimiter(TPath.GetFullPath(Output));
+  end;
   while true do
   begin
     try

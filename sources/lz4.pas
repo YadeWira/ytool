@@ -131,15 +131,10 @@ begin
       inc(pMatch, STEPSIZE);
       continue;
     end;
-{$IFDEF WIN32}
-    asm
-      bsf eax, diff
-      shr eax, 3
-      mov incValue, eax
-    end;
-{$ELSE}
+{$IFDEF LZ4_CPU64}
     incValue := LZ4_NbCommonBytesx64(diff);
-    // x64 mode does not allow asm inline
+{$ELSE}
+    incValue := BsfDWord(diff) shr 3;   // 32-bit: STEPSIZE is 4
 {$ENDIF}
     inc(pIn, incValue);
     exit(cardinal(pIn - pStart));

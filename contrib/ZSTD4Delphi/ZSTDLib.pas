@@ -1123,6 +1123,11 @@ begin Result:=ZSTD_buildBlockEntropyStats(cctxParams,prevEntropy,nextEntropy,
 {$linklib c}
 {$L zstd4delphi.linux.x64.o}
 {$ENDIF}
+{$IFDEF CPUI386}
+{$linklib c}
+{$linklib gcc}
+{$L zstd4delphi.linux.x86.o}
+{$ENDIF}
 {$ENDIF}
 end.
 

@@ -74,6 +74,11 @@ function LzmaDecodeToEndMark(Dest: PByte; DestLen: PNativeUInt; Src: PByte;
 {$linklib c}
 {$L lzmadelphi.linux.x64.o}
 {$ENDIF}
+{$IFDEF CPUI386}
+{$linklib c}
+{$linklib gcc}
+{$L lzmadelphi.linux.x86.o}
+{$ENDIF}
 {$ENDIF}
 
 end.

@@ -421,7 +421,7 @@ type
     FDone, FFirstRead, FLastRead: Boolean;
   public
     constructor Create(AInput: TStream; ADynamic: Boolean;
-      ASlots, ASize: NativeInt; ATempFile: String = 'datastore.tmp');
+      ASlots, ASize: NativeInt; ATempFile: String = '');
     destructor Destroy; override;
     procedure ChangeInput(AInput: TStream);
     function Read(Index: Integer; Position: NativeInt; var Buffer;
@@ -799,9 +799,30 @@ end;
   since they're MSVC compiler intrinsics, not actual DLL symbols). Every
   Int64 atomic op below is built as a compare-and-swap retry loop on top of
   that one real primitive. }
+{$IFDEF MSWINDOWS}
 function Win32InterlockedCompareExchange64(var Destination: Int64;
   Exchange, Comparand: Int64): Int64; stdcall;
   external 'kernel32' name 'InterlockedCompareExchange64';
+{$ELSE}
+{ Linux i386: no kernel32, so the same primitive straight from the CPU
+  (lock cmpxchg8b, Pentium and later). Returns the value Destination had. }
+{$ASMMODE INTEL}
+function Win32InterlockedCompareExchange64(var Destination: Int64;
+  Exchange, Comparand: Int64): Int64; stdcall; assembler; nostackframe;
+asm
+  push ebx
+  push edi
+  mov edi, [esp + 12]
+  mov ebx, [esp + 16]
+  mov ecx, [esp + 20]
+  mov eax, [esp + 24]
+  mov edx, [esp + 28]
+  lock cmpxchg8b [edi]
+  pop edi
+  pop ebx
+  ret 20
+end;
+{$ENDIF}
 {$ENDIF}
 
 function AtomicIncrement(var Target: Int64): Int64;
@@ -2986,6 +3007,11 @@ begin
   FSync.Init;
   FInput := AInput;
   FTemp := nil;
+  // Was 'datastore.tmp' for every run: two find/erase/replace/generate in
+  // one folder shared it. The process ID keeps them apart.
+  if ATempFile = '' then
+    ATempFile := 'ytool_' + GetProcessID.ToString + '_' +
+      IntToHex(Random($7FFFFFFF), 8) + '-datastore.tmp';
   FTempFile := ATempFile;
   FTempPos := 0;
   FDynamic := ADynamic;

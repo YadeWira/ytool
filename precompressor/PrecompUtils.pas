@@ -580,7 +580,10 @@ procedure TPrecompVMStream.Initialise;
 begin
   if FInitialised then
     exit;
+  // Was ytool-vm.tmp for every run, and an existing one was deleted first:
+  // a second decode in the same folder removed the first one's cache.
   FFilename := LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
+    '_' + GetProcessID.ToString + '_' + IntToHex(Random($7FFFFFFF), 8) +
     FSuffix));
   if FileExists(FFilename) then
     DeleteFile(FFilename);

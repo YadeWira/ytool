@@ -427,6 +427,11 @@ end;
 {$linklib c}
 {$L xxhash4delphi.linux.x64.o}
 {$ENDIF}
+{$IFDEF CPUI386}
+{$linklib c}
+{$linklib gcc}
+{$L xxhash4delphi.linux.x86.o}
+{$ENDIF}
 {$ENDIF}
 
 end.

@@ -6,6 +6,7 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   IOCommon,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -49,21 +50,21 @@ var
   InfoStore: TArray<TListEx<TEntryStruct1>>;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'erase - blank out sectors within files');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput,
-    '  ytool erase [parameters] extracted_streams original_data [decode_data]');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Parameters:');
-  WriteLn(ErrOutput, '  -c#  - scanning range [16mb]');
-  WriteLn(ErrOutput, '  -t#  - number of working threads [50p]');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('erase') + ' - blank out the places where some files sit inside a bigger one');
+  WriteLine('');
+  WriteLine('Usage: ytool erase [options] streams original [map]');
+  WriteLine('');
+  WriteLine('  Like find, and then fills each match in original with zeros, ' + UIYellow('in place') + ':');
+  WriteLine('  work on a copy. The size does not change. With map, decode puts the');
+  WriteLine('  streams back: ytool decode map streams original.');
+  HelpSection('Examples');
+  WriteLine('  ytool erase streams game.pak game.map');
+  WriteLine('  ytool decode game.map streams game.pak');
+  HelpSection('Options');
+  HelpOption('-c#', 'how much of original is searched at a time', '16mb');
+  HelpOption('-t#', 'threads (a number, or a share of the CPUs)', '50p');
+  WriteLine('');
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);

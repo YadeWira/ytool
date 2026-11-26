@@ -14,6 +14,8 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 XTOOL="${XTOOL:-$ROOT/ytool}"
+# ytool looks for srep and osrep next to itself, so that is where to check
+XDIR="$(cd "$(dirname "$XTOOL")" && pwd)"
 WORK="$(mktemp -d)"
 CORPUS="$WORK/corpus"
 # Failure artifacts must live OUTSIDE $WORK: the trap below wipes $WORK on exit,
@@ -294,18 +296,38 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   fi
 fi
 
+# --- dos ytool a la vez en la misma carpeta ----------------------------------
+# Hasta 0.9.9b el archivo temporal de -dd se llamaba siempre ytool-dd.tmp, en
+# el directorio actual: dos precomp con -dd en una carpeta escribian uno en el
+# del otro y el .ytp no decodificaba (encontrado corriendo dos suites juntas).
+if [ -x "$XTOOL" ] && [ -f "$CORPUS/11_text_8m.bin" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
+  CC="$WORK/concurrent"; rm -rf "$CC"; mkdir -p "$CC"; cok=1
+  ( cd "$CC" && "$XTOOL" precomp -mzlib -dd "$CORPUS/11_text_8m.bin" a.ytp >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XTOOL" precomp -mzlib -dd "$CORPUS/23_dup_streams.bin" b.ytp >/dev/null 2>&1 ) &
+  wait
+  # decode a la vez tambien, desde la misma carpeta (ytool-vm.tmp era fijo)
+  ( cd "$CC" && "$XTOOL" decode a.ytp a.out >/dev/null 2>&1 ) &
+  ( cd "$CC" && "$XTOOL" decode b.ytp b.out >/dev/null 2>&1 ) &
+  wait
+  cmp -s "$CORPUS/11_text_8m.bin" "$CC/a.out" || cok=0
+  cmp -s "$CORPUS/23_dup_streams.bin" "$CC/b.out" || cok=0
+  ls "$CC"/*.tmp >/dev/null 2>&1 && cok=0
+  if [ "$cok" = 1 ]; then echo "-- dos precomp/decode -dd a la vez en una carpeta: ok --"; pass=$((pass+1))
+  else echo "-- *** dos precomp/decode -dd a la vez en una carpeta: fallo *** --"; fail=$((fail+1)); fi
+fi
+
 # --- -ddo: OSREP como dedup externo -----------------------------------------
 # Corre si hay un osrep junto a ytool (no viene en el repo; releases de
 # YadeWira/omega-srep). Ida y vuelta con y sin -osp, y un .ytp hecho con -ddo
 # tiene que pedir osrep al decodificar si falta, no fallar con un error mudo.
-if [ -x "$XTOOL" ] && [ -x "$ROOT/osrep" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
+if [ -x "$XTOOL" ] && [ -x "$XDIR/osrep" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
   DO="$CORPUS/23_dup_streams.bin"; dok=1
   for o in "-ddo" "-ddo -ospm3:l64"; do
     "$XTOOL" precomp -mzlib $o "$DO" "$WORK/do.ytp" >/dev/null 2>&1 && \
       "$XTOOL" decode "$WORK/do.ytp" "$WORK/do.out" >/dev/null 2>&1 && \
       cmp -s "$DO" "$WORK/do.out" || { dok=0; echo "-- *** -ddo [$o]: fallo *** --"; }
   done
-  FK="$WORK/noosrep"; rm -rf "$FK"; mkdir -p "$FK"; cp "$XTOOL" "$FK/ytool"; cp "$ROOT"/*.so "$FK/" 2>/dev/null
+  FK="$WORK/noosrep"; rm -rf "$FK"; mkdir -p "$FK"; cp "$XTOOL" "$FK/ytool"; cp "$XDIR"/*.so "$FK/" 2>/dev/null
   "$FK/ytool" decode "$WORK/do.ytp" "$FK/x.out" > "$FK/log" 2>&1 && dok=0
   grep -q 'put "osrep" next to ytool' "$FK/log" || { dok=0; echo "-- *** -ddo sin osrep: sin el mensaje *** --"; }
   if [ "$dok" = 1 ]; then echo "-- -ddo: ida y vuelta (con y sin -osp), y pide osrep si falta --"; pass=$((pass+1)); else fail=$((fail+1)); fi
@@ -795,7 +817,7 @@ fi
 #   2. El output de srep no era reproducible (clave VMAC aleatoria). Con -seed
 #      dos corridas tienen que dar el MISMO .ytp; sin eso no se puede fijar un
 #      archivo por hash ni comparar dos builds.
-if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
+if [ -x "$XTOOL" ] && [ -f "$XDIR/srep64" -o -f "$XDIR/srep" -o -f "$XDIR/srep.exe" ]; then
   SEED="$(printf 'ab%.0s' $(seq 1 32))"
   SP1="$WORK/rep1.ytp"; SP2="$WORK/rep2.ytp"; SPR="$WORK/rep.out"
   if "$XTOOL" precomp -mzlib -dd3 -seed"$SEED" "$CORPUS/23_dup_streams.bin" "$SP1" >/dev/null 2>&1 \
@@ -827,10 +849,11 @@ if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
   # junto a una copia de ytool tiene que dar exit != 0 y el mensaje de srep.
   if [ "$(uname -s)" = Linux ] && [ -f "$XTOOL" ]; then
     FK="$WORK/fakesrep"; rm -rf "$FK"; mkdir -p "$FK"
-    cp "$XTOOL" "$FK/ytool"; cp "$ROOT"/*.so "$FK/" 2>/dev/null
+    cp "$XTOOL" "$FK/ytool"; cp "$XDIR"/*.so "$FK/" 2>/dev/null
+    # srep64 is what a 64-bit ytool runs, srep a 32-bit one
     printf '#!/bin/sh\necho "  ERROR! simulated failure" >&2\nexit 4\n' > "$FK/srep64"
-    chmod +x "$FK/srep64"
-    # desde $FK: ytool-dd.tmp (la copia que srep lee) va al directorio actual
+    cp "$FK/srep64" "$FK/srep"; chmod +x "$FK/srep64" "$FK/srep"
+    # desde $FK: ytool_<pid>_<n>-dd.tmp (la copia que srep lee) va al directorio actual
     if ( cd "$FK" && ./ytool precomp -mzlib -dd3 "$CORPUS/23_dup_streams.bin" o.ytp > log 2>&1 ); then
       echo "-- srep: *** un srep que falla dio exit 0 *** --"; fail=$((fail+1))
     elif grep -q "simulated failure" "$FK/log"; then
@@ -838,7 +861,7 @@ if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
     else
       echo "-- srep: *** fallo sin el mensaje de srep *** --"; fail=$((fail+1))
     fi
-    [ -e "$FK/ytool-dd.tmp" ] && { echo "-- srep: *** quedo ytool-dd.tmp *** --"; fail=$((fail+1)); }
+    ls "$FK"/*-dd.tmp >/dev/null 2>&1 && { echo "-- srep: *** quedo un -dd.tmp *** --"; fail=$((fail+1)); }
   fi
 fi
 

@@ -4,6 +4,7 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   DbgUtils,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -56,22 +57,23 @@ var
   InfoStore: TArray<TListEx<TEntryStruct>>;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'generate - database generator');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput,
-    '  ytool generate [parameters] extracted_streams original_data database_output');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Parameters:');
-  WriteLn(ErrOutput, '  -m#  - codec to use for precompression');
-  WriteLn(ErrOutput, '  -c#  - scanning range [16mb]');
-  WriteLn(ErrOutput, '  -t#  - number of working threads [50p]');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('generate') + ' - build a database of known streams for precomp');
+  WriteLine('');
+  WriteLine('Usage: ytool generate [options] streams original database');
+  WriteLine('');
+  WriteLine('  Finds each file of the streams folder in original and writes their');
+  WriteLine('  signatures and the codec given with -m. Saved next to ytool as');
+  WriteLine('  <name>.xtl it becomes a codec: precomp -m<name> finds those streams');
+  WriteLine('  by their signatures and processes them with that codec.');
+  HelpSection('Examples');
+  WriteLine('  ytool generate -mzlib streams game.pak game.xtl');
+  WriteLine('  ytool precomp -mgame game.pak game.ytp');
+  HelpSection('Options');
+  HelpOption('-m<codec>', 'the codec the streams are processed with');
+  HelpOption('-c#', 'how much of original is searched at a time', '16mb');
+  HelpOption('-t#', 'threads (a number, or a share of the CPUs)', '50p');
+  WriteLine('');
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);

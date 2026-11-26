@@ -273,7 +273,7 @@ var
   ArgParse: TArgParser;
   ExpParse: TExpressionParser;
   List: TStringDynArray;
-  I, J: Integer;
+  I, J, DDMethod: Integer;
   S, A, F: String;
   B: Boolean;
 begin
@@ -357,34 +357,32 @@ begin
                 WriteLine(Format('%s: -ddo needs "%s" next to ytool; using ' +
                   'in-memory dedup (-dd).', ['warning', OSREPEXE]));
             end
-            else if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
-              if S.Length > 1 then
+            else if S.Length > 1 then
+            begin
+              // El numero ES el metodo de srep (-dd3 -> srep -m3f), y srep solo
+              // tiene del 0 al 5. Con -dd9 el helper salia con error y quedaba
+              // un .ytp de 34 bytes con exit 0. Se valida ANTES de mirar si
+              // srep esta: sin srep, -dd9 se aceptaba y degradaba a -dd, y
+              // -dd12 se leia como -dd1 (solo se miraba el primer digito).
+              DDMethod := StrToIntDef(S.Substring(1), -1);
+              if not InRange(DDMethod, 0, SREP_METHOD_MAX) then
+                raise Exception.CreateFmt
+                  ('-dd%s does not exist: srep has methods 1..%d ' +
+                  '(the number is the method: -dd3 = srep -m3f)',
+                  [S.Substring(1), SREP_METHOD_MAX]);
+              // La degradacion a dedup en memoria era silenciosa: pedias -dd1
+              // y obtenias -dd sin una linea de aviso. Si una etapa no puede
+              // correr, que se vea.
+              if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               begin
-                StoreDD := StrToInt(S[2]);
+                StoreDD := DDMethod;
                 if StoreDD > 0 then
                   SrepCheckVersion;
-              end;
-            // El digito ES el metodo de srep (-dd3 -> srep -m3f), y srep solo
-            // tiene del 0 al 5. Con -dd9 el helper sale con error, ytool no
-            // mira su exit code, y el resultado era un .ytp de 34 bytes con
-            // exit 0: el unico sintoma, tres "0.00 MB" en el resumen. Un valor
-            // fuera de rango es un error de linea de comandos, no algo que
-            // degradar, asi que se rechaza antes de empezar.
-            if (StoreDD >= 0) and (StoreDD <> DD_OSREP) and
-              (StoreDD > SREP_METHOD_MAX) then
-              raise Exception.CreateFmt
-                ('-dd%d no existe: srep solo tiene los metodos 1..%d ' +
-                '(el numero es el metodo: -dd3 = srep -m3f).',
-                [StoreDD, SREP_METHOD_MAX]);
-            // La degradacion a dedup en memoria era silenciosa: pedias -dd1
-            // (srep externo) y obtenias -dd (memoria) sin una linea de aviso,
-            // con la unica pista en el numero de etapas del resumen de tamanos.
-            // Mismo criterio que la suite usa para los codecs: si una etapa no
-            // puede correr, que se vea.
-            if (StoreDD = -1) and (S.Length > 1) and not S.StartsWith('do') then
-              WriteLine(Format('%s: el dedup externo (-dd%s) necesita "%s" junto ' +
-                'a ytool; se usara dedup en memoria (-dd).',
-                ['aviso', S.Substring(1), SREPEXE]));
+              end
+              else
+                WriteLine(Format('%s: -dd%s needs "%s" next to ytool; using ' +
+                  'in-memory dedup (-dd).', ['warning', S.Substring(1), SREPEXE]));
+            end;
           end;
         'f':
           begin
@@ -538,8 +536,8 @@ begin
             B := False;
       if not B then
         raise Exception.CreateFmt
-          ('-seed necesita exactamente 64 digitos hexadecimales (32 bytes, el ' +
-          'tamano de la clave VMAC de srep); recibido: "%s" (%d caracteres).',
+          ('-seed needs exactly 64 hex digits (32 bytes, the size of ' +
+          'srep''s VMAC key); got "%s" (%d characters)',
           [SrepSeed, Length(SrepSeed)]);
       // Se le pasa al hijo como variable de entorno, no por la linea de
       // comandos: srep no tiene opcion para esto y agregarla tocaria su parser.
@@ -593,19 +591,25 @@ begin
     OPTIMISE_DEC := ArgParse.AsBoolean('-o');
     FULLSCAN := ArgParse.AsBoolean('-f');
     PATCH_ALL := ArgParse.AsBoolean('-pa');
+    // -x<dir> / -X<dir> used to be ignored, silently, when dir did not exist:
+    // the run went on and wrote nothing there. Now dir is created, and a dir
+    // that cannot be created is an error.
     Options.ExtractDir := ArgParse.AsString('-x');
     if Options.ExtractDir <> '' then
-      EXTRACT := DirectoryExists(Options.ExtractDir);
+      EXTRACT := True;
     // 0.8.5: -X<dir> extracts ONLY the streams that could not be processed.
     if not EXTRACT then
     begin
       Options.ExtractDir := ArgParse.AsString('-X');
       if Options.ExtractDir <> '' then
       begin
-        EXTRACT := DirectoryExists(Options.ExtractDir);
-        EXTRACT_UNPROCESSED := EXTRACT;
+        EXTRACT := True;
+        EXTRACT_UNPROCESSED := True;
       end;
     end;
+    if EXTRACT and not DirectoryExists(Options.ExtractDir) and
+      not ForceDirectories(Options.ExtractDir) then
+      raise Exception.CreateFmt('cannot create the folder %s', [Options.ExtractDir]);
     EXTCOMP := ArgParse.AsString('-e');
     if FileExists(ExpandPath(PluginsPath + ExtractExec(EXTCOMP), True)) then
       COMPRESS := 2;
@@ -741,7 +745,12 @@ var
   // incremental porque en el camino no-MT los bytes se escriben directo al
   // stream de salida y nunca quedan en un buffer contiguo que se pueda hashear
   // despues.
-  VerifySt: TArray<XXH3_state_t>;
+  // XXH3's state must be 64-byte aligned (its C struct says so, and the SSE2
+  // code relies on it): FPC's heap gives 16 on x86-64 but only 8 on i386,
+  // where an array of records crashed in XXH3_128bits_reset. So each state
+  // lives in its own block, aligned by hand; VerifyMem keeps what to free.
+  VerifySt: TArray<PXXH3_state_t>;
+  VerifyMem: TArray<Pointer>;
   VerifyOn: TArray<Boolean>;
   ThrIdx: TArray<Integer>;
   WorkStream: TArray<TMemoryStreamEx2>;
@@ -2155,8 +2164,11 @@ begin
       begin
         DataStore := TDataStore1.Create(Input, True, Length(InfoStore1),
           Options^.ChunkSize,
+          // The process ID keeps two ytool runs in one folder apart: Random
+          // alone is not seeded in every build, so both drew the same name.
           LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
-          '_' + Random($7FFFFFFF).ToHexString + '-storage.tmp')));
+          '_' + GetProcessID.ToString + '_' + Random($7FFFFFFF).ToHexString +
+          '-storage.tmp')));
         IntArray[0] := Options^.ChunkSize;
         // The number of chunk slots. This was "I", the variable of the for
         // loop just above, whose value after the loop is undefined; it came
@@ -2710,7 +2722,12 @@ begin
     else if StoreDD > -2 then
       LOutput := TBufferedStream.Create
         (TFileStream.Create
+        // Was ytool-dd.tmp for every run: two precomps with -dd in one folder
+        // wrote into each other's file, and the result did not decode (the
+        // XTP2 check caught it). In the current folder still, not the temp
+        // one: it is as big as the output, and /tmp is often in memory.
         (LowerCase(ChangeFileExt(ExtractFileName(Utils.GetModuleName),
+        '_' + GetProcessID.ToString + '_' + IntToHex(Random($7FFFFFFF), 8) +
         '-dd.tmp')), fmCreate or fmShareDenyNone), False, YTOOL_BSIZE)
     else
       LOutput := Output;
@@ -3314,7 +3331,7 @@ begin
   // despues de Restore porque en el camino no-MT estos bytes se escriben
   // directo a la salida y no quedan en ningun buffer.
   if VerifyOn[Instance] then
-    XXH3_128bits_update(VerifySt[Instance], Buffer, Size);
+    XXH3_128bits_update(VerifySt[Instance]^, Buffer, Size);
   with ComVars2[CurDepth[Instance]] do
     DecOutput[Instance].WriteBuffer(Buffer^, Size);
   if (StoreDD > -2) and (CurDepth[Instance] = 0) then
@@ -3337,7 +3354,7 @@ begin
   // despues de Restore porque en el camino no-MT estos bytes se escriben
   // directo a la salida y no quedan en ningun buffer.
   if VerifyOn[Instance] then
-    XXH3_128bits_update(VerifySt[Instance], Buffer, Size);
+    XXH3_128bits_update(VerifySt[Instance]^, Buffer, Size);
   with ComVars2[CurDepth[Instance]] do
     MemOutput1[Instance].WriteBuffer(Buffer^, Size);
 end;
@@ -3507,7 +3524,7 @@ begin
       VerifyOn[Index2] := (Depth = 0) and
         not((SH^.Checksum.low64 = 0) and (SH^.Checksum.high64 = 0));
       if VerifyOn[Index2] then
-        XXH3_128bits_reset(VerifySt[Index2]);
+        XXH3_128bits_reset(VerifySt[Index2]^);
       if (Codecs[SH^.Codec].Restore(Index2, Depth, Ptr1, Ptr2, SI, LOutput,
         @PrecompFunctions) = False) then
       begin
@@ -3518,7 +3535,7 @@ begin
       if VerifyOn[Index2] then
       begin
         VerifyOn[Index2] := False;
-        VerifyHash := XXH3_128bits_digest(VerifySt[Index2]);
+        VerifyHash := XXH3_128bits_digest(VerifySt[Index2]^);
         // Esto es lo que antes no existia: hasta ahora el decode aceptaba un
         // stream restaurado comparando SOLO el tamano, asi que una corrupcion
         // en el cuerpo salia con exit 0 y datos distintos. Medido: 40 de 40
@@ -3588,6 +3605,12 @@ begin
     SetLength(Tasks, Options^.Threads);
   SetLength(CurCodec, Options^.Threads);
   SetLength(VerifySt, Options^.Threads);
+  SetLength(VerifyMem, Options^.Threads);
+  for I := 0 to Pred(Options^.Threads) do
+  begin
+    GetMem(VerifyMem[I], SizeOf(XXH3_state_t) + 128);
+    VerifySt[I] := Pointer((PtrUInt(VerifyMem[I]) + 63) and not PtrUInt(63));
+  end;
   SetLength(VerifyOn, Options^.Threads);
   SetLength(CurDepth, Options^.Threads);
   SetLength(WorkStream, Options^.Threads);
@@ -3667,6 +3690,10 @@ var
 begin
   WaitForAll(Tasks);
   CodecFree(Length(ThreadSync));
+  for I := Low(VerifyMem) to High(VerifyMem) do
+    FreeMem(VerifyMem[I]);
+  VerifyMem := nil;
+  VerifySt := nil;
   for J := Low(ComVars2) to High(ComVars2) do
     with ComVars2[J] do
     begin

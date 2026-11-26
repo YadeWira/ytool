@@ -135,11 +135,11 @@ begin
   Cmd(CommandPrecomp, 'find compressed streams and unpack them into a .ytp file');
   Cmd(CommandDecode, 'rebuild the original from a .ytp file, byte for byte');
   Cmd(CommandAnalyze, 'try each codec on a file and recommend a -m combination');
-  Cmd(CommandGenerate, 'build a database of streams for a precomp run');
-  Cmd(CommandFind, 'search for sectors within files');
-  Cmd(CommandExtract, 'extract sectors from files');
-  Cmd(CommandErase, 'blank out sectors within files');
-  Cmd(CommandReplace, 'replace sectors with another within files');
+  Cmd(CommandGenerate, 'build a database of known streams, a codec for precomp');
+  Cmd(CommandFind, 'find where some files sit inside a bigger one');
+  Cmd(CommandExtract, 'copy out the files a map from find points to');
+  Cmd(CommandErase, 'blank out those files inside the bigger one');
+  Cmd(CommandReplace, 'swap those files for new versions');
   Cmd(CommandExecute, 'run a program on chunks of a file, in parallel');
   HelpSection('Examples');
   WriteLine('  ytool precomp -mzlib+zstd+pja game.pak game.ytp');

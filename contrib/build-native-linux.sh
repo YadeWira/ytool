@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rebuilds the native C objects (lz4/zstd/lzma) for Linux x86-64 (Option C of
-# the migration to FPC). Output: contrib/{LZ4Delphi,ZSTD4Delphi,LZMADelphi}/*.linux.x64.o
+# Rebuilds the native C objects (lz4/zstd/lzma) for Linux x86-64, or i386 with ARCH=x86 (Option C of
+# the migration to FPC). Output: contrib/{LZ4Delphi,ZSTD4Delphi,LZMADelphi}/*.linux.$ARCH.o
 #
 # Sources expected in contrib/.csrc (gitignored). If missing, they are fetched:
 #   zstd v1.5.2 (must match ZSTD_VERSION_STRING in ZSTDLib.pas)
@@ -13,7 +13,7 @@
 #  - zstd: -DZSTD_DISABLE_ASM (avoids huf_decompress .S files; uses C fallback,
 #    identical output). xxhash.c is NOT included: zstd leaves XXH64 undefined.
 #  - lz4: does NOT include xxhash.c either (XXH32 left undefined).
-#  - xxhash4delphi.linux.x64.o is the sole owner of the XXH* symbols; both are
+#  - xxhash4delphi.linux.$ARCH.o is the sole owner of the XXH* symbols; both are
 #    resolved from it at final link, which avoids XXH* clashes.
 #  - lzma: single-threaded (_7ZIP_ST/Z7_ST, avoids needing Threads.c); LzFind.c is the
 #    match finder LzmaEnc.c needs. lzmadelphi.c adds two small wrappers on top of
@@ -22,6 +22,15 @@
 #    variant real encoders (e.g. "xz --format=lzma") actually produce.
 set -euo pipefail
 cd "$(dirname "$0")"                 # contrib/
+
+# ARCH=x86 builds the i386 objects (*.linux.x86.o) with gcc -m32, for the
+# Linux x86 build of ytool (needs libc6-dev-i386 / gcc-multilib).
+ARCH="${ARCH:-x64}"
+case "$ARCH" in
+  x64) M="" ;;
+  x86) M="-m32 -msse2" ;;   # SSE2 is not baseline on i386 (xxHash needs it)
+  *) echo "ARCH must be x64 or x86" >&2; exit 2 ;;
+esac
 CSRC="$(pwd)/.csrc"
 mkdir -p "$CSRC"
 
@@ -53,27 +62,27 @@ pin_repo https://github.com/Cyan4973/xxHash "$CSRC/xxhash" "$XXHASH_REF"
 . "$(dirname "$CSRC")/fetch-lzma-sdk.sh"
 fetch_lzma_sdk || exit 1
 
-echo "==> xxhash4delphi.linux.x64.o (dueno unico de los simbolos XXH*, incl. XXH3)"
-gcc -c -O2 -fPIC -I "$CSRC/xxhash" \
-  -o XXHASH4Delphi/xxhash4delphi.linux.x64.o XXHASH4Delphi/xxhash4delphi.SSE2.c
+echo "==> xxhash4delphi.linux.$ARCH.o (dueno unico de los simbolos XXH*, incl. XXH3)"
+gcc $M -c -O2 -fPIC -I "$CSRC/xxhash" \
+  -o XXHASH4Delphi/xxhash4delphi.linux.$ARCH.o XXHASH4Delphi/xxhash4delphi.SSE2.c
 
-echo "==> zstd4delphi.linux.x64.o"
-gcc -c -O2 -fPIC -DZSTD_DISABLE_ASM \
+echo "==> zstd4delphi.linux.$ARCH.o"
+gcc $M -c -O2 -fPIC -DZSTD_DISABLE_ASM \
   -I "$CSRC/zstd/lib" -I "$CSRC/zstd/lib/common" \
   -I "$CSRC/zstd/lib/compress" -I "$CSRC/zstd/lib/decompress" \
-  -o ZSTD4Delphi/zstd4delphi.linux.x64.o ZSTD4Delphi/zstd4delphi.c
+  -o ZSTD4Delphi/zstd4delphi.linux.$ARCH.o ZSTD4Delphi/zstd4delphi.c
 
-echo "==> lz4delphi.linux.x64.o (SIN xxhash; usa el objeto xxhash de arriba)"
+echo "==> lz4delphi.linux.$ARCH.o (SIN xxhash; usa el objeto xxhash de arriba)"
 cat > "$CSRC/lz4delphi_lin.c" <<'EOF'
 #include "lz4.c"
 #include "lz4hc.c"
 #include "lz4frame.c"
 EOF
-gcc -c -O2 -fPIC -I "$CSRC/lz4/lib" \
-  -o LZ4Delphi/lz4delphi.linux.x64.o "$CSRC/lz4delphi_lin.c"
+gcc $M -c -O2 -fPIC -I "$CSRC/lz4/lib" \
+  -o LZ4Delphi/lz4delphi.linux.$ARCH.o "$CSRC/lz4delphi_lin.c"
 
-echo "==> lzmadelphi.linux.x64.o"
-gcc -c -O2 -fPIC -I "$LZMA_SDK_C" \
-  -o LZMADelphi/lzmadelphi.linux.x64.o LZMADelphi/lzmadelphi.c
+echo "==> lzmadelphi.linux.$ARCH.o"
+gcc $M -c -O2 -fPIC -I "$LZMA_SDK_C" \
+  -o LZMADelphi/lzmadelphi.linux.$ARCH.o LZMADelphi/lzmadelphi.c
 
 echo "OK: objetos Linux generados."

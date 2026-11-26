@@ -1299,6 +1299,11 @@ implementation
 {$linklib c}
 {$L lz4delphi.linux.x64.o}
 {$ENDIF}
+{$IFDEF CPUI386}
+{$linklib c}
+{$linklib gcc}
+{$L lz4delphi.linux.x86.o}
+{$ENDIF}
 {$ENDIF}
   end.
 

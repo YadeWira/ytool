@@ -6,6 +6,7 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   IOCommon,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -50,21 +51,21 @@ var
   InfoStore: TArray<TListEx<TEntryStruct1>>;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'find - search for sectors within files');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput,
-    '  ytool find [parameters] extracted_streams original_data [decode_data]');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Parameters:');
-  WriteLn(ErrOutput, '  -c#  - scanning range [16mb]');
-  WriteLn(ErrOutput, '  -t#  - number of working threads [50p]');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('find') + ' - find where some files sit inside a bigger one');
+  WriteLine('');
+  WriteLine('Usage: ytool find [options] streams original [map]');
+  WriteLine('');
+  WriteLine('  Searches original for each file in the streams folder (for example the');
+  WriteLine('  streams precomp -x wrote) and writes map: which file is at which offset.');
+  WriteLine('  extract, and decode after erase, read that map. original is not changed.');
+  HelpSection('Examples');
+  WriteLine('  ytool precomp -mzlib -xstreams game.pak game.ytp');
+  WriteLine('  ytool find streams game.pak game.map');
+  HelpSection('Options');
+  HelpOption('-c#', 'how much of original is searched at a time', '16mb');
+  HelpOption('-t#', 'threads (a number, or a share of the CPUs)', '50p');
+  WriteLine('');
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);

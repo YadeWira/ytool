@@ -5,6 +5,7 @@ interface
 uses
   InitCode,
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   IOCommon,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -51,20 +52,26 @@ const
   STATE_DONE = 3;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'execute - parallel program execution');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput, '  ytool execute [parameters] input output [exec_syntax]');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Parameters:');
-  WriteLn(ErrOutput, '  -c#  - chunk size [64mb]');
-  WriteLn(ErrOutput, '  -t#  - number of working threads [50p]');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('execute') + ' - run a program on chunks of a file, in parallel');
+  WriteLine('');
+  WriteLine('Usage: ytool execute [options] input output program [arguments]');
+  WriteLine('');
+  WriteLine('  Cuts input in chunks, runs program on each (several at once) and joins');
+  WriteLine('  the results in output. decode gives back input with the reverse program:');
+  WriteLine('  ytool decode output input program [arguments].');
+  WriteLine('');
+  WriteLine('  In the arguments, how the program gets and returns each chunk:');
+  HelpOption('{stdin} {stdout}', 'through its standard input / output');
+  HelpOption('{filein} {fileout}', 'through files, named data.in and data.out');
+  HelpOption('[filein] [fileout]', 'through files, with their names passed as arguments');
+  HelpSection('Examples');
+  WriteLine('  ytool execute -c32mb game.pak game.gz gzip -c {stdin} {stdout}');
+  WriteLine('  ytool decode game.gz game.pak gzip -dc {stdin} {stdout}');
+  HelpSection('Options');
+  HelpOption('-c#', 'chunk size', '64mb');
+  HelpOption('-t#', 'threads (a number, or a share of the CPUs)', '50p');
+  WriteLine('');
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);

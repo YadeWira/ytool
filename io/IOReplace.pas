@@ -6,6 +6,7 @@ interface
 
 uses
   Threading, Utils, SynCommons, SynCrypto, ParseClass, ParseExpr,
+  CliUI, PrecompHelp,
   IOCommon,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -50,21 +51,20 @@ var
   InfoStore: TArray<TListEx<TEntryStruct1>>;
 
 procedure PrintHelp;
-var
-  I, J: Integer;
-  S: string;
 begin
-  WriteLn(ErrOutput, 'replace - replace sectors with another within files');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Usage:');
-  WriteLn(ErrOutput,
-    '  ytool replace [parameters] old_streams new_streams original_data [decode_data]');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, '');
-  WriteLn(ErrOutput, 'Parameters:');
-  WriteLn(ErrOutput, '  -c#  - scanning range [16mb]');
-  WriteLn(ErrOutput, '  -t#  - number of working threads [50p]');
-  WriteLn(ErrOutput, '');
+  WriteLine(UIBold('replace') + ' - swap files inside a bigger one for new versions');
+  WriteLine('');
+  WriteLine('Usage: ytool replace [options] old new original [map]');
+  WriteLine('');
+  WriteLine('  Finds each file of the old folder in original and writes over it, ' + UIYellow('in place') + ',');
+  WriteLine('  the file with the same name in the new folder (up to the shorter of the');
+  WriteLine('  two). Work on a copy. Known issue: it sometimes exits with code 2.');
+  HelpSection('Examples');
+  WriteLine('  ytool replace old new game.pak game.map');
+  HelpSection('Options');
+  HelpOption('-c#', 'how much of original is searched at a time', '16mb');
+  HelpOption('-t#', 'threads (a number, or a share of the CPUs)', '50p');
+  WriteLine('');
 end;
 
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds ytool's external plugins/codecs for Linux x86-64 from open source
+# Builds ytool's external plugins/codecs for Linux x86-64 (or i386 with
+# ARCH=x86, into OUT=<dir>) from open source
 # and leaves them as .so / binaries in the repo root (next to the ytool
 # executable, which is the default PluginsPath). These artifacts are gitignored
 # (regenerable). Different from contrib/build-native-linux.sh, which builds the
@@ -27,6 +28,18 @@ BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no
 CXX="$(command -v clang++ || command -v g++)"
 CC="$(command -v gcc || command -v clang || command -v cc)"
 
+# ARCH=x86: the same libraries for Linux i386 (gcc -m32; needs gcc-multilib and
+# g++-multilib), written to $OUT instead of the repo root, where the x86-64
+# ones live. ARCH=x64 (the default) is unchanged.
+ARCH="${ARCH:-x64}"
+case "$ARCH" in
+  x64) M=""; OUT="${OUT:-$ROOT}" ;;
+  x86) M="-m32 -msse2"; OUT="${OUT:?ARCH=x86 needs OUT=<dir> (the x86-64 libraries are in the repo root)}"
+       CXX="$(command -v g++)"; CC="$(command -v gcc)" ;;
+  *) echo "ARCH must be x64 or x86" >&2; exit 2 ;;
+esac
+mkdir -p "$OUT"
+
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
 # lz4 pinned by SHA, not by tag (see contrib/pin-repo.sh).
@@ -48,15 +61,15 @@ LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 # distro 1.5.7 still restore, and .zst files from a current zstd reproduce.
 # Own checkout: $CSRC/zstd stays at v1.5.2 for the compiled-in objects.
 ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
-echo "==> libzstd.so (x86-64)"
+echo "==> libzstd.so ($ARCH)"
 pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 # ZSTD_MULTITHREAD: the zstd CLI writes with one worker thread by default (-T1),
 # whose bytes differ from single-threaded zstd above a job's size; without it
 # libzstd refuses nbWorkers and such frames (level 1 over ~2 MB, for one) could
 # not be reproduced. Single-threaded output does not change.
-( cd "$CSRC/zstd-lib/lib" && "$CC" -shared -fPIC -O2 -Wl,-Bsymbolic -DZSTD_DISABLE_ASM \
+( cd "$CSRC/zstd-lib/lib" && "$CC" $M -shared -fPIC -O2 -Wl,-Bsymbolic -DZSTD_DISABLE_ASM \
     -DZSTD_MULTITHREAD -pthread \
-    -I. -Icommon common/*.c compress/*.c decompress/*.c -o "$ROOT/libzstd.so" ) \
+    -I. -Icommon common/*.c compress/*.c decompress/*.c -o "$OUT/libzstd.so" ) \
   && echo "   OK -> libzstd.so" || echo "   (libzstd fallo)"
 
 # -- liblz4.so -- sin esto Linux usa el liblz4 de la DISTRO ------------------
@@ -76,11 +89,11 @@ pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 # -Bsymbolic para que la lib resuelva sus propios XXH* aunque el proceso
 # tenga otros: hoy ./ytool no exporta ninguno (medido), pero eso es una
 # propiedad del build de FPC, no una garantia.
-echo "==> liblz4.so (x86-64)"
+echo "==> liblz4.so ($ARCH)"
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
 if [ -d "$CSRC/lz4/lib" ]; then
-  ( cd "$CSRC/lz4/lib" && "$CC" -shared -fPIC -O2 -Wl,-Bsymbolic \
-      lz4.c lz4hc.c lz4frame.c xxhash.c -o "$ROOT/liblz4.so" ) \
+  ( cd "$CSRC/lz4/lib" && "$CC" $M -shared -fPIC -O2 -Wl,-Bsymbolic \
+      lz4.c lz4hc.c lz4frame.c xxhash.c -o "$OUT/liblz4.so" ) \
     && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
 fi
 
@@ -98,15 +111,21 @@ fi
 # checked against the SHA-256 in that release's SHA256SUMS; the version is
 # spelled once.
 PJA_VER="0.9.14"
-PJA_ASSET="pja-${PJA_VER}-lib-linux-x86_64.tar.gz"
-PJA_SHA256="2b8cf9ecbb8e6b0669b4f8d7fc9e760ebb9ea466edbe50f7fff4ce2718410d83"
+if [ "$ARCH" = x86 ]; then
+  PJA_PLAT="linux-x86"
+  PJA_SHA256="705292ef46d70c2d4d7cb1c0212deba5c566779bcd85021e82ae2a704064b16f"
+else
+  PJA_PLAT="linux-x86_64"
+  PJA_SHA256="2b8cf9ecbb8e6b0669b4f8d7fc9e760ebb9ea466edbe50f7fff4ce2718410d83"
+fi
+PJA_ASSET="pja-${PJA_VER}-lib-${PJA_PLAT}.tar.gz"
 echo "==> PJA (libpja.so)"
 if curl -sfL -o "$CSRC/$PJA_ASSET" \
     "https://github.com/YadeWira/PJA/releases/download/v${PJA_VER}/$PJA_ASSET" \
   && echo "$PJA_SHA256  $CSRC/$PJA_ASSET" | sha256sum -c --status; then
   rm -rf "$CSRC/pja-lib" && mkdir -p "$CSRC/pja-lib" \
     && ( cd "$CSRC/pja-lib" && tar xzf "$CSRC/$PJA_ASSET" ) \
-    && cp "$CSRC/pja-lib/pja-${PJA_VER}-lib-linux-x86_64/pja.so" "$ROOT/libpja.so" \
+    && cp "$CSRC/pja-lib/pja-${PJA_VER}-lib-${PJA_PLAT}/pja.so" "$OUT/libpja.so" \
     && echo "   OK -> libpja.so" || echo "   (PJA: no se pudo extraer)"
 else
   rm -f "$CSRC/$PJA_ASSET"; echo "   (PJA: descarga fallida o SHA-256 distinto)"
@@ -137,9 +156,9 @@ if [ -d "$CSRC/preflate" ]; then
   ( cd "$CSRC/preflate"
     SRCS=$(ls preflate_*.cpp | grep -vE "preflate_dumper|preflate_unpack|preflate_checker|preflate_wrap")
     SRCS="$SRCS $(ls support/*.cpp | grep -vE "support_tests|filestream")"
-    "$CXX" -shared -fPIC -fvisibility=hidden -std=c++11 -O2 \
+    "$CXX" $M -shared -fPIC -fvisibility=hidden -std=c++11 -O2 \
       -include cstdint -include cstddef -include cstring -include cstdio \
-      $SRCS preflate_wrap.cpp -lpthread -o "$ROOT/libpreflate.so"
+      $SRCS preflate_wrap.cpp -lpthread -o "$OUT/libpreflate.so"
   ) && echo "   OK -> libpreflate.so" || echo "   (preflate fallo)"
 fi
 
@@ -153,30 +172,32 @@ pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "
 # Same flags as its Makefile: hidden visibility (only FL2_* exported) and, on
 # x86-64, the assembler LZMA decoder.
 ( cd "$CSRC/ultra-fast-lzma2/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
-  if [ "$(uname -m)" = x86_64 ]; then \
+  if [ "$ARCH" = x64 ] && [ "$(uname -m)" = x86_64 ]; then \
     "$CC" -c -DMS_x64_CALL=0 lzma_dec_x86_64.S -o lzma_dec_x86_64.o && \
     ASM="lzma_dec_x86_64.o" && OPT="-DLZMA2_DEC_OPT"; \
   else ASM="" && OPT=""; fi && \
-  "$CC" -shared -fPIC -O2 -pthread -fvisibility=hidden $OPT *.c $ASM \
-    -o "$ROOT/libfast-lzma2.so" ) \
+  "$CC" $M -shared -fPIC -O2 -pthread -fvisibility=hidden $OPT *.c $ASM \
+    -o "$OUT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
 # ── brunsli (JPEG media codec, alternative to PJA) — requires cmake ────────
 echo "==> brunsli (libbrunsli.so)"
 pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
-  ( cd "$CSRC/brunsli" && mkdir -p out && cd out && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. >/dev/null 2>&1 && \
+  BOUT=out; [ "$ARCH" = x86 ] && BOUT=out32
+  ( cd "$CSRC/brunsli" && mkdir -p $BOUT && cd $BOUT && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_C_FLAGS="$M" -DCMAKE_CXX_FLAGS="$M" .. >/dev/null 2>&1 && \
     make -j4 >/dev/null 2>&1 )
-  A="$CSRC/brunsli/out/artifacts"; BR="$CSRC/brunsli/out/_deps/brotli-build"
-  "$CXX" -shared -fPIC -fvisibility=hidden -std=c++11 -O2 -I "$CSRC/brunsli/c/include" \
+  A="$CSRC/brunsli/$BOUT/artifacts"; BR="$CSRC/brunsli/$BOUT/_deps/brotli-build"
+  "$CXX" $M -shared -fPIC -fvisibility=hidden -std=c++11 -O2 -I "$CSRC/brunsli/c/include" \
     "$ROOT/contrib/brunsli_wrap.cpp" -Wl,--start-group \
     "$A/libbrunslienc-static.a" "$A/libbrunslidec-static.a" "$A/libbrunslicommon-static.a" \
     "$BR/libbrotlienc-static.a" "$BR/libbrotlidec-static.a" "$BR/libbrotlicommon-static.a" \
-    -Wl,--end-group -o "$ROOT/libbrunsli.so" \
+    -Wl,--end-group -o "$OUT/libbrunsli.so" \
     && echo "   OK -> libbrunsli.so" || echo "   (brunsli link fallo)"
 else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-echo "Hecho. Plugins .so en la raiz del repo (gitignored)."
+echo "Hecho. Plugins .so en $OUT (la raiz del repo, gitignored, salvo ARCH=x86)."

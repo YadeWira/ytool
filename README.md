@@ -13,7 +13,7 @@ xtool's source stopped at 0.7.9 (MIT). ytool starts from there and recreates the
 
 ## Download
 
-Linux x64, Windows x64 and Windows x86 builds, with every codec library included, are on the
+Linux x64, Linux x86, Windows x64 and Windows x86 builds, with every codec library included, are on the
 [Releases](https://github.com/YadeWira/ytool/releases) page.
 
 ## Usage
@@ -110,6 +110,9 @@ fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
   -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi \
   -oytool ytool.dpr
 ```
+
+Linux x86: `contrib/build-linux-x86.sh`, on an x86-64 host with FPC 3.2.2 for i386-linux and
+gcc-multilib (the script says what it needs).
 
 Windows: the C objects and DLLs are cross-compiled from Linux (`build-native-windows*.sh`,
 `build-plugins-windows*.sh`), and `ytool.exe` is compiled on Windows (`contrib/winbuild.ps1`,

@@ -1,4 +1,4 @@
-ytool - Linux x86-64
+ytool - Linux (x86-64 y x86)
 Recreacion open-source de xtool (Razor12911). https://github.com/YadeWira/ytool
 ==================================================================================
 
@@ -15,11 +15,16 @@ stream, y cada version de lz4/zstd comprime distinto en algunos niveles. ytool l
 carga antes que las del sistema; si las borras, usa las de la distro y un .ytp puede
 no restaurarse en otra maquina.
 
-Del sistema (dlopen): libz, liblzo2, libFLAC, libwavpack.
+Del sistema: libz (hace falta para arrancar), y por dlopen liblzo2, libFLAC y
+libwavpack. En el paquete x86 tienen que ser las de 32 bits (en Debian/Ubuntu sobre
+un sistema de 64 bits: lib32z1; sin las otras de 32 bits, esos codecs quedan
+desactivados, ytool help precomp los marca con *).
 
 srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
 pones srep64 junto a ytool (builds: https://github.com/YadeWira/srep-builds); sin el,
-ytool avisa y usa la dedup en memoria (-dd).
+ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP (MIT, vista previa):
+pon el binario de https://github.com/YadeWira/omega-srep/releases junto a ytool,
+renombrado osrep.
 
 Uso (todas las opciones: ./ytool help precomp):
   ./ytool precomp -mzlib+zstd+pja entrada salida.ytp

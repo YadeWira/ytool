@@ -1,6 +1,7 @@
 # ── Salida del compilador FPC ────────────────────────────────────────────────
 .fpcout/
 .fpcout_dbg/
+/build-x86/
 *.o
 *.O
 *.ppu
