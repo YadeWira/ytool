@@ -41,7 +41,11 @@ XXHASH_REF="e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7"
 # y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
 # otro algoritmo. Un .pmp codificado con una version se restaura mal con la
 # otra, a veces en silencio. Ver contrib/pin-repo.sh.
-LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
+# v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
+# 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
+# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# older pre-releases that hold such streams do not restore with it.
+LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 
 pin_repo https://github.com/facebook/zstd "$CSRC/zstd" v1.5.2
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"

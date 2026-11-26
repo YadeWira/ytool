@@ -81,6 +81,8 @@ fi
 [ -x "$XTOOL" ] || { echo "binary does not exist $XTOOL"; exit 3; }
 
 # 2) corpus -----------------------------------------------------------------
+# 75_lz4f_fast.bin must come from the lz4 ytool loads (see gen_corpus.py).
+if [ -f "$ROOT/liblz4.so" ]; then export LZ4_LIB="$ROOT/liblz4.so"; else unset LZ4_LIB; fi
 python3 tests/gen_corpus.py "$CORPUS" >/dev/null || { echo "gen_corpus FAILED"; exit 3; }
 # lzo1x: if gcc + liblzo2 are present, compiles the generator and creates a DETECTABLE
 # lzo1x stream (covers the lzo codec, which previously had no test). If missing, it's skipped

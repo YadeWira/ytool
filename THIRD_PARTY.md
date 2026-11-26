@@ -13,8 +13,8 @@ found, and no grant of rights should be read into the silence.
 
 | Component | Where | Author | Terms |
 |---|---|---|---|
-| lz4 (`lib/`) | built by `contrib/build-native-*.sh` from github.com/lz4/lz4 | Yann Collet | BSD 2-Clause |
-| Zstandard | idem, github.com/facebook/zstd (v1.5.2) | Facebook, Inc. (now Meta) | BSD 3-Clause (dual GPL-2.0; used under BSD) |
+| lz4 (`lib/`) | built by `contrib/build-native-*.sh` and `build-plugins-*.sh` from github.com/lz4/lz4 (1.11.1) | Yann Collet | BSD 2-Clause |
+| Zstandard | idem, github.com/facebook/zstd (v1.5.2 objects; `libzstd` plugin v1.6.0, shipped beside the binary) | Facebook, Inc. (now Meta) | BSD 3-Clause (dual GPL-2.0; used under BSD) |
 | xxHash | idem, github.com/Cyan4973/xxHash | Yann Collet | BSD 2-Clause |
 | LZMA SDK | `contrib/LZMADelphi/` | Igor Pavlov | Public domain |
 | mORMot (8 units) | `contrib/mORMot/` | Arnaud Bouchez / Synopse | MPL 1.1 / GPL 2.0+ / LGPL 2.1+ tri-licence (per file headers) |
@@ -25,9 +25,9 @@ found, and no grant of rights should be read into the silence.
 
 | Component | Source | Author | Terms |
 |---|---|---|---|
-| zlib | github.com/madler/zlib | Jean-loup Gailly, Mark Adler | zlib licence |
+| zlib | github.com/madler/zlib (1.4 in the Windows packages; Linux uses the system libz) | Jean-loup Gailly, Mark Adler | zlib licence |
 | preflate | `contrib/preflate/`, github.com/deus-libri/preflate | Dirk Steinke | Apache 2.0 |
-| fast-lzma2 | github.com/conor42/fast-lzma2 | Conor McCarthy | BSD 3-Clause (dual GPL-2.0; used under BSD) |
+| fast-lzma2 1.2.0 | github.com/YadeWira/ultra-fast-lzma2 (its `fast-lzma2/` folder), maintained fork of github.com/conor42/fast-lzma2 | Conor McCarthy; fork by YadeWira | BSD 3-Clause (dual GPL-2.0; used under BSD) |
 | brunsli | github.com/google/brunsli | Google LLC | MIT |
 | packJPG | github.com/YadeWira/packJPG (fork) | HTW Aalen University and Matthias Stirner; fork by YadeWira | LGPL 3.0 |
 | packMP3 | github.com/YadeWira/packMP3 (fork) | Ratisbon University and Matthias Stirner; fork by YadeWira | LGPL 3.0 |

@@ -22,7 +22,7 @@ mkdir -p "$CSRC"
 # puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
 # que aplicarse tambien sobre un checkout que ya existe.
 PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
-FLZMA2_REF="a793db99fade2957d2453035390f97e573acecb2"
+FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
 BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
 CXX="$(command -v clang++ || command -v g++)"
@@ -30,9 +30,30 @@ CC="$(command -v gcc || command -v clang || command -v cc)"
 
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
-# lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
-# trae el merge de fix_read_oob (PR #1753). Ver contrib/pin-repo.sh.
-LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
+# lz4 pinned by SHA, not by tag (see contrib/pin-repo.sh).
+# v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
+# 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
+# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# older pre-releases that hold such streams do not restore with it.
+LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
+
+# -- libzstd (-mzstd) ----------------------------------------------------------
+# imports/ZSTDDLL.pas is all that -mzstd uses; the zstd objects compiled into
+# ytool are not. Without a library of its own, Linux loaded the distro's
+# libzstd.so.1 and Windows loaded nothing: no package shipped libzstd.dll, so
+# -mzstd stored every stream literally there (measured on the v0.9.8 x64 zip).
+#
+# v1.6.0 because its output is the same as 1.5.7's in every case measured
+# (264 of 264: 4 inputs x levels 1-22, checksum on and off, compress2 and
+# compressCCtx), while 1.5.2 differs in 189. So .pmp files made against a
+# distro 1.5.7 still restore, and .zst files from a current zstd reproduce.
+# Own checkout: $CSRC/zstd stays at v1.5.2 for the compiled-in objects.
+ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
+echo "==> libzstd.so (x86-64)"
+pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
+( cd "$CSRC/zstd-lib/lib" && "$CC" -shared -fPIC -O2 -Wl,-Bsymbolic -DZSTD_DISABLE_ASM \
+    -I. -Icommon common/*.c compress/*.c decompress/*.c -o "$ROOT/libzstd.so" ) \
+  && echo "   OK -> libzstd.so" || echo "   (libzstd fallo)"
 
 # -- liblz4.so -- sin esto Linux usa el liblz4 de la DISTRO ------------------
 # imports/LZ4DLL.pas cargaba el soname pelado 'liblz4.so.1', o sea lo que
@@ -131,10 +152,21 @@ if [ -d "$CSRC/preflate" ]; then
 fi
 
 # ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
+# From YadeWira/ultra-fast-lzma2, the maintained fork (conor42/fast-lzma2 is
+# frozen). Its fast-lzma2/ folder is the FL2_* library ytool loads; the uf-lzma2
+# line at the repo root has a renamed UF2_* API and is not used. 1.2.0 keeps
+# the compressed bytes of every level, so .pmp files are unchanged.
 echo "==> fast-lzma2 (libfast-lzma2.so)"
-pin_repo https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2" "$FLZMA2_REF"
-( cd "$CSRC/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
-  "$CC" -shared -fPIC -O2 *.c -lpthread -o "$ROOT/libfast-lzma2.so" ) \
+pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "$FLZMA2_REF"
+# Same flags as its Makefile: hidden visibility (only FL2_* exported) and, on
+# x86-64, the assembler LZMA decoder.
+( cd "$CSRC/ultra-fast-lzma2/fast-lzma2" && CC="$(command -v gcc || command -v clang)" && \
+  if [ "$(uname -m)" = x86_64 ]; then \
+    "$CC" -c -DMS_x64_CALL=0 lzma_dec_x86_64.S -o lzma_dec_x86_64.o && \
+    ASM="lzma_dec_x86_64.o" && OPT="-DLZMA2_DEC_OPT"; \
+  else ASM="" && OPT=""; fi && \
+  "$CC" -shared -fPIC -O2 -pthread -fvisibility=hidden $OPT *.c $ASM \
+    -o "$ROOT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
 # ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────

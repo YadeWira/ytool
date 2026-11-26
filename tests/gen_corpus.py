@@ -163,13 +163,61 @@ def make_lz4f_fast(seed):
     made level 2 a distinct algorithm (LZ4MID), which broke the alias and left
     level 1 unreachable -- so a .lz4 written with no level flag at all, the most
     common kind, stopped being recognised."""
+    payload = _discriminating_payload(seed)
+    # Fast-mode output changes between lz4 versions (1.11 differs from 1.10 at
+    # every acceleration), so the frame has to come from the library ytool will
+    # load, or the case measures a version skew instead of the codec. LZ4_LIB is
+    # set by tests/regression.sh when a liblz4.so sits next to the binary; with
+    # none there, ytool loads the system lz4, and the python module is the
+    # closest stand-in for it.
+    lib = os.environ.get('LZ4_LIB', '')
+    if lib and os.path.isfile(lib):
+        return _lz4f_compress_with(lib, payload, level=1, block_size_id=4,
+                                   content_checksum=1)
     try:
         import lz4.frame
     except ImportError:
         return None
-    return lz4.frame.compress(_discriminating_payload(seed),
-                              content_checksum=True, compression_level=1,
-                              block_size=4)
+    return lz4.frame.compress(payload, content_checksum=True,
+                              compression_level=1, block_size=4)
+
+
+def _lz4f_compress_with(path, data, level, block_size_id, content_checksum):
+    """LZ4F_compressFrame from a given shared library (ctypes)."""
+    import ctypes
+
+    class FrameInfo(ctypes.Structure):
+        _fields_ = [('blockSizeID', ctypes.c_int), ('blockMode', ctypes.c_int),
+                    ('contentChecksumFlag', ctypes.c_int),
+                    ('frameType', ctypes.c_int),
+                    ('contentSize', ctypes.c_ulonglong),
+                    ('dictID', ctypes.c_uint),
+                    ('blockChecksumFlag', ctypes.c_int)]
+
+    class Prefs(ctypes.Structure):
+        _fields_ = [('frameInfo', FrameInfo), ('compressionLevel', ctypes.c_int),
+                    ('autoFlush', ctypes.c_uint), ('favorDecSpeed', ctypes.c_uint),
+                    ('reserved', ctypes.c_uint * 3)]
+
+    lz = ctypes.CDLL(path)
+    lz.LZ4F_compressFrameBound.restype = ctypes.c_size_t
+    lz.LZ4F_compressFrameBound.argtypes = [ctypes.c_size_t, ctypes.c_void_p]
+    lz.LZ4F_compressFrame.restype = ctypes.c_size_t
+    lz.LZ4F_compressFrame.argtypes = [ctypes.c_void_p, ctypes.c_size_t,
+                                      ctypes.c_void_p, ctypes.c_size_t,
+                                      ctypes.c_void_p]
+    lz.LZ4F_isError.restype = ctypes.c_uint
+    lz.LZ4F_isError.argtypes = [ctypes.c_size_t]
+    p = Prefs()
+    p.frameInfo.blockSizeID = block_size_id
+    p.frameInfo.contentChecksumFlag = content_checksum
+    p.compressionLevel = level
+    cap = lz.LZ4F_compressFrameBound(len(data), ctypes.byref(p))
+    out = ctypes.create_string_buffer(cap)
+    n = lz.LZ4F_compressFrame(out, cap, data, len(data), ctypes.byref(p))
+    if lz.LZ4F_isError(n):
+        return None
+    return out.raw[:n]
 
 
 def make_zstd_frames(seed):

@@ -60,12 +60,12 @@ literal store would produce. See [Testing](#testing).
 | FLAC / WAV | [xiph/flac](https://github.com/xiph/flac) | ✅ | ✅ |
 | WavPack / WAV | [dbry/WavPack](https://github.com/dbry/WavPack) | ✅ | ✅ |
 | MP3 | [YadeWira/packMP3](https://github.com/YadeWira/packMP3) (successor fork, LGPLv3) | ✅ | ✅ |
-| LZ4 (`lz4f`) | liblz4, pinned to `0774d05` | ✅ (`liblz4.so`, shipped) | ✅ (`liblz4.dll`) |
+| LZ4 (`lz4f`) | liblz4 1.11.1 | ✅ (`liblz4.so`, shipped) | ✅ (`liblz4.dll`) |
 | LZ4 raw blocks (`lz4`, `lz4hc`) | liblz4 | ⚠️ detects nothing — see below | same |
-| Zstandard | libzstd | ✅ ¹ | ✅ ¹ |
+| Zstandard | libzstd 1.6.0 | ✅ ¹ (`libzstd.so`, shipped) | ✅ ¹ (`libzstd.dll`) |
 | LZO (`lzo1x`) | [Oberhumer lzo](https://www.oberhumer.com/opensource/lzo/) | ✅ ² | ✅ ² |
 | raw LZMA1 (`-mlzma`) | LZMA SDK (Igor Pavlov, public domain) | ✅ | ✅ |
-| fast-lzma2 (final stage, `-l#`) | [conor42/fast-lzma2](https://github.com/conor42/fast-lzma2) | ✅ | ✅ |
+| fast-lzma2 1.2.0 (final stage, `-l#`) | [YadeWira/ultra-fast-lzma2](https://github.com/YadeWira/ultra-fast-lzma2) (maintained fork of conor42/fast-lzma2) | ✅ | ✅ |
 | dedup, in-memory (`-dd`) | — | ✅ | ✅ |
 | dedup, external (`-dd<N>`) | SREP 3.93a, **not included** — bring your own `srep64`/`srep.exe` ([srep-builds](https://github.com/YadeWira/srep-builds)) | ✅ ³ | ✅ ³ |
 | Oodle | proprietary | 🔒 loader ready, needs *your own* `oo2core`/`oo2ext` library — see below | same |
@@ -81,7 +81,13 @@ library's defaults, which omit the content checksum the `zstd` CLI writes by def
 frame fell back to a literal store. Fixed by recording the frame descriptor. Two cases still store
 literally, both safe and both documented in `PrecompZSTD.pas`: frames written from a pipe (no content-size
 field), and some one-shot-versus-chunked divergences at levels 5–15 unless `-mzstd:b128` selects the
-streaming path. libzstd is loaded dynamically, not linked in.
+streaming path. libzstd is loaded dynamically, not linked in (the zstd objects compiled into the binary
+are not what `-mzstd` uses). Until 2026-11-25 no package shipped it: Linux used the distro's `libzstd.so.1`
+and on Windows `-mzstd` stored every stream literally (measured on the v0.9.8 x64 zip). It now ships
+1.6.0, whose output matched 1.5.7's in all 264 cases measured (4 inputs, levels 1–22, checksum on/off, two
+APIs); 1.5.2 differed in 189. So `.pmp` files made against a distro 1.5.7 still restore, and frames
+written by a current `zstd` reproduce. Checked on Linux and on real Windows 10 x64 and x86: same `.pmp`
+bytes on all three, and each decodes the others'.
 
 ² **LZO** reproduces only the `lzo1x_999` family, because its level search iterates
 `lzo1x_999_compress_level`. Data from the fast `lzo1x_1` is detected and stored literally.
@@ -96,6 +102,15 @@ and not yet diagnosed. Framed LZ4 (`-mlz4f`) is unaffected.
 **Linux ships its own `liblz4.so`** and loads it ahead of the system library. Previously the distro's
 `liblz4.so.1` was used, and lz4 1.9.4 and 1.10.0 emit different bytes at the same level (`LZ4HC_CLEVEL_MIN`
 moved from 3 to 2), so a `.pmp` made on one machine could fail to restore on another.
+
+**lz4 is 1.11.1 since 0.9.9a, which starts a new baseline.** 1.11.1 emits different bytes from 1.10.0 in
+fast mode (every acceleration), at HC levels 1, 2 and 10–12, and in frames at those levels. Measured with
+the real CLIs on two inputs: `.lz4` files written by lz4 1.11.1 reproduce at `-1`, `-9` and `-12`; files
+written by lz4 1.10 at `-1` (the CLI default) and `-12` no longer do, and are stored literally (still
+lossless, just without the gain); `-3`..`-9` reproduce from either. `.pmp` files from earlier
+pre-releases that hold such streams do not restore with this build. Supporting both at once would mean
+loading two lz4 libraries and recording which one matched, as xtool 0.9.9 does with its library variants.
+Linux and real Windows 10 x64 and x86 give the same `.pmp` bytes for all of these.
 
 Prebuilt binaries (Linux x64 tarball, Windows x64 zip, Windows x86 zip — all three with every
 buildable plugin library included) are on the [Releases page](https://github.com/YadeWira/ytool/releases).

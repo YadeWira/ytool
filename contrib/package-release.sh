@@ -56,8 +56,8 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool liblz4.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
-WIN_DLLS="zlib1 lzo2 packjpg_dll brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4"
+LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpackjpg.so libpackmp3.so libpackpng.so libpreflate.so"
+WIN_DLLS="zlib1 lzo2 packjpg_dll brunsli packmp3_dll libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 packpng liblz4 libzstd"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
 # de imports es una dependencia que el usuario no tiene.
@@ -156,6 +156,7 @@ smoke packpng 62_png_photo.bin
 smoke packmp3 72_mp3_min.bin
 smoke lz4f    74_lz4f_64k.bin
 smoke lz4f    75_lz4f_fast.bin
+smoke zstd    76_zstd_levels.bin
 smoke zlib    20_zlib_streams.bin
 smoke preflate 20_zlib_streams.bin
 [ "$FAILED" = 0 ] || die "el smoke del paquete linux fallo"

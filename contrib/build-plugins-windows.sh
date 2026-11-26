@@ -27,7 +27,7 @@ mkdir -p "$CSRC"
 # puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
 # que aplicarse tambien sobre un checkout que ya existe.
 PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
-FLZMA2_REF="a793db99fade2957d2453035390f97e573acecb2"
+FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
 WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
 PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
@@ -44,7 +44,11 @@ BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
 # y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
 # otro algoritmo. Un .pmp codificado con una version se restaura mal con la
 # otra, a veces en silencio. Ver contrib/pin-repo.sh.
-LZ4_REF="0774d05537f9762f838f7ab541b7765f1a729cb5"
+# v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
+# 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
+# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# older pre-releases that hold such streams do not restore with it.
+LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 CC="x86_64-w64-mingw32-gcc"
 CXX="x86_64-w64-mingw32-g++"
 TOOLCHAIN="$CSRC/mingw-toolchain.cmake"
@@ -74,6 +78,24 @@ EOF
 # (inflate/inflateEnd/inflateInit2_/inflateReset/crc32/deflate/compress/uncompress
 # etc.), verified with a real round-trip on the Windows VM.
 
+# -- libzstd (-mzstd) ----------------------------------------------------------
+# imports/ZSTDDLL.pas is all that -mzstd uses; the zstd objects compiled into
+# ytool are not. Without a library of its own, Linux loaded the distro's
+# libzstd.so.1 and Windows loaded nothing: no package shipped libzstd.dll, so
+# -mzstd stored every stream literally there (measured on the v0.9.8 x64 zip).
+#
+# v1.6.0 because its output is the same as 1.5.7's in every case measured
+# (264 of 264: 4 inputs x levels 1-22, checksum on and off, compress2 and
+# compressCCtx), while 1.5.2 differs in 189. So .pmp files made against a
+# distro 1.5.7 still restore, and .zst files from a current zstd reproduce.
+# Own checkout: $CSRC/zstd stays at v1.5.2 for the compiled-in objects.
+ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
+echo "==> libzstd.dll (x86-64)"
+pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
+( cd "$CSRC/zstd-lib/lib" && "$CC" -shared -O2 -DZSTD_DLL_EXPORT=1 -DZSTD_DISABLE_ASM \
+    -I. -Icommon common/*.c compress/*.c decompress/*.c -static-libgcc -o "$ROOT/libzstd.dll" ) \
+  && echo "   OK -> libzstd.dll" || echo "   (libzstd fallo)"
+
 # ── liblz4.dll — sin esto los codecs -mlz4/-mlz4hc/-mlz4f estan MUERTOS en Windows ──
 # imports/LZ4DLL.pas carga PluginsPath + 'liblz4.dll' (en Unix cae a
 # liblz4.so.1 del sistema, por eso Linux nunca lo noto). Esa DLL no se
@@ -93,8 +115,8 @@ if [ -d "$CSRC/lz4/lib" ]; then
     && echo "   OK -> liblz4.dll" || echo "   (liblz4 fallo)"
 fi
 
-echo "==> zlib1.dll (from source, zlib 1.3.1)"
-pin_repo https://github.com/madler/zlib "$CSRC/zlib" v1.3.1
+echo "==> zlib1.dll (from source, zlib 1.4)"
+pin_repo https://github.com/madler/zlib "$CSRC/zlib" 99623ef7097352da7993ba614161fd6a311e046e   # v1.4: deflate output equal to 1.3.1 in 3888 of 3888 cases measured
 if [ -d "$CSRC/zlib" ]; then
   ( cd "$CSRC/zlib" && rm -f *.o && "$CC" -c -O2 -DZLIB_DLL adler32.c compress.c crc32.c deflate.c \
       gzclose.c gzlib.c gzread.c gzwrite.c infback.c inffast.c inflate.c inftrees.c trees.c \
@@ -246,10 +268,17 @@ if [ -d "$CSRC/preflate" ]; then
 fi
 
 # ── fast-lzma2 (final internal LZMA2 compression, -l#) ─────────────────────────
+# From YadeWira/ultra-fast-lzma2, the maintained fork (conor42/fast-lzma2 is
+# frozen). Its fast-lzma2/ folder is the FL2_* library ytool loads; the uf-lzma2
+# line at the repo root has a renamed UF2_* API and is not used. 1.2.0 keeps
+# the compressed bytes of every level, so .pmp files are unchanged.
 echo "==> fast-lzma2 (fast-lzma2.dll)"
-pin_repo https://github.com/conor42/fast-lzma2 "$CSRC/fast-lzma2" "$FLZMA2_REF"
-( cd "$CSRC/fast-lzma2" && "$CC" -shared -O2 -DFL2_DLL_EXPORT=1 -Wl,--export-all-symbols \
-  *.c -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
+pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "$FLZMA2_REF"
+# FL2_DLL_EXPORT marks the FL2_* API dllexport, so only that is exported.
+( cd "$CSRC/ultra-fast-lzma2/fast-lzma2" && \
+  "$CC" -c -DMS_x64_CALL=1 lzma_dec_x86_64.S -o lzma_dec_x86_64.o && \
+  "$CC" -shared -O2 -DFL2_DLL_EXPORT=1 -DLZMA2_DEC_OPT \
+  *.c lzma_dec_x86_64.o -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
 
 # ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
