@@ -287,6 +287,116 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   fi
 fi
 
+# --- reassign, plugins INI, execute, find/extract/erase/replace -------------
+# Estas rutas no tenian una sola prueba y escondian bugs reales (2026-11-25):
+# un plugin INI perdia todo stream a -t1 (division por cero), un codec de
+# plugin por <stdin>/<stdout> daba access violation en Linux y no producia nada
+# en Windows, a -t4 se colgaba (pipes heredados entre hijos), "execute" con un
+# programa que no escribe nada guardaba un trozo vacio con exit 0 (datos
+# perdidos), y -rA=B se ignoraba. Solo Linux: usa gcc y lee "Streams:".
+p3_check() { # nombre condicion-ok
+  if [ "$2" = 1 ]; then echo "-- $1: ok --"; pass=$((pass+1))
+  else echo "-- *** $1: FALLA *** --"; fail=$((fail+1)); fi
+}
+p3_streams() { tr '\r' '\n' < "$1" | grep -oE "Streams: [0-9]+ / [0-9]+" | tail -1; }
+if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ] && command -v gcc >/dev/null; then
+  P3="$WORK/p3"; mkdir -p "$P3"
+  if gcc -O2 tests/helpers/rle.c -o "$P3/rle" && gcc -O2 tests/helpers/xorer.c -o "$P3/xorer"; then
+    # reassign: -rzlib=preflate manda los streams de zlib a preflate (0.9.9:
+    # "preflate = 6"); un destino que no puede con ellos no procesa ninguno.
+    Z="$CORPUS/20_zlib_streams.bin"
+    "$XTOOL" precomp -mzlib -rzlib=preflate -t2 "$Z" "$P3/r1.pmp" > "$P3/r1.log" 2>&1
+    "$XTOOL" decode "$P3/r1.pmp" "$P3/r1.out" > /dev/null 2>&1
+    ok=0; grep -q -- "- preflate = 6 " "$P3/r1.log" && cmp -s "$Z" "$P3/r1.out" && ok=1
+    p3_check "reassign -rzlib=preflate (todo a preflate)" $ok
+    "$XTOOL" precomp -mzlib -rzlib=lzo1x -t2 "$Z" "$P3/r2.pmp" > "$P3/r2.log" 2>&1
+    "$XTOOL" decode "$P3/r2.pmp" "$P3/r2.out" > /dev/null 2>&1
+    ok=0; [ "$(p3_streams "$P3/r2.log")" = "Streams: 0 / 6" ] && cmp -s "$Z" "$P3/r2.out" && ok=1
+    p3_check "reassign -rzlib=lzo1x (0 / 6, nada perdido)" $ok
+
+    # plugins INI: formato de juguete TOY1 + codec externo rle en sus tres formas.
+    python3 - "$P3/toy.bin" <<'EOF'
+import random, struct, sys
+r = random.Random(4); out = bytearray()
+def rle(b):
+    o = bytearray(); i = 0
+    while i < len(b):
+        j = i
+        while j < len(b) and b[j] == b[i] and j - i < 255: j += 1
+        o += bytes([j - i, b[i]]); i = j
+    return bytes(o)
+for k in range(5):
+    raw = b''.join(bytes([r.randrange(97, 123)]) * r.randrange(20, 200) for _ in range(300))
+    comp = rle(raw)
+    out += bytes(r.getrandbits(8) for _ in range(300))
+    out += b'TOY1' + struct.pack('<II', len(comp), len(raw)) + comp
+out += bytes(r.getrandbits(8) for _ in range(300))
+open(sys.argv[1], 'wb').write(out)
+EOF
+    for mode in "S:rle d <stdin> <stdout>:rle c <stdin> <stdout>" \
+                "F:rle d [filein] [fileout]:rle c [filein] [fileout]" \
+                "L:rle L d <library>:rle L c <library>"; do
+      m=${mode%%:*}; rest=${mode#*:}; enc=${rest%%:*}; dec=${rest#*:}
+      PD="$P3/plug$m"; mkdir -p "$PD"; cp "$P3/rle" "$PD/"
+      printf '[Stream1]\nName=toy\nCodec=toyx\nBigEndian=0\nSignature=0x31594F54\nStructure=Signature(4),CSize(4),DSize(4),Stream\nCompressedSize=CSize\nDecompressedSize=DSize\n' > "$PD/toy.ini"
+      printf '[toyx]\nEncode=%s\nDecode=%s\n' "$enc" "$dec" > "$PD/$(basename "$XTOOL").ini"
+      for t in 1 4; do
+        timeout 300 "$XTOOL" precomp -mtoy -bd"$PD" -t$t "$P3/toy.bin" "$P3/t$m$t.pmp" > "$P3/t$m$t.log" 2>&1 </dev/null
+        timeout 300 "$XTOOL" decode -bd"$PD" "$P3/t$m$t.pmp" "$P3/t$m$t.out" > /dev/null 2>&1 </dev/null
+        ok=0; [ "$(p3_streams "$P3/t$m$t.log")" = "Streams: 5 / 5" ] && cmp -s "$P3/toy.bin" "$P3/t$m$t.out" && ok=1
+        p3_check "plugin INI modo $m -t$t (5 / 5)" $ok
+      done
+      ok=0; cmp -s "$P3/t${m}1.pmp" "$P3/t${m}4.pmp" && ok=1
+      p3_check "plugin INI modo $m: mismo .pmp a -t1 y -t4" $ok
+    done
+
+    # execute: mismo programa para ir y volver (xor). {filein}/{fileout} no le
+    # pasa el nombre, asi que no escribe nada: el trozo tiene que quedar tal
+    # cual, no vacio.
+    cat "$CORPUS/11_text_8m.bin" "$CORPUS/10_random_2m.bin" > "$P3/ex.bin"
+    cp "$P3/xorer" "$(dirname "$XTOOL")/xorer"
+    for syn in "xorer {stdin} {stdout}" "xorer [filein] [fileout]" "xorer {filein} {fileout}"; do
+      rm -f "$P3/ex.pmp" "$P3/ex.out"
+      "$XTOOL" execute -c4mb -t2 "$P3/ex.bin" "$P3/ex.pmp" $syn > /dev/null 2>&1
+      "$XTOOL" decode "$P3/ex.pmp" "$P3/ex.out" $syn > /dev/null 2>&1
+      ok=0; cmp -s "$P3/ex.bin" "$P3/ex.out" && ok=1
+      p3_check "execute '$syn' round-trip" $ok
+    done
+    rm -f "$(dirname "$XTOOL")/xorer"
+
+    # find / extract / erase / replace sobre los streams de -x del bloque anterior.
+    if [ -d "${XA:-}" ] && [ -f "$XF" ]; then
+      cp "$XF" "$P3/orig.bin"
+      "$XTOOL" find -t1 "$XA" "$P3/orig.bin" "$P3/f1.dat" > /dev/null 2>&1
+      "$XTOOL" find -t4 "$XA" "$P3/orig.bin" "$P3/f2.dat" > /dev/null 2>&1
+      mkdir -p "$P3/ex_dir"
+      "$XTOOL" extract "$P3/f1.dat" "$P3/orig.bin" "$P3/ex_dir" > /dev/null 2>&1
+      ok=0; cmp -s "$P3/f1.dat" "$P3/f2.dat" && diff -rq "$XA" "$P3/ex_dir" > /dev/null && ok=1
+      p3_check "find reproducible (-t1 == -t4) y extract == -x" $ok
+      cp "$XF" "$P3/er.bin"
+      "$XTOOL" erase -t2 "$XA" "$P3/er.bin" "$P3/er.dat" > /dev/null 2>&1
+      e1=0; cmp -s "$XF" "$P3/er.bin" || e1=1
+      "$XTOOL" decode "$P3/er.dat" "$XA" "$P3/er.bin" > /dev/null 2>&1
+      ok=0; [ $e1 = 1 ] && cmp -s "$XF" "$P3/er.bin" && ok=1
+      p3_check "erase blanquea y decode lo restaura" $ok
+      mkdir -p "$P3/new"
+      python3 -c "
+import os, sys
+for f in os.listdir(sys.argv[1]):
+    open(os.path.join(sys.argv[2], f), 'wb').write(open(os.path.join(sys.argv[1], f), 'rb').read()[::-1])
+" "$XA" "$P3/new"
+      cp "$XF" "$P3/rp.bin"
+      "$XTOOL" replace -t2 "$XA" "$P3/new" "$P3/rp.bin" "$P3/rp.dat" > /dev/null 2>&1
+      e1=0; cmp -s "$XF" "$P3/rp.bin" || e1=1
+      "$XTOOL" decode "$P3/rp.dat" "$XA" "$P3/rp.bin" > /dev/null 2>&1
+      ok=0; [ $e1 = 1 ] && cmp -s "$XF" "$P3/rp.bin" && ok=1
+      p3_check "replace cambia y decode lo restaura" $ok
+    fi
+  else
+    echo "-- reassign/plugins/execute: omitido, no compilaron los helpers --"
+  fi
+fi
+
 # --- integridad del passthrough literal --------------------------------------
 # El digest XTP1 cubria solo los streams. En un .pmp donde ningun codec engancho
 # los bytes pasaban de largo sin verificacion: medido, 40 de 40 flips de un byte

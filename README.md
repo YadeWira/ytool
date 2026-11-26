@@ -71,6 +71,9 @@ says so and uses `-dd`.
 - **Missing:** the `mp3` scanner (until PMPA is stable), the `ogg`, `bink` and `wwise` scanners, `gdeflate`,
   and `brute` and `-cfg`, whose behaviour 0.9.9 does not document.
 - **Prefetch** is `-p#` (0.9.9 renamed it `-pf#`).
+- **`-rA=B`** works as in 0.9.9 (streams A detects are processed with B instead). A `-r<codec>` with no
+  `=` does nothing in 0.9.9; in ytool it is a codec to retry failed streams with. Reassigning to `zlib`
+  searches levels, where 0.9.9 loses every such stream.
 - 0.9.9 loads several versions of a library at once; ytool loads one per library.
 
 The flag-by-flag comparison, measured against the 0.9.9 binary:
