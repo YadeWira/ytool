@@ -35,17 +35,17 @@ BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
 # lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
-# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .pmp no
+# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .ytp no
 # confiable, volver al tag sacaria ese fix.
 #
 # Los tres scripts que compilan lz4 comparten $CSRC/lz4, asi que TIENEN que
 # pedir la misma revision: entre 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2)
 # y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
-# otro algoritmo. Un .pmp codificado con una version se restaura mal con la
+# otro algoritmo. Un .ytp codificado con una version se restaura mal con la
 # otra, a veces en silencio. Ver contrib/pin-repo.sh.
 # v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
 # 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
-# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# levels 1, 2 and 10-12, and frames at those levels, so .ytp files from the
 # older pre-releases that hold such streams do not restore with it.
 LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 CC=i686-w64-mingw32-gcc
@@ -76,7 +76,7 @@ EOF
 #
 # v1.6.0 because its output is the same as 1.5.7's in every case measured
 # (264 of 264: 4 inputs x levels 1-22, checksum on and off, compress2 and
-# compressCCtx), while 1.5.2 differs in 189. So .pmp files made against a
+# compressCCtx), while 1.5.2 differs in 189. So .ytp files made against a
 # distro 1.5.7 still restore, and .zst files from a current zstd reproduce.
 # Own checkout: $CSRC/zstd stays at v1.5.2 for the compiled-in objects.
 ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
@@ -93,7 +93,7 @@ pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 # era False y los tres codecs se reportaban no disponibles: ytool guardaba
 # cada stream LZ4 literal y el round-trip pasaba igual, que es exactamente
 # como se paso por alto. Verificado en Windows real: sin la DLL un .lz4 del
-# CLI da .pmp de 312810 bytes (literal, mas grande que la entrada); con ella
+# CLI da .ytp de 312810 bytes (literal, mas grande que la entrada); con ella
 # da 1599715 y round-trip bit-exacto, igual que Linux.
 # --export-all-symbols porque lz4 solo marca dllexport bajo LZ4_DLL_EXPORT,
 # que su propio build system define; compilando los .c sueltos no aplica.
@@ -182,7 +182,7 @@ fi
 # From YadeWira/ultra-fast-lzma2, the maintained fork (conor42/fast-lzma2 is
 # frozen). Its fast-lzma2/ folder is the FL2_* library ytool loads; the uf-lzma2
 # line at the repo root has a renamed UF2_* API and is not used. 1.2.0 keeps
-# the compressed bytes of every level, so .pmp files are unchanged.
+# the compressed bytes of every level, so .ytp files are unchanged.
 echo "==> fast-lzma2 (fast-lzma2-x86.dll)"
 pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "$FLZMA2_REF"
 # FL2_DLL_EXPORT marks the FL2_* API dllexport, so only that is exported.

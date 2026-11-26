@@ -117,7 +117,7 @@ fi
 # lee de la salida de ytool, y en Windows esa salida va directo a la consola:
 # no la captura ni PowerShell redirigiendo, ni cmd.exe redirigiendo a archivo
 # (probadas las dos; solo se obtiene el banner). Por eso los smoke tests de
-# Windows verifican engagement comparando el tamano del .pmp contra el que
+# Windows verifican engagement comparando el tamano del .ytp contra el que
 # produce un codec que no puede matchear -- un almacenamiento literal pesa
 # entrada+~50 bytes, uno enganchado no. Es equivalente en poder pero hay que
 # hacerlo a mano; si alguien encuentra como capturar esa salida, este assert
@@ -162,7 +162,7 @@ fi
 # etapa -- "Streams: X / Y" cuenta lo que hizo el detector de streams y nada
 # mas. Una etapa posterior que muera es invisible ahi: escondiendo srep64,
 # "-mzlib -dd1" seguia reportando "Streams: 90 / 90", exit 0, sin una sola
-# linea de error, y el .pmp cambiaba 76 bytes. El assert de arriba daba verde
+# linea de error, y el .ytp cambiaba 76 bytes. El assert de arriba daba verde
 # con el dedup externo muerto.
 #
 # La señal se encontro diferenciando una corrida sana contra una rota (metodo
@@ -193,12 +193,12 @@ expected_streams() {
   done | head -1
 }
 
-printf "%-26s %-14s %10s %10s %8s  %s\n" FILE METHOD IN PMP RATIO RESULT
+printf "%-26s %-14s %10s %10s %8s  %s\n" FILE METHOD IN YTP RATIO RESULT
 for f in "$CORPUS"/*; do
   bn="$(basename "$f")"
   insz=$(stat -c%s "$f")
   for m in "${METHODS[@]}"; do
-    pmp="$WORK/out.pmp"; outf="$WORK/out.bin"
+    pmp="$WORK/out.ytp"; outf="$WORK/out.bin"
     rm -f "$pmp" "$outf"
     # Exit codes are checked, not discarded. Without this a precomp or decode
     # that ABORTS is indistinguishable from one that produced non-reversible
@@ -225,7 +225,7 @@ for f in "$CORPUS"/*; do
     elif ! cmp -s "$f" "$outf"; then
       res="*** FAIL ***"; fail=$((fail+1))
     elif [ "$needst" -ge 1 ] && [ "$stg" -lt "$needst" ]; then
-      # Una etapa posterior (dedup) no corrio: el .pmp sale casi igual y el
+      # Una etapa posterior (dedup) no corrio: el .ytp sale casi igual y el
       # round-trip cierra igual, pero el trabajo no se hizo.
       res="*** ETAPA MUERTA ($stg de $needst etapas) ***"; fail=$((fail+1)); dead=$((dead+1))
     elif [ "$need" -ge 1 ] && [ "$proc" -lt 1 ]; then
@@ -236,16 +236,16 @@ for f in "$CORPUS"/*; do
       res="OK"; pass=$((pass+1))
     fi
     # Preserve the exact artifacts of any failure. An intermittent one is only
-    # diagnosable if the .pmp that produced it still exists afterwards.
+    # diagnosable if the .ytp that produced it still exists afterwards.
     if [ "$res" != "OK" ]; then
       fdir="$FAILDIR/$(printf '%s' "${bn}_${m:-literal}" | tr -c 'A-Za-z0-9._-' '_')"
       mkdir -p "$fdir"
       cp -f "$f" "$fdir/input.bin" 2>/dev/null
-      [ -s "$pmp" ] && cp -f "$pmp" "$fdir/out.pmp" 2>/dev/null
+      [ -s "$pmp" ] && cp -f "$pmp" "$fdir/out.ytp" 2>/dev/null
       [ -s "$outf" ] && cp -f "$outf" "$fdir/decoded.bin" 2>/dev/null
       cp -f "$WORK/precomp.log" "$WORK/decode.log" "$fdir/" 2>/dev/null
       { echo "method: ${m:-<literal>}"; echo "precomp_rc: $prc"; echo "decode_rc: $drc"
-        echo "input_size: $insz"; echo "pmp_size: $pmpsz"
+        echo "input_size: $insz"; echo "ytp_size: $pmpsz"
         echo "date: $(date -Is)"; echo "loadavg: $(cat /proc/loadavg 2>/dev/null)"
       } > "$fdir/context.txt" 2>/dev/null
       echo "   [artefactos del fallo guardados -> $fdir]" >&2
@@ -267,8 +267,8 @@ done
 XF="$CORPUS/24_zlib_mixed.bin"
 if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   XA="$WORK/x_all"; XU="$WORK/x_unproc"; mkdir -p "$XA" "$XU"
-  "$XTOOL" precomp -mzlib -x"$XA" "$XF" "$WORK/x1.pmp" > "$WORK/x1.log" 2>&1
-  "$XTOOL" precomp -mzlib -X"$XU" "$XF" "$WORK/x2.pmp" > /dev/null 2>&1
+  "$XTOOL" precomp -mzlib -x"$XA" "$XF" "$WORK/x1.ytp" > "$WORK/x1.log" 2>&1
+  "$XTOOL" precomp -mzlib -X"$XU" "$XF" "$WORK/x2.ytp" > /dev/null 2>&1
   st=$(tr '\r' '\n' < "$WORK/x1.log" | grep -oE "Streams: [0-9]+ / [0-9]+" | tail -1)
   xp=$(echo "$st" | awk '{print $2}'); xt=$(echo "$st" | awk '{print $4}')
   na=$(ls "$XA" | wc -l); nu=$(ls "$XU" | wc -l)
@@ -308,15 +308,15 @@ if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ] && command -v gcc >/dev/null; th
     # Needs libpreflate (the CI does not build the plugins): skipped without it.
     "$XTOOL" precomp -mpreflate -t2 "$Z" /dev/null > "$P3/r0.log" 2>&1
     if [ "$(p3_streams "$P3/r0.log")" = "Streams: 6 / 6" ]; then
-      "$XTOOL" precomp -mzlib -rzlib=preflate -t2 "$Z" "$P3/r1.pmp" > "$P3/r1.log" 2>&1
-      "$XTOOL" decode "$P3/r1.pmp" "$P3/r1.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mzlib -rzlib=preflate -t2 "$Z" "$P3/r1.ytp" > "$P3/r1.log" 2>&1
+      "$XTOOL" decode "$P3/r1.ytp" "$P3/r1.out" > /dev/null 2>&1
       ok=0; grep -q -- "- preflate = 6 " "$P3/r1.log" && cmp -s "$Z" "$P3/r1.out" && ok=1
       p3_check "reassign -rzlib=preflate (todo a preflate)" $ok
     else
       echo "-- reassign -rzlib=preflate: omitido, preflate no disponible --"
     fi
-    "$XTOOL" precomp -mzlib -rzlib=lzo1x -t2 "$Z" "$P3/r2.pmp" > "$P3/r2.log" 2>&1
-    "$XTOOL" decode "$P3/r2.pmp" "$P3/r2.out" > /dev/null 2>&1
+    "$XTOOL" precomp -mzlib -rzlib=lzo1x -t2 "$Z" "$P3/r2.ytp" > "$P3/r2.log" 2>&1
+    "$XTOOL" decode "$P3/r2.ytp" "$P3/r2.out" > /dev/null 2>&1
     ok=0; [ "$(p3_streams "$P3/r2.log")" = "Streams: 0 / 6" ] && cmp -s "$Z" "$P3/r2.out" && ok=1
     p3_check "reassign -rzlib=lzo1x (0 / 6, nada perdido)" $ok
 
@@ -325,8 +325,8 @@ if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ] && command -v gcc >/dev/null; th
     # estrategia queda en el stream, asi que el decode no necesita la opcion.
     M24="$CORPUS/24_zlib_mixed.bin"
     if [ -f "$M24" ]; then
-      "$XTOOL" precomp -mzlib -cfgzlib:st2 -t2 "$M24" "$P3/cf.pmp" > "$P3/cf.log" 2>&1
-      "$XTOOL" decode "$P3/cf.pmp" "$P3/cf.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mzlib -cfgzlib:st2 -t2 "$M24" "$P3/cf.ytp" > "$P3/cf.log" 2>&1
+      "$XTOOL" decode "$P3/cf.ytp" "$P3/cf.out" > /dev/null 2>&1
       ok=0; [ "$(p3_streams "$P3/cf.log")" = "Streams: 1 / 8" ] && cmp -s "$M24" "$P3/cf.out" && ok=1
       p3_check "-cfgzlib:st2 (1 / 8, como 0.9.9)" $ok
     fi
@@ -357,9 +357,9 @@ n = z.ZSTD_compress2(c, out, cap, data, len(data))
 sys.exit(1 if z.ZSTD_isError(n) else open(sys.argv[2], 'wb').write(out.raw[:n]) and 0)
 EOF
     then
-      "$XTOOL" precomp -mzstd -t2 "$P3/zc.zst" "$P3/zs0.pmp" > "$P3/zs0.log" 2>&1
-      "$XTOOL" precomp -mzstd -cfgzstd:hl18:cl17:sl3:mm4 -t2 "$P3/zc.zst" "$P3/zs1.pmp" > "$P3/zs1.log" 2>&1
-      "$XTOOL" decode "$P3/zs1.pmp" "$P3/zs1.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mzstd -t2 "$P3/zc.zst" "$P3/zs0.ytp" > "$P3/zs0.log" 2>&1
+      "$XTOOL" precomp -mzstd -cfgzstd:hl18:cl17:sl3:mm4 -t2 "$P3/zc.zst" "$P3/zs1.ytp" > "$P3/zs1.log" 2>&1
+      "$XTOOL" decode "$P3/zs1.ytp" "$P3/zs1.out" > /dev/null 2>&1
       ok=0; [ "$(p3_streams "$P3/zs0.log")" = "Streams: 0 / 1" ] && \
         [ "$(p3_streams "$P3/zs1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/zc.zst" "$P3/zs1.out" && ok=1
       p3_check "-cfgzstd (0 / 1 sin, 1 / 1 con; decode sin la opcion)" $ok
@@ -412,36 +412,36 @@ else:
     sys.exit(1)
 EOF
     then
-      "$XTOOL" precomp -mlz4f -t2 "$P3/ds.lz4" "$P3/l0.pmp" > "$P3/l0.log" 2>&1
-      "$XTOOL" precomp -mlz4f -cfglz4:ds1 -t2 "$P3/ds.lz4" "$P3/l1.pmp" > "$P3/l1.log" 2>&1
-      "$XTOOL" decode "$P3/l1.pmp" "$P3/l1.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mlz4f -t2 "$P3/ds.lz4" "$P3/l0.ytp" > "$P3/l0.log" 2>&1
+      "$XTOOL" precomp -mlz4f -cfglz4:ds1 -t2 "$P3/ds.lz4" "$P3/l1.ytp" > "$P3/l1.log" 2>&1
+      "$XTOOL" decode "$P3/l1.ytp" "$P3/l1.out" > /dev/null 2>&1
       ok=0; [ "$(p3_streams "$P3/l0.log")" = "Streams: 0 / 1" ] && \
         [ "$(p3_streams "$P3/l1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/ds.lz4" "$P3/l1.out" && ok=1
       p3_check "-cfglz4:ds1 (lz4f favorDecSpeed: 0 / 1 sin, 1 / 1 con)" $ok
-      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/ac.bin" "$P3/a0.pmp" > "$P3/a0.log" 2>&1
-      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:ac8 -t2 "$P3/ac.bin" "$P3/a1.pmp" > "$P3/a1.log" 2>&1
-      "$XTOOL" decode "$P3/a1.pmp" "$P3/a1.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/ac.bin" "$P3/a0.ytp" > "$P3/a0.log" 2>&1
+      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:ac8 -t2 "$P3/ac.bin" "$P3/a1.ytp" > "$P3/a1.log" 2>&1
+      "$XTOOL" decode "$P3/a1.ytp" "$P3/a1.out" > /dev/null 2>&1
       ok=0; [ "$(p3_streams "$P3/a0.log")" = "Streams: 0 / 1" ] && \
         [ "$(p3_streams "$P3/a1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/ac.bin" "$P3/a1.out" && ok=1
       p3_check "-cfglz4:x64kb:ac8 (bloque lz4 crudo: 0 / 1 sin, 1 / 1 con)" $ok
       # -b (0.9.9): busqueda bruta, no procesa nada; imprime las lineas que
       # reconstruyen cada stream. Sobre los mismos ds.lz4 y ac.bin.
-      "$XTOOL" precomp -mlz4f -b -t2 "$P3/ds.lz4" "$P3/b0.pmp" > "$P3/b0.log" 2>&1
-      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/ac.bin" "$P3/b1.pmp" > "$P3/b1.log" 2>&1
+      "$XTOOL" precomp -mlz4f -b -t2 "$P3/ds.lz4" "$P3/b0.ytp" > "$P3/b0.log" 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/ac.bin" "$P3/b1.ytp" > "$P3/b1.log" 2>&1
       ok=0; grep -qx -- '-mlz4f:l12 -cfglz4af0:ds1 \[1\]' "$P3/b0.log" && \
         grep -qx -- '-cfglz4ac8 \[1\]' "$P3/b1.log" && \
         [ "$(p3_streams "$P3/b1.log")" = "Streams: 0 / 1" ] && ok=1
       p3_check "-b (lz4f: l12 ds1; lz4: ac8; sin procesar)" $ok
-      "$XTOOL" precomp -mlz4:s64kb -b3 -t2 "$P3/ac.bin" "$P3/b2.pmp" > "$P3/b2.log" 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -b3 -t2 "$P3/ac.bin" "$P3/b2.ytp" > "$P3/b2.log" 2>&1
       ok=0; grep -qx 'No possible parameters match' "$P3/b2.log" && ok=1
       p3_check "-b3 (3 aceleraciones, 2..4: ninguna coincide)" $ok
       # lo que -b encuentra en un bloque con aceleracion > 127 se usa tal cual:
       # 0 / 1 sin la opcion, 1 / 1 con ella, y decode lo rehace (Resource)
-      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/abig.bin" "$P3/b3.pmp" > "$P3/b3.log" 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/abig.bin" "$P3/b3.ytp" > "$P3/b3.log" 2>&1
       AC=$(grep -m1 -oE '^-cfglz4ac[0-9]+' "$P3/b3.log" | sed 's/^-cfglz4//')
-      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/abig.bin" "$P3/b4.pmp" > "$P3/b4.log" 2>&1
-      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:$AC -t2 "$P3/abig.bin" "$P3/b5.pmp" > "$P3/b5.log" 2>&1
-      "$XTOOL" decode "$P3/b5.pmp" "$P3/b5.out" > /dev/null 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/abig.bin" "$P3/b4.ytp" > "$P3/b4.log" 2>&1
+      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:$AC -t2 "$P3/abig.bin" "$P3/b5.ytp" > "$P3/b5.log" 2>&1
+      "$XTOOL" decode "$P3/b5.ytp" "$P3/b5.out" > /dev/null 2>&1
       ok=0; [ -n "$AC" ] && [ "${AC#ac}" -gt 127 ] && \
         [ "$(p3_streams "$P3/b4.log")" = "Streams: 0 / 1" ] && \
         [ "$(p3_streams "$P3/b5.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/abig.bin" "$P3/b5.out" && ok=1
@@ -478,8 +478,8 @@ for p in plain:
     enc.append(p ^ (((t * (t ^ 1)) >> 8) & 0xff)); upd(p)
 open(sys.argv[1], 'wb').write(bytes(r.getrandbits(8) for _ in range(300)) + b'ZCR1' + struct.pack('<I', len(enc)) + bytes(enc) + bytes(r.getrandbits(8) for _ in range(300)))
 EOF
-    "$XTOOL" precomp -mzc+zlib -d1 -bd"$ZD" -t2 "$P3/zc.bin" "$P3/zc.pmp" > "$P3/zc.log" 2>&1 </dev/null
-    "$XTOOL" decode -bd"$ZD" "$P3/zc.pmp" "$P3/zc.out" > /dev/null 2>&1 </dev/null
+    "$XTOOL" precomp -mzc+zlib -d1 -bd"$ZD" -t2 "$P3/zc.bin" "$P3/zc.ytp" > "$P3/zc.log" 2>&1 </dev/null
+    "$XTOOL" decode -bd"$ZD" "$P3/zc.ytp" "$P3/zc.out" > /dev/null 2>&1 </dev/null
     ok=0; [ "$(p3_streams "$P3/zc.log")" = "Streams: 2 / 2" ] && cmp -s "$P3/zc.bin" "$P3/zc.out" && ok=1
     p3_check "zipcrypto + zlib a -d1 (2 / 2)" $ok
 
@@ -510,13 +510,13 @@ EOF
       printf '[Stream1]\nName=toy\nCodec=toyx\nBigEndian=0\nSignature=0x31594F54\nStructure=Signature(4),CSize(4),DSize(4),Stream\nCompressedSize=CSize\nDecompressedSize=DSize\n' > "$PD/toy.ini"
       printf '[toyx]\nEncode=%s\nDecode=%s\n' "$enc" "$dec" > "$PD/$(basename "$XTOOL").ini"
       for t in 1 4; do
-        timeout 300 "$XTOOL" precomp -mtoy -bd"$PD" -t$t "$P3/toy.bin" "$P3/t$m$t.pmp" > "$P3/t$m$t.log" 2>&1 </dev/null
-        timeout 300 "$XTOOL" decode -bd"$PD" "$P3/t$m$t.pmp" "$P3/t$m$t.out" > /dev/null 2>&1 </dev/null
+        timeout 300 "$XTOOL" precomp -mtoy -bd"$PD" -t$t "$P3/toy.bin" "$P3/t$m$t.ytp" > "$P3/t$m$t.log" 2>&1 </dev/null
+        timeout 300 "$XTOOL" decode -bd"$PD" "$P3/t$m$t.ytp" "$P3/t$m$t.out" > /dev/null 2>&1 </dev/null
         ok=0; [ "$(p3_streams "$P3/t$m$t.log")" = "Streams: 5 / 5" ] && cmp -s "$P3/toy.bin" "$P3/t$m$t.out" && ok=1
         p3_check "plugin INI modo $m -t$t (5 / 5)" $ok
       done
-      ok=0; cmp -s "$P3/t${m}1.pmp" "$P3/t${m}4.pmp" && ok=1
-      p3_check "plugin INI modo $m: mismo .pmp a -t1 y -t4" $ok
+      ok=0; cmp -s "$P3/t${m}1.ytp" "$P3/t${m}4.ytp" && ok=1
+      p3_check "plugin INI modo $m: mismo .ytp a -t1 y -t4" $ok
     done
 
     # execute: mismo programa para ir y volver (xor). {filein}/{fileout} no le
@@ -525,9 +525,9 @@ EOF
     cat "$CORPUS/11_text_8m.bin" "$CORPUS/10_random_2m.bin" > "$P3/ex.bin"
     cp "$P3/xorer" "$(dirname "$XTOOL")/xorer"
     for syn in "xorer {stdin} {stdout}" "xorer [filein] [fileout]" "xorer {filein} {fileout}"; do
-      rm -f "$P3/ex.pmp" "$P3/ex.out"
-      "$XTOOL" execute -c4mb -t2 "$P3/ex.bin" "$P3/ex.pmp" $syn > /dev/null 2>&1
-      "$XTOOL" decode "$P3/ex.pmp" "$P3/ex.out" $syn > /dev/null 2>&1
+      rm -f "$P3/ex.ytp" "$P3/ex.out"
+      "$XTOOL" execute -c4mb -t2 "$P3/ex.bin" "$P3/ex.ytp" $syn > /dev/null 2>&1
+      "$XTOOL" decode "$P3/ex.ytp" "$P3/ex.out" $syn > /dev/null 2>&1
       ok=0; cmp -s "$P3/ex.bin" "$P3/ex.out" && ok=1
       p3_check "execute '$syn' round-trip" $ok
     done
@@ -567,12 +567,12 @@ for f in os.listdir(sys.argv[1]):
 fi
 
 # --- integridad del passthrough literal --------------------------------------
-# El digest XTP1 cubria solo los streams. En un .pmp donde ningun codec engancho
+# El digest XTP1 cubria solo los streams. En un .ytp donde ningun codec engancho
 # los bytes pasaban de largo sin verificacion: medido, 40 de 40 flips de un byte
 # decodificaban con exit 0 y devolvian datos distintos. Un fallo silencioso.
-# Este bloque exige lo contrario: un .pmp corrupto tiene que FALLAR el decode.
+# Este bloque exige lo contrario: un .ytp corrupto tiene que FALLAR el decode.
 if [ -x "$XTOOL" ]; then
-  IGP="$WORK/ig_src.bin"; IGPMP="$WORK/ig.pmp"; IGOUT="$WORK/ig.out"
+  IGP="$WORK/ig_src.bin"; IGPMP="$WORK/ig.ytp"; IGOUT="$WORK/ig.out"
   # Entrada sin streams: nada comprimido, todo passthrough literal, que es
   # exactamente el caso que no estaba cubierto.
   python3 -c "
@@ -581,11 +581,11 @@ random.seed(20261125)
 open('$IGP','wb').write(random.randbytes(200000))
 " 2>/dev/null
   if "$XTOOL" precomp -mzlib "$IGP" "$IGPMP" >/dev/null 2>&1 && [ -s "$IGPMP" ]; then
-    # control: el .pmp intacto decodifica
+    # control: el .ytp intacto decodifica
     if "$XTOOL" decode "$IGPMP" "$IGOUT" >/dev/null 2>&1 && cmp -s "$IGP" "$IGOUT"; then
-      echo "-- integridad: .pmp intacto decodifica --"
+      echo "-- integridad: .ytp intacto decodifica --"
     else
-      echo "-- *** integridad: el .pmp intacto NO decodifica *** --"
+      echo "-- *** integridad: el .ytp intacto NO decodifica *** --"
       fail=$((fail+1))
     fi
     # el caso: un byte cambiado en el passthrough tiene que fallar
@@ -593,23 +593,23 @@ open('$IGP','wb').write(random.randbytes(200000))
 d = bytearray(open('$IGPMP','rb').read())
 # lejos de la cabecera, dentro de los datos que nadie proceso
 d[len(d)//2] ^= 0xFF
-open('$WORK/ig_bad.pmp','wb').write(d)
+open('$WORK/ig_bad.ytp','wb').write(d)
 " 2>/dev/null
     rm -f "$WORK/ig_bad.out"
-    # LIMITACION CONOCIDA, no un fallo de la suite. Hoy un .pmp cuyo cuerpo es
+    # LIMITACION CONOCIDA, no un fallo de la suite. Hoy un .ytp cuyo cuerpo es
     # todo passthrough literal no tiene ninguna cobertura de integridad: el
     # digest XTP1 cubre los streams y nada mas. Se informa siempre, y solo
     # cuenta como fallo si STRICT_INTEGRITY=1 -- pensado para el dia que se
     # cierre la limitacion: ahi este bloque pasa a exigirla sin tocar nada mas.
-    if "$XTOOL" decode "$WORK/ig_bad.pmp" "$WORK/ig_bad.out" >/dev/null 2>&1; then
+    if "$XTOOL" decode "$WORK/ig_bad.ytp" "$WORK/ig_bad.out" >/dev/null 2>&1; then
       if [ "${STRICT_INTEGRITY:-0}" = "1" ]; then
-        echo "-- *** integridad: .pmp corrupto decodifico con exit 0 (SILENCIOSO) *** --"
+        echo "-- *** integridad: .ytp corrupto decodifico con exit 0 (SILENCIOSO) *** --"
         fail=$((fail+1))
       else
         echo "-- integridad: LIMITACION CONOCIDA (passthrough sin cubrir; STRICT_INTEGRITY=1 para exigirlo) --"
       fi
     else
-      echo "-- integridad: .pmp corrupto rechazado --"
+      echo "-- integridad: .ytp corrupto rechazado --"
       # Ademas de rechazar, no debe dejar el archivo de salida a medias: quien lo
       # ejecute en un script no mira el exit code. Esto si se exige siempre: es
       # barato y es el comportamiento correcto una vez que el rechazo existe.
@@ -619,7 +619,7 @@ open('$WORK/ig_bad.pmp','wb').write(d)
       fi
     fi
   else
-    echo "-- integridad: (no se pudo generar el .pmp de prueba) --"
+    echo "-- integridad: (no se pudo generar el .ytp de prueba) --"
   fi
 fi
 
@@ -664,14 +664,14 @@ fi
 # --- srep: reproducibilidad y metodos -------------------------------------
 # La suite de arriba prueba reversibilidad; esto prueba dos propiedades que no
 # se ven en un round-trip y que costaron bugs reales:
-#   1. -dd<N> con un metodo fuera de rango fallaba con un .pmp de 34 bytes y
+#   1. -dd<N> con un metodo fuera de rango fallaba con un .ytp de 34 bytes y
 #      exit 0. Un error de linea de comandos tiene que ser un error.
 #   2. El output de srep no era reproducible (clave VMAC aleatoria). Con -seed
-#      dos corridas tienen que dar el MISMO .pmp; sin eso no se puede fijar un
+#      dos corridas tienen que dar el MISMO .ytp; sin eso no se puede fijar un
 #      archivo por hash ni comparar dos builds.
 if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
   SEED="$(printf 'ab%.0s' $(seq 1 32))"
-  SP1="$WORK/rep1.pmp"; SP2="$WORK/rep2.pmp"; SPR="$WORK/rep.out"
+  SP1="$WORK/rep1.ytp"; SP2="$WORK/rep2.ytp"; SPR="$WORK/rep.out"
   if "$XTOOL" precomp -mzlib -dd3 -seed"$SEED" "$CORPUS/23_dup_streams.bin" "$SP1" >/dev/null 2>&1 \
   && "$XTOOL" precomp -mzlib -dd3 -seed"$SEED" "$CORPUS/23_dup_streams.bin" "$SP2" >/dev/null 2>&1; then
     if cmp -s "$SP1" "$SP2"; then
@@ -689,8 +689,8 @@ if [ -x "$XTOOL" ] && [ -f "$ROOT/srep64" -o -f "$ROOT/srep.exe" ]; then
   else
     echo "-- srep: (sin helper o -dd3 no soportado, se omiten estas pruebas) --"
   fi
-  # Un metodo fuera de rango tiene que fallar, no producir un .pmp vacio.
-  if "$XTOOL" precomp -mzlib -dd9 "$CORPUS/23_dup_streams.bin" "$WORK/bad.pmp" >/dev/null 2>&1; then
+  # Un metodo fuera de rango tiene que fallar, no producir un .ytp vacio.
+  if "$XTOOL" precomp -mzlib -dd9 "$CORPUS/23_dup_streams.bin" "$WORK/bad.ytp" >/dev/null 2>&1; then
     echo "-- srep: *** -dd9 (invalido) NO fallo *** --"
     fail=$((fail+1))
   else

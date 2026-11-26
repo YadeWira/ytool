@@ -18,9 +18,9 @@ resourcestring
   SPrecompError3 = 'Error in the method ''%s'' (stream #%d, pos %d, depth %d)';
   // Distinto de SPrecompError3 a proposito: ese dice que el codec no pudo
   // reconstruir, este dice que reconstruyo ALGO y no es lo que se guardo.
-  // El segundo apunta a corrupcion del .pmp, el primero no.
+  // El segundo apunta a corrupcion del .ytp, el primero no.
   SPrecompError4 = 'Checksum mismatch restoring ''%s'' (stream #%d, pos %d, depth %d) '
-    + '-- the .pmp is corrupt or was produced by a different build';
+    + '-- the .ytp is corrupt or was produced by a different build';
   SPrecompSep1 = '+';
   SPrecompSep2 = ':';
   SPrecompSep3 = ',';
@@ -99,7 +99,7 @@ type
     // comparar y aceptaba un stream restaurado comparando SOLO EL TAMANO.
     //
     // Medido antes de agregarlo: 40 de 40 flips de un byte en el cuerpo de un
-    // .pmp decodificaban con exit 0 y devolvian datos distintos. Ninguno daba
+    // .ytp decodificaban con exit 0 y devolvian datos distintos. Ninguno daba
     // error. El cuerpo no tenia ninguna cobertura.
     //
     // Los streams DUPLICATED_STREAM llevan esto en cero: no pasan por Restore,

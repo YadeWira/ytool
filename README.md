@@ -19,8 +19,8 @@ Linux x64, Windows x64 and Windows x86 builds, with every codec library included
 ## Usage
 
 ```bash
-ytool precomp -mzlib+zstd+pja input output.pmp   # find and unpack streams
-ytool decode output.pmp restored                 # the original, byte for byte
+ytool precomp -mzlib+zstd+pja input output.ytp   # find and unpack streams
+ytool decode output.ytp restored                 # the original, byte for byte
 ```
 
 Common options: `-m<codecs>` (joined with `+`), `-t#` threads, `-l#` final LZMA2 compression, `-dd`

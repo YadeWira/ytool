@@ -32,7 +32,7 @@ CC="$(command -v gcc || command -v clang || command -v cc)"
 # lz4 pinned by SHA, not by tag (see contrib/pin-repo.sh).
 # v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
 # 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
-# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# levels 1, 2 and 10-12, and frames at those levels, so .ytp files from the
 # older pre-releases that hold such streams do not restore with it.
 LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 
@@ -44,7 +44,7 @@ LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 #
 # v1.6.0 because its output is the same as 1.5.7's in every case measured
 # (264 of 264: 4 inputs x levels 1-22, checksum on and off, compress2 and
-# compressCCtx), while 1.5.2 differs in 189. So .pmp files made against a
+# compressCCtx), while 1.5.2 differs in 189. So .ytp files made against a
 # distro 1.5.7 still restore, and .zst files from a current zstd reproduce.
 # Own checkout: $CSRC/zstd stays at v1.5.2 for the compiled-in objects.
 ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
@@ -62,7 +62,7 @@ pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 #
 # Eso no es solo desprolijo. Entre lz4 1.9.4 y 1.10.0, LZ4HC_CLEVEL_MIN paso
 # de 3 a 2, y el nivel 2 -- el primer candidato de la busqueda de nivel de
-# PrecompLZ4 -- pasa a ser otro algoritmo. Medido end-to-end: un .pmp
+# PrecompLZ4 -- pasa a ser otro algoritmo. Medido end-to-end: un .ytp
 # codificado contra 1.10.0 y restaurado contra 1.9.4 falla, y existe la
 # variante silenciosa (mismo largo, bytes distintos) que pasa el gate de
 # tamano de PrecompLZ4.pas:599 y escribe datos mal sin excepcion.
@@ -142,7 +142,7 @@ fi
 # From YadeWira/ultra-fast-lzma2, the maintained fork (conor42/fast-lzma2 is
 # frozen). Its fast-lzma2/ folder is the FL2_* library ytool loads; the uf-lzma2
 # line at the repo root has a renamed UF2_* API and is not used. 1.2.0 keeps
-# the compressed bytes of every level, so .pmp files are unchanged.
+# the compressed bytes of every level, so .ytp files are unchanged.
 echo "==> fast-lzma2 (libfast-lzma2.so)"
 pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "$FLZMA2_REF"
 # Same flags as its Makefile: hidden visibility (only FL2_* exported) and, on

@@ -137,14 +137,14 @@ smoke() { # codec archivo
   local m="$1" f="$2"
   [ -f "$CORPUS/$f" ] || { echo "   (sin material para -m$m, salteado)"; return; }
   cp "$CORPUS/$f" "$P/in.bin"
-  ( cd "$P" && ./ytool precomp "-m$m" in.bin real.pmp >/dev/null 2>&1
-                ./ytool precomp -mflac in.bin lit.pmp  >/dev/null 2>&1
-                ./ytool decode real.pmp back.bin       >/dev/null 2>&1 )
+  ( cd "$P" && ./ytool precomp "-m$m" in.bin real.ytp >/dev/null 2>&1
+                ./ytool precomp -mflac in.bin lit.ytp  >/dev/null 2>&1
+                ./ytool decode real.ytp back.bin       >/dev/null 2>&1 )
   local r l rt
-  r="$(stat -c %s "$P/real.pmp" 2>/dev/null || echo 0)"
-  l="$(stat -c %s "$P/lit.pmp"  2>/dev/null || echo 0)"
+  r="$(stat -c %s "$P/real.ytp" 2>/dev/null || echo 0)"
+  l="$(stat -c %s "$P/lit.ytp"  2>/dev/null || echo 0)"
   cmp -s "$P/in.bin" "$P/back.bin" && rt=ok || rt=MISMATCH
-  rm -f "$P"/real.pmp "$P"/lit.pmp "$P"/back.bin "$P"/in.bin
+  rm -f "$P"/real.ytp "$P"/lit.ytp "$P"/back.bin "$P"/in.bin
   if [ "$rt" != ok ]; then echo "   FALLA -m$m sobre $f: round-trip $rt"; FAILED=1; return; fi
   # Un almacenamiento literal pesa lo mismo que el de un codec que no matchea.
   if [ "$r" = "$l" ]; then echo "   FALLA -m$m sobre $f: no engancho (pmp=$r == literal=$l)"; FAILED=1; return; fi
@@ -233,4 +233,4 @@ echo
 echo "   NOTA: el engagement de los binarios de Windows NO se verifica aca."
 echo "   La salida de ytool en Windows va directo a la consola y no se puede leer"
 echo "   por SSH, asi que hay que correr el smoke a mano en la VM comparando el"
-echo "   tamano del .pmp contra la referencia de Linux impresa arriba."
+echo "   tamano del .ytp contra la referencia de Linux impresa arriba."

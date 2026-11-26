@@ -1004,7 +1004,7 @@ begin
         // was never assigned here, unlike PrecompLZMA/PrecompSearch which
         // give it real meaning -- this codec has none, but the field still
         // flows into TStreamHeader.Resource and gets written to the output
-        // verbatim, so leftover stack garbage ended up embedded in the .pmp
+        // verbatim, so leftover stack garbage ended up embedded in the .ytp
         // file, varying run-to-run with process/stack layout.
         SI.Resource := 0;
         SI.Option := 0;
@@ -1062,7 +1062,7 @@ begin
         // was never assigned here, unlike PrecompLZMA/PrecompSearch which
         // give it real meaning -- this codec has none, but the field still
         // flows into TStreamHeader.Resource and gets written to the output
-        // verbatim, so leftover stack garbage ended up embedded in the .pmp
+        // verbatim, so leftover stack garbage ended up embedded in the .ytp
         // file, varying run-to-run with process/stack layout.
         SI.Resource := 0;
         SI.Option := 0;

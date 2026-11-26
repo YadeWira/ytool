@@ -19,7 +19,7 @@ Las DLL solo importan DLL del sistema (KERNEL32, msvcrt, y user32/oleaut32 en pj
 
 x86 (32 bits): un .lz4 en modo rapido con bloques enlazados, escrito por un lz4 de
 64 bits, no se puede reproducir en 32 bits (lz4 usa otro hash segun el tamano de
-palabra). Al comprimir en x86 se guarda tal cual; y un .pmp hecho en 64 bits que
+palabra). Al comprimir en x86 se guarda tal cual; y un .ytp hecho en 64 bits que
 contiene uno de esos streams no se decodifica en x86: sale con error (exit 1) y no
 escribe nada, nunca datos incorrectos. Para mover archivos entre maquinas, usa x64.
 
@@ -29,5 +29,5 @@ sin el, ytool avisa y usa la dedup en memoria (-dd).
 Oodle tampoco: es propietario; si tienes oo2core/oo2ext, ponla junto a ytool.exe.
 
 Uso:
-  ytool.exe precomp -mzlib+zstd+pja entrada salida.pmp
-  ytool.exe decode salida.pmp restaurado
+  ytool.exe precomp -mzlib+zstd+pja entrada salida.ytp
+  ytool.exe decode salida.ytp restaurado

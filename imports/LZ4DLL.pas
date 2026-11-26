@@ -198,7 +198,7 @@ begin
   //
   // Entre lz4 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2), y el nivel 2
   // es el primer candidato que prueba la busqueda de nivel de PrecompLZ4.
-  // Con versiones distintas de un lado y del otro, un .pmp puede no
+  // Con versiones distintas de un lado y del otro, un .ytp puede no
   // restaurarse: medido, con una variante silenciosa (mismo largo, bytes
   // distintos) que pasa el chequeo de tamano de PrecompLZ4.pas:599.
   //

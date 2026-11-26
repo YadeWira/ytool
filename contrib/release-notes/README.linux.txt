@@ -10,9 +10,9 @@ liblz4.so    lz4 1.11.1 (-mlz4, -mlz4hc, -mlz4f)
 libzstd.so   zstd 1.6.0 (-mzstd)
 libfast-lzma2.so  compresion final (-l#)
 
-liblz4.so y libzstd.so van incluidas a proposito: el .pmp guarda el nivel, no el
+liblz4.so y libzstd.so van incluidas a proposito: el .ytp guarda el nivel, no el
 stream, y cada version de lz4/zstd comprime distinto en algunos niveles. ytool las
-carga antes que las del sistema; si las borras, usa las de la distro y un .pmp puede
+carga antes que las del sistema; si las borras, usa las de la distro y un .ytp puede
 no restaurarse en otra maquina.
 
 Del sistema (dlopen): libz, liblzo2, libFLAC, libwavpack.
@@ -22,5 +22,5 @@ pones srep64 junto a ytool (builds: https://github.com/YadeWira/srep-builds); si
 ytool avisa y usa la dedup en memoria (-dd).
 
 Uso:
-  ./ytool precomp -mzlib+zstd+pja entrada salida.pmp
-  ./ytool decode salida.pmp restaurado
+  ./ytool precomp -mzlib+zstd+pja entrada salida.ytp
+  ./ytool decode salida.ytp restaurado

@@ -19,7 +19,7 @@ uses
 
 const
   // 'XTP1' -- formato de precomp, version 1. Bumpeado al agregar el checksum a
-  // TStreamHeader: un .pmp nuevo leido por un ytool viejo cae en el else del
+  // TStreamHeader: un .ytp nuevo leido por un ytool viejo cae en el else del
   // case de ytool.dpr y sale con error de magic desconocido, exit 1 y sin
   // dejar archivo (verificado). Sin el bump, el ytool viejo habria leido
   // headers de 14 bytes como si fueran de 30, y el fallo no habria tenido
@@ -28,7 +28,7 @@ const
   // OJO CON LA SERIE 'XTL': el ultimo byte de 'XTL0'/'XTL1'/'XTL2' NO es un
   // digito de version, es un discriminador de TIPO de contenedor -- XTL1 ya
   // es YTOOL_IODEC y XTL2 es YTOOL_EXEC. Bumpear 'XTL0' a 'XTL1' habria hecho
-  // que un .pmp nuevo se despachara al decodificador de iodec. Lo atrapo el
+  // que un .ytp nuevo se despachara al decodificador de iodec. Lo atrapo el
   // compilador como duplicate case label; si los tres no hubieran estado en
   // el mismo case, no lo habria atrapado nadie.
   YTOOL_PRECOMP = $31505458;
@@ -208,7 +208,7 @@ var
   SREPEXE: String = {$IFDEF MSWINDOWS}'srep.exe'{$ELSE}'srep'{$ENDIF};
   { Semilla fija para srep (SREP_SEED_HEX, parche propio en contrib/patch_srep.py).
     Sin ella cada ejecucion produce bytes distintos: la clave VMAC sale de
-    systemRandomData()+time(). Con ella, el mismo input da el mismo .pmp, que es
+    systemRandomData()+time(). Con ella, el mismo input da el mismo .ytp, que es
     lo que permite comparar dos builds, fijar un test por hash y reproducir un
     archivo publicado. Vacia = comportamiento de siempre (aleatoria). }
   SrepSeed: String = '';
@@ -378,7 +378,7 @@ begin
                 StoreDD := StrToInt(S[2]);
             // El digito ES el metodo de srep (-dd3 -> srep -m3f), y srep solo
             // tiene del 0 al 5. Con -dd9 el helper sale con error, ytool no
-            // mira su exit code, y el resultado era un .pmp de 34 bytes con
+            // mira su exit code, y el resultado era un .ytp de 34 bytes con
             // exit 0: el unico sintoma, tres "0.00 MB" en el resumen. Un valor
             // fuera de rango es un error de linea de comandos, no algo que
             // degradar, asi que se rechaza antes de empezar.
@@ -563,7 +563,7 @@ begin
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
     // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
     // que la cadena de ReplaceText no toca y termina evaluandose como un
-    // tamaño invalido: precomp salia con exit 1 y un .pmp de 22 bytes. Si lo
+    // tamaño invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
     // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
     if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
       S := '0mb';
@@ -685,7 +685,7 @@ begin
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
     // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
     // que la cadena de ReplaceText no toca y termina evaluandose como un
-    // tamaño invalido: precomp salia con exit 1 y un .pmp de 22 bytes. Si lo
+    // tamaño invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
     // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
     if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
       S := '0mb';
@@ -2264,7 +2264,7 @@ begin
         S := S + SPrecompSep1 + ExternalMethods[J];
   end;
   // 0.9.1 (removes recompress): the file header is now always written (previously it was
-  // omitted under "if REPROCESS=''" because -r mode did not produce a decodable .pmp).
+  // omitted under "if REPROCESS=''" because -r mode did not produce a decodable .ytp).
   begin
     Bytes := BytesOf(S);
     B := Length(Bytes);
@@ -3781,7 +3781,7 @@ var
 {$ENDIF}
   begin
     // Stream count, not bytes: unlike encode's EncInfo.InSize (the whole input
-    // file's size, known upfront), decode reads the .pmp in sequential blocks
+    // file's size, known upfront), decode reads the .ytp in sequential blocks
     // (required to stay pipe/stdin-friendly, no seeking) -- a byte-accurate
     // total isn't available before the last block is reached. stderr, same
     // reasoning as encode's Update: stdout must stay clean for "-" piping.

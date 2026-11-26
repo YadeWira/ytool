@@ -33,17 +33,17 @@ XXHASH_REF="c87183a77d67f7d37e3d2d1b7eaac5e7c695e4f0"   # v0.8.4
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
 # lz4 pinneado por SHA y no por tag: 0774d05 es posterior al tag v1.10.0 y
-# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .pmp no
+# trae el merge de fix_read_oob (PR #1753). Como ytool decodifica .ytp no
 # confiable, volver al tag sacaria ese fix.
 #
 # Los tres scripts que compilan lz4 comparten $CSRC/lz4, asi que TIENEN que
 # pedir la misma revision: entre 1.9.4 y 1.10.0 cambio LZ4HC_CLEVEL_MIN (3 -> 2)
 # y el nivel 2 -- el primer candidato de la busqueda de nivel -- pasa a ser
-# otro algoritmo. Un .pmp codificado con una version se restaura mal con la
+# otro algoritmo. Un .ytp codificado con una version se restaura mal con la
 # otra, a veces en silencio. Ver contrib/pin-repo.sh.
 # v1.11.1 since 0.9.9a, which starts a new baseline: its output differs from
 # 0774d05 (1.10.0 + fix_read_oob) for fast mode at every acceleration, HC
-# levels 1, 2 and 10-12, and frames at those levels, so .pmp files from the
+# levels 1, 2 and 10-12, and frames at those levels, so .ytp files from the
 # older pre-releases that hold such streams do not restore with it.
 LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 

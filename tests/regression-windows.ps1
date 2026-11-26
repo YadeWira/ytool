@@ -89,13 +89,13 @@ try {
   )
 
   $pass = 0; $fail = 0
-  "{0,-26} {1,-14} {2,10} {3,10} {4,8}  {5}" -f "FILE", "METHOD", "IN", "PMP", "RATIO", "RESULT"
+  "{0,-26} {1,-14} {2,10} {3,10} {4,8}  {5}" -f "FILE", "METHOD", "IN", "YTP", "RATIO", "RESULT"
   Get-ChildItem $CorpusDir -File | ForEach-Object {
     $f = $_.FullName
     $bn = $_.Name
     $insz = $_.Length
     foreach ($m in $Methods) {
-      $pmp = Join-Path $Work "out.pmp"
+      $pmp = Join-Path $Work "out.ytp"
       $outf = Join-Path $Work "out.bin"
       Remove-Item $pmp, $outf -ErrorAction SilentlyContinue
       $mArgs = if ($m -eq "") { @() } else { $m -split " " }

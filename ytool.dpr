@@ -583,7 +583,7 @@ begin
               end;
           else
             raise Exception.CreateFmt(
-              'Unrecognized .pmp format (bad magic: $%.8x)', [I]);
+              'Unrecognized .ytp format (bad magic: $%.8x)', [I]);
           end;
         finally
           Input.Free;
