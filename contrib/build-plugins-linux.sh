@@ -50,7 +50,12 @@ LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
 echo "==> libzstd.so (x86-64)"
 pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
+# ZSTD_MULTITHREAD: the zstd CLI writes with one worker thread by default (-T1),
+# whose bytes differ from single-threaded zstd above a job's size; without it
+# libzstd refuses nbWorkers and such frames (level 1 over ~2 MB, for one) could
+# not be reproduced. Single-threaded output does not change.
 ( cd "$CSRC/zstd-lib/lib" && "$CC" -shared -fPIC -O2 -Wl,-Bsymbolic -DZSTD_DISABLE_ASM \
+    -DZSTD_MULTITHREAD -pthread \
     -I. -Icommon common/*.c compress/*.c decompress/*.c -o "$ROOT/libzstd.so" ) \
   && echo "   OK -> libzstd.so" || echo "   (libzstd fallo)"
 

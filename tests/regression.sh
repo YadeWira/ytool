@@ -294,6 +294,21 @@ if [ -x "$XTOOL" ] && [ -f "$XF" ]; then
   fi
 fi
 
+# --- -p (prefetch) en el borde de 4 MB --------------------------------------
+# -p8mb fallaba (access violation, exit 1, .ytp de 22 bytes): la mitad de -p es
+# la cache de escritura, y con exactamente 4 MB (su bloque) TCacheWriteStream
+# escribia en un almacenamiento que no habia creado. 4, 8 y 16 MB, ida y vuelta.
+PF="$CORPUS/21_zlib_many.bin"
+if [ -x "$XTOOL" ] && [ -f "$PF" ]; then
+  pok=1
+  for p in 4mb 8mb 16mb; do
+    "$XTOOL" precomp -mzlib -p$p "$PF" "$WORK/pf.ytp" >/dev/null 2>&1 && \
+      "$XTOOL" decode -p$p "$WORK/pf.ytp" "$WORK/pf.out" >/dev/null 2>&1 && \
+      cmp -s "$PF" "$WORK/pf.out" || { pok=0; echo "-- *** -p$p: fallo *** --"; }
+  done
+  if [ "$pok" = 1 ]; then echo "-- -p4mb/-p8mb/-p16mb: ida y vuelta --"; pass=$((pass+1)); else fail=$((fail+1)); fi
+fi
+
 # --- reassign, plugins INI, execute, find/extract/erase/replace -------------
 # Estas rutas no tenian una sola prueba y escondian bugs reales (2026-11-25):
 # un plugin INI perdia todo stream a -t1 (division por cero), un codec de
@@ -412,6 +427,58 @@ EOF
       p3_check "esa linea en -cfgzstd: 1 / 1 (tl/st en un recurso), decode exacto" $ok
     else
       echo "-- -b zstd: omitido, no se pudo escribir el frame con $ZL --"
+    fi
+
+    # Frames como los escribe el CLI de zstd: con un worker (-T1, su defecto),
+    # que da otros bytes que zstd de un hilo por encima de un job; y desde un
+    # pipe, sin tamano en la cabecera. Ambos se guardaban tal cual. Necesitan
+    # una libzstd con ZSTD_MULTITHREAD (la que construye build-plugins-linux.sh).
+    if python3 - "$ZL" "$P3" <<'EOF'
+import ctypes, sys, random
+z = ctypes.CDLL(sys.argv[1]); d = sys.argv[2]
+z.ZSTD_createCCtx.restype = ctypes.c_void_p
+z.ZSTD_CCtx_setParameter.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+z.ZSTD_CCtx_setParameter.restype = ctypes.c_size_t
+z.ZSTD_isError.argtypes = [ctypes.c_size_t]
+z.ZSTD_compress2.restype = ctypes.c_size_t
+z.ZSTD_compress2.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t]
+class Buf(ctypes.Structure):
+    _fields_ = [("p", ctypes.c_void_p), ("size", ctypes.c_size_t), ("pos", ctypes.c_size_t)]
+z.ZSTD_compressStream2.restype = ctypes.c_size_t
+z.ZSTD_compressStream2.argtypes = [ctypes.c_void_p, ctypes.POINTER(Buf), ctypes.POINTER(Buf), ctypes.c_int]
+r = random.Random(11)
+w = [bytes(r.choice(b"abcdefghijklmnopqrst") for _ in range(r.randint(2, 9))) for _ in range(5000)]
+data = b" ".join(r.choice(w) for _ in range(400000))
+c = z.ZSTD_createCCtx()
+if z.ZSTD_isError(z.ZSTD_CCtx_setParameter(c, 400, 1)):
+    sys.exit(2)
+for p, v in ((100, 1), (201, 1)):
+    z.ZSTD_CCtx_setParameter(c, p, v)
+out = ctypes.create_string_buffer(len(data) + 65536)
+n = z.ZSTD_compress2(c, out, len(out), data, len(data))
+open(d + "/zmt.zst", "wb").write(out.raw[:n])
+c = z.ZSTD_createCCtx()
+for p, v in ((100, 19), (201, 1)):
+    z.ZSTD_CCtx_setParameter(c, p, v)
+src = ctypes.create_string_buffer(data, len(data))
+o = Buf(ctypes.cast(out, ctypes.c_void_p), len(out), 0)
+i = Buf(ctypes.cast(src, ctypes.c_void_p), len(data), 0)
+while i.pos < i.size:
+    z.ZSTD_compressStream2(c, ctypes.byref(o), ctypes.byref(i), 0)
+e = Buf(None, 0, 0)
+while z.ZSTD_compressStream2(c, ctypes.byref(o), ctypes.byref(e), 2) != 0:
+    pass
+open(d + "/zpipe.zst", "wb").write(out.raw[:o.pos])
+EOF
+    then
+      for zf in zmt zpipe; do
+        "$XTOOL" precomp -mzstd "$P3/$zf.zst" "$P3/$zf.ytp" > "$P3/$zf.log" 2>&1
+        "$XTOOL" decode "$P3/$zf.ytp" "$P3/$zf.out" > /dev/null 2>&1
+        ok=0; [ "$(p3_streams "$P3/$zf.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/$zf.zst" "$P3/$zf.out" && ok=1
+        p3_check "zstd como el CLI ($zf): 1 / 1, decode exacto" $ok
+      done
+    else
+      echo "-- zstd -T1/pipe: omitido (libzstd sin ZSTD_MULTITHREAD o sin python) --"
     fi
 
     # -cfglz4 (0.9.9): ds = favorDecSpeed de lz4f (un frame de nivel 12 con
@@ -643,18 +710,11 @@ d[len(d)//2] ^= 0xFF
 open('$WORK/ig_bad.ytp','wb').write(d)
 " 2>/dev/null
     rm -f "$WORK/ig_bad.out"
-    # LIMITACION CONOCIDA, no un fallo de la suite. Hoy un .ytp cuyo cuerpo es
-    # todo passthrough literal no tiene ninguna cobertura de integridad: el
-    # digest XTP1 cubre los streams y nada mas. Se informa siempre, y solo
-    # cuenta como fallo si STRICT_INTEGRITY=1 -- pensado para el dia que se
-    # cierre la limitacion: ahi este bloque pasa a exigirla sin tocar nada mas.
+    # Desde XTP2 (0.9.9b) cada bloque lleva un hash de sus literales: un byte
+    # cambiado ahi tiene que fallar, siempre.
     if "$XTOOL" decode "$WORK/ig_bad.ytp" "$WORK/ig_bad.out" >/dev/null 2>&1; then
-      if [ "${STRICT_INTEGRITY:-0}" = "1" ]; then
-        echo "-- *** integridad: .ytp corrupto decodifico con exit 0 (SILENCIOSO) *** --"
-        fail=$((fail+1))
-      else
-        echo "-- integridad: LIMITACION CONOCIDA (passthrough sin cubrir; STRICT_INTEGRITY=1 para exigirlo) --"
-      fi
+      echo "-- *** integridad: .ytp corrupto decodifico con exit 0 (SILENCIOSO) *** --"
+      fail=$((fail+1))
     else
       echo "-- integridad: .ytp corrupto rechazado --"
       # Ademas de rechazar, no debe dejar el archivo de salida a medias: quien lo

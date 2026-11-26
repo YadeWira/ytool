@@ -64,6 +64,7 @@ var
   ZFuncs: PPrecompFuncs = nil;
   ZThreads: Integer = 1;
   ZLock: TRTLCriticalSection;
+  ZMTOK: Boolean = False;   // the library takes nbWorkers (built with threads)
 
 function ZCfgPack(WL, HL, CL, SL, MM: Integer): Integer;
 begin
@@ -105,9 +106,10 @@ begin
   if (Cfg and $40000000) <> 0 then
   begin
     Size := 0;
-    if Assigned(ZFuncs) and ZFuncs^.GetResource(Cfg and $3FFFFFFF, nil, @Size)
+    // bit 29 is the size-unknown flag of ZOnePass, not part of the index
+    if Assigned(ZFuncs) and ZFuncs^.GetResource(Cfg and $1FFFFFFF, nil, @Size)
       and (Size = SizeOf(Result)) then
-      ZFuncs^.GetResource(Cfg and $3FFFFFFF, @Result, @Size);
+      ZFuncs^.GetResource(Cfg and $1FFFFFFF, @Result, @Size);
     exit;
   end;
   // the packed form: 0 means the library default, as -1 does here
@@ -140,6 +142,7 @@ function ZSTDInit(Command: PChar; Count: Integer; Funcs: PPrecompFuncs)
 var
   I: Integer;
   Options: TArray<Integer>;
+  Ctx0: Pointer;
   S: String;
   X, Y: Integer;
 begin
@@ -149,6 +152,12 @@ begin
   // rejects them (the attempt then fails and the stream stays raw).
   ZFuncs := Funcs;
   ZThreads := Max(1, Count);
+  if not ZMTOK and Assigned(ZSTD_createCCtx) and Assigned(ZSTD_isError) then
+  begin
+    Ctx0 := ZSTD_createCCtx;
+    ZMTOK := ZSTD_isError(ZSTD_CCtx_setParameter(Ctx0, ZSTD_c_nbWorkers, 1)) = 0;
+    ZSTD_freeCCtx(Ctx0);
+  end;
   for I := 1 to ParamCount do
     if ParamStr(I).StartsWith('-cfgzstd', True) then
     begin
@@ -404,6 +413,68 @@ begin
       StreamInfo^.OldSize, StreamInfo^.NewSize);
     Result := True;
   end;
+end;
+
+// One frame, in one pass, the way the stream's Option and Resource say:
+// level, window, checksum, -cfgzstd, and two ways the zstd CLI writes frames
+// that single-call compression does not reproduce:
+//  - Option bit 30: one worker thread (nbWorkers 1, the CLI's default -T1);
+//  - Resource bit 29, for a frame with no content size (Option bits 28-29 = 0)
+//    written from a pipe: compressed without telling zstd the size, so it picks
+//    its parameters for an unknown size as the CLI did, instead of shrinking
+//    them to the input.
+// Returns the frame's size, or -1.
+function ZOnePass(Ctx: Pointer; Option, Resource, Level: Integer; Src: Pointer;
+  Size: NativeInt; Dst: Pointer; Cap: NativeInt): NativeInt;
+var
+  Inp: ZSTD_inBuffer;
+  Oup: ZSTD_outBuffer;
+  Rem: size_t;
+begin
+  Result := -1;
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_compressionLevel, Level);
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_windowLog, GetBits(Option, 9, 5));
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_checksumFlag, GetBits(Option, 27, 1));
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_contentSizeFlag,
+    Ord(GetBits(Option, 28, 2) <> 0));
+  ZCfgApply(Ctx, Resource);
+  if ZMTOK then
+    ZSTD_CCtx_setParameter(Ctx, ZSTD_c_nbWorkers, GetBits(Option, 30, 1));
+  if (GetBits(Option, 28, 2) = 0) and (Resource and $20000000 <> 0) and
+    Assigned(ZSTD_compressStream2) then
+  begin
+    // e_continue first: an e_end on the first call would tell zstd the size
+    Oup.dst := Dst;
+    Oup.Size := Cap;
+    Oup.Pos := 0;
+    Inp.src := Src;
+    Inp.Size := Size;
+    Inp.Pos := 0;
+    while Inp.Pos < Inp.Size do
+    begin
+      Rem := ZSTD_compressStream2(Ctx, @Oup, @Inp, ZSTD_e_continue);
+      if (ZSTD_isError(Rem) <> 0) or (Oup.Pos >= Oup.Size) then
+        exit;
+    end;
+    Inp.Size := 0;
+    Inp.Pos := 0;
+    repeat
+      Rem := ZSTD_compressStream2(Ctx, @Oup, @Inp, ZSTD_e_end);
+      if ZSTD_isError(Rem) <> 0 then
+        exit;
+      if (Rem > 0) and (Oup.Pos >= Oup.Size) then
+        exit;
+    until Rem = 0;
+    Result := Oup.Pos;
+  end
+  else if Assigned(ZSTD_compress2) then
+  begin
+    Rem := ZSTD_compress2(Ctx, Dst, Cap, Src, Size);
+    if ZSTD_isError(Rem) = 0 then
+      Result := Rem;
+  end
+  else
+    Result := ZSTD_compressCCtx(Ctx, Dst, Cap, Src, Size, Level);
 end;
 
 // --- -b (brute) for zstd ---------------------------------------------------
@@ -702,6 +773,7 @@ var
   Progress: NativeInt;
   EndOp: ZSTD_EndDirective;
   Rem: size_t;
+  V: Integer;
 begin
   Result := False;
   X := GetBits(StreamInfo^.Option, 0, 3);
@@ -746,33 +818,50 @@ begin
           begin
             if GetBits(StreamInfo^.Option, 14, 13) = 0 then
             begin
-              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_compressionLevel,
-                IfThen(GetBits(StreamInfo^.Option, 8, 1) = 0, I, -I));
-              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_windowLog,
-                GetBits(StreamInfo^.Option, 9, 5));
-              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
-                GetBits(StreamInfo^.Option, 27, 1));
-              ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
-                Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0));
-              ZCfgApply(cctx[Instance], StreamInfo^.Resource);
-              if Assigned(ZSTD_compress2) then
-                Res1 := ZSTD_compress2(cctx[Instance], Buffer,
-                  StreamInfo^.NewSize, NewInput, StreamInfo^.NewSize)
-              else if Assigned(ZSTD_compress_generic) then
+              // Variants of the zstd CLI, tried only when the plain way fails,
+              // and remembered in the stream:
+              //  - one worker thread (its default -T1): other bytes than
+              //    single-threaded zstd above a job (at least 512 KB). Option
+              //    bit 30;
+              //  - for a frame with no content size, the size not given to
+              //    zstd (written from a pipe) instead of known but not written
+              //    (one-shot with the flag off). Resource bit 29.
+              V := 0;
+              repeat
+                SetBits(StreamInfo^.Option, V and 1, 30, 1);
+                if V and 2 <> 0 then
+                  StreamInfo^.Resource := StreamInfo^.Resource or $20000000
+                else
+                  StreamInfo^.Resource := StreamInfo^.Resource and
+                    not Integer($20000000);
+                Res1 := ZOnePass(cctx[Instance], StreamInfo^.Option,
+                  StreamInfo^.Resource, IfThen(GetBits(StreamInfo^.Option, 8,
+                  1) = 0, I, -I), NewInput, StreamInfo^.NewSize, Buffer,
+                  StreamInfo^.NewSize);
+                if (Res1 = StreamInfo^.OldSize) and CompareMem(OldInput, Buffer,
+                  StreamInfo^.OldSize) then
+                  break;
+                if StreamInfo^.Status >= TStreamStatus.Predicted then
+                  break;    // its variant is already in Option/Resource
+                Inc(V);
+                // skip what does not apply: threads below a job, or with a
+                // library without them; the size variant with a size field
+                if (V and 1 <> 0) and (not ZMTOK or (StreamInfo^.NewSize <=
+                  512 * 1024)) then
+                  Inc(V);
+                if (V and 2 <> 0) and (GetBits(StreamInfo^.Option, 28, 2) <> 0)
+                then
+                  V := 4;
+                if (V = 3) and (not ZMTOK or (StreamInfo^.NewSize <= 512 * 1024))
+                then
+                  V := 4;
+              until V > 3;
+              if V > 3 then
               begin
-                Oup.dst := Buffer;
-                Oup.Size := StreamInfo^.NewSize;
-                Oup.Pos := 0;
-                Inp.src := PByte(NewInput);
-                Inp.Size := StreamInfo^.NewSize;
-                Inp.Pos := 0;
-                ZSTD_compress_generic(cctx[Instance], @Oup, @Inp, ZSTD_e_end);
-                Res1 := Oup.Pos;
-              end
-              else
-                Res1 := ZSTD_compressCCtx(cctx[Instance], Buffer,
-                  StreamInfo^.NewSize, NewInput, StreamInfo^.NewSize,
-                  IfThen(GetBits(StreamInfo^.Option, 8, 1) = 0, I, -I))
+                SetBits(StreamInfo^.Option, 0, 30, 1);
+                StreamInfo^.Resource := StreamInfo^.Resource and
+                  not Integer($20000000);
+              end;
             end
             else
             begin
@@ -902,39 +991,11 @@ begin
           cctx[Instance] := ZSTD_createCCtx;
         if GetBits(StreamInfo.Option, 14, 13) = 0 then
         begin
-          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_compressionLevel,
-            IfThen(GetBits(StreamInfo.Option, 8, 1) = 0,
-            GetBits(StreamInfo.Option, 3, 5),
-            -GetBits(StreamInfo.Option, 3, 5)));
-          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_windowLog,
-            GetBits(StreamInfo.Option, 9, 5));
-          // Simetrico con Process: sin esto el decode reconstruiria un frame
-          // distinto del que se codifico.
-          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_checksumFlag,
-            GetBits(StreamInfo.Option, 27, 1));
-          ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
-            Ord(GetBits(StreamInfo.Option, 28, 2) <> 0));
-          ZCfgApply(cctx[Instance], StreamInfo.Resource);
-          if Assigned(ZSTD_compress2) then
-            Res1 := ZSTD_compress2(cctx[Instance], Buffer, StreamInfo.NewSize,
-              Input, StreamInfo.NewSize)
-          else if Assigned(ZSTD_compress_generic) then
-          begin
-            Oup.dst := Buffer;
-            Oup.Size := StreamInfo.NewSize;
-            Oup.Pos := 0;
-            Inp.src := PByte(Input);
-            Inp.Size := StreamInfo.NewSize;
-            Inp.Pos := 0;
-            ZSTD_compress_generic(cctx[Instance], @Oup, @Inp, ZSTD_e_end);
-            Res1 := Oup.Pos;
-          end
-          else
-            Res1 := ZSTD_compressCCtx(cctx[Instance], Buffer,
-              StreamInfo.NewSize, Input, StreamInfo.NewSize,
-              IfThen(GetBits(StreamInfo.Option, 8, 1) = 0,
-              GetBits(StreamInfo.Option, 3, 5),
-              -GetBits(StreamInfo.Option, 3, 5)));
+          // the same function as Process: they cannot drift apart
+          Res1 := ZOnePass(cctx[Instance], StreamInfo.Option,
+            StreamInfo.Resource, IfThen(GetBits(StreamInfo.Option, 8, 1) = 0,
+            GetBits(StreamInfo.Option, 3, 5), -GetBits(StreamInfo.Option, 3, 5)),
+            Input, StreamInfo.NewSize, Buffer, StreamInfo.NewSize);
         end
         else
         begin

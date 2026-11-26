@@ -88,7 +88,10 @@ EOF
 ZSTD_LIB_REF="916e8e70b33317d469a41ee837e47317807815c8"   # v1.6.0
 echo "==> libzstd.dll (x86-64)"
 pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
+# ZSTD_MULTITHREAD: frames the zstd CLI writes with its default one worker
+# thread (-T1) need nbWorkers to be reproduced (see build-plugins-linux.sh).
 ( cd "$CSRC/zstd-lib/lib" && "$CC" -shared -O2 -DZSTD_DLL_EXPORT=1 -DZSTD_DISABLE_ASM \
+    -DZSTD_MULTITHREAD \
     -I. -Icommon common/*.c compress/*.c decompress/*.c -static-libgcc -o "$ROOT/libzstd.dll" ) \
   && echo "   OK -> libzstd.dll" || echo "   (libzstd fallo)"
 

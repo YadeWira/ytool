@@ -32,6 +32,11 @@ const
   // compilador como duplicate case label; si los tres no hubieran estado en
   // el mismo case, no lo habria atrapado nadie.
   YTOOL_PRECOMP = $31505458;
+  // 'XTP2' (0.9.9b): each block ends with an XXH64 of its literal segments
+  // (the bytes no codec took, and their lengths). XTP1 checked only the
+  // streams: 40 of 40 one-byte corruptions of literal data decoded with exit 0
+  // and wrong output. Decode reads XTP1 and XTP2; encode writes XTP2.
+  YTOOL_PRECOMP2 = $32505458;
   // El formato anterior, conservado solo para reconocerlo.
   YTOOL_PRECOMP0 = $304C5458;
   YTOOL_BSIZE = 4194304;
@@ -79,6 +84,9 @@ var
   // srep's stderr during a decode, for the top-level error message: when srep
   // fails mid-stream, ytool's own error is only a read error.
   SrepDecodeErr: TStringStream = nil;
+  // Set by the caller from the container's magic: XTP2 blocks carry a hash of
+  // their literal data.
+  LITHASH: Boolean = True;
 
 procedure PrintHelp;
 procedure Parse(ParamArg: TArray<string>; out Options: TEncodeOptions);
@@ -2023,7 +2031,7 @@ begin
   SetLength(ThreadSync, Options^.Threads);
   for I := Low(ThreadSync) to High(ThreadSync) do
     ThreadSync[I] := TCriticalSection.Create;
-  I := YTOOL_PRECOMP;
+  I := YTOOL_PRECOMP2;
   Output.WriteBuffer(I, I.Size);
   if UseDB then
   begin
@@ -2453,6 +2461,8 @@ var
   DupTyp2: TDuplicate3;
   ErrStream: TStringStream;
   SrepProc: TProcessStream;
+  LitState: XXH64_state_t;
+  LitHash: XXH64_hash_t;
   LOutput, LCache: TStream;
   List: TStringDynArray;
   procedure SaveResources;
@@ -2802,14 +2812,20 @@ begin
             J := InfoStore1[I].Get(StreamInfo);
           end;
           InfoStore1[I].Index := LastIndex;
+          XXH64_reset(LitState, 0);
           J := InfoStore1[I].Get(StreamInfo);
           while J >= 0 do
           begin
             UI32 := StreamInfo.ActualPosition - LastPos;
             TempOutput.WriteBuffer(UI32, UI32.Size);
+            XXH64_update(LitState, @UI32, UI32.Size);
             if UI32 > 0 then
+            begin
               TempOutput.WriteBuffer
                 ((PByte(DataStore.Slot(I).Memory) + LastPos)^, UI32);
+              XXH64_update(LitState, PByte(DataStore.Slot(I).Memory) + LastPos,
+                UI32);
+            end;
             if Depth = 0 then
               Inc(EncInfo.InflSize, UI32 + UI32.Size);
             LastPos := StreamInfo.ActualPosition + StreamInfo.OldSize;
@@ -2827,11 +2843,18 @@ begin
           else
             UI32 := 0;
           TempOutput.WriteBuffer(UI32, UI32.Size);
+          XXH64_update(LitState, @UI32, UI32.Size);
           if UI32 > 0 then
+          begin
             TempOutput.WriteBuffer
               ((PByte(DataStore.Slot(I).Memory) + LastPos)^, UI32);
+            XXH64_update(LitState, PByte(DataStore.Slot(I).Memory) + LastPos,
+              UI32);
+          end;
+          LitHash := XXH64_digest(LitState);
+          TempOutput.WriteBuffer(LitHash, LitHash.Size);
           if Depth = 0 then
-            Inc(EncInfo.InflSize, UI32 + UI32.Size);
+            Inc(EncInfo.InflSize, UI32 + UI32.Size + LitHash.Size);
         until LastIndex = InfoStore1[I].Count;
         LastStream := Max(LastStream - DataStore.Size(I), 0);
         if Depth = 0 then
@@ -3087,6 +3110,7 @@ type
     StreamInfo: TArray<PStreamInfo>;
     StreamIdx: TArray<PInteger>;
     BlockPos: TArray<PInt64>;
+    LitState: TArray<XXH64_state_t>;   // per Index: this block's literal hash
   end;
 
 procedure TStreamInfo.Init;
@@ -3188,6 +3212,52 @@ begin
     end;
 end;
 
+// One literal segment of a block: its length and bytes, copied to the output
+// and, in XTP2, added to the block's hash.
+procedure LitCopy(Index, Depth: Integer);
+var
+  UI32: UInt32;
+  Buf: array [0 .. 65535] of Byte;
+  N: Integer;
+begin
+  with ComVars2[Depth] do
+  begin
+    DecInput[Index].ReadBuffer(UI32, UI32.Size);
+    if not LITHASH then
+    begin
+      if UI32 > 0 then
+        CopyStreamEx(DecInput[Index], DecOutput[Index], UI32);
+      exit;
+    end;
+    XXH64_update(LitState[Index], @UI32, UI32.Size);
+    while UI32 > 0 do
+    begin
+      N := Min(UI32, SizeOf(Buf));
+      DecInput[Index].ReadBuffer(Buf, N);
+      XXH64_update(LitState[Index], @Buf, N);
+      DecOutput[Index].WriteBuffer(Buf, N);
+      Dec(UI32, N);
+    end;
+  end;
+end;
+
+// End of a block in XTP2: the hash written by encode against the one of the
+// literal data just copied.
+procedure LitCheck(Index, Depth: Integer);
+var
+  Stored: XXH64_hash_t;
+begin
+  if not LITHASH then
+    exit;
+  with ComVars2[Depth] do
+  begin
+    DecInput[Index].ReadBuffer(Stored, Stored.Size);
+    if Stored <> XXH64_digest(LitState[Index]) then
+      raise Exception.Create('the container is damaged: literal data of a ' +
+        'block does not match its checksum');
+  end;
+end;
+
 procedure Restore(MT: Boolean; Index1, Index2, Depth: Integer);
 var
   X, Y: Integer;
@@ -3234,9 +3304,7 @@ begin
             DataMgr.Add(DDIndex1, SH^.OldSize, DDList2[DDIndex2].Count);
         end;
         LOutput := @PrecompOutput2;
-        DecInput[Index1].ReadBuffer(UI32, UI32.Size);
-        if UI32 > 0 then
-          CopyStreamEx(DecInput[Index1], DecOutput[Index1], UI32);
+        LitCopy(Index1, Depth);
       end;
       SI.OldSize := SH^.OldSize;
       SI.NewSize := SH^.NewSize;
@@ -3409,6 +3477,7 @@ begin
       SetLength(StreamInfo, Options^.Threads);
       SetLength(StreamIdx, Options^.Threads);
       SetLength(BlockPos, Options^.Threads);
+      SetLength(LitState, Options^.Threads);
       for I := Low(ThreadSync) to High(ThreadSync) do
       begin
         if (J = 0) and (I > 0) then
@@ -3586,6 +3655,7 @@ begin
         for I := Low(Tasks) to High(Tasks) do
           Tasks[I].RaiseLastError;
       DecInput[Index].ReadBuffer(BlockSize, BlockSize.Size);
+      XXH64_reset(LitState[Index], 0);
       if StreamCount[Index]^ > 0 then
       begin
         MemStream1[Index].Position := 0;
@@ -3645,9 +3715,7 @@ begin
           for J := 0 to StreamCount[Index]^ - 1 do
           begin
             StreamHeader := PStreamHeader(MemStream1[Index].Memory) + J;
-            DecInput[Index].ReadBuffer(UI32, UI32.Size);
-            if UI32 > 0 then
-              CopyStreamEx(DecInput[Index], DecOutput[Index], UI32);
+            LitCopy(Index, Depth);
             while (StreamInfo[Index]^.Completed[J] = False) and
               (IsErrored(Tasks) = False) do
               Sleep(1);
@@ -3682,9 +3750,8 @@ begin
         else
           Restore(False, Index, 0, Depth);
       end;
-      DecInput[Index].ReadBuffer(UI32, UI32.Size);
-      if UI32 > 0 then
-        CopyStreamEx(DecInput[Index], DecOutput[Index], UI32);
+      LitCopy(Index, Depth);
+      LitCheck(Index, Depth);
       LoadResources;
       DecInput[Index].ReadBuffer(StreamCount[Index]^, StreamCount[Index]^.Size);
     end;

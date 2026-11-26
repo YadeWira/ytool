@@ -103,6 +103,15 @@ end;
 destructor TTask.Destroy;
 begin
   SetStatus(tsTerminated);
+  // FPC's TThread.Destroy waits with WaitFor, which on Unix, from the main
+  // thread, polls CheckSynchronize(100): nothing wakes it when the thread
+  // ends, so every task freed cost a full 100 ms, one after another (0.1 s per
+  // -t thread on every run: -t32 took 3.6 s on a 6 KB file). Waiting here for
+  // the thread to finish first makes WaitFor return at once. Only for a thread
+  // that was started: one never started never runs Execute.
+  if FStarted then
+    while not Finished do
+      Sleep(1);
   inherited Destroy;
   FLock.Free;
 end;

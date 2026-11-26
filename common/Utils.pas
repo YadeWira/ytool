@@ -2901,7 +2901,11 @@ end;
 
 function TCacheWriteStream.Write(const Buffer; Count: LongInt): LongInt;
 begin
-  if FMaxSize < FBufferSize then
+  // <=, as the constructor's "> FBufferSize" test for creating FStorage. With
+  // "<" a cache of exactly FBufferSize (4 MB: precomp -p8mb, half of which is
+  // the write cache) wrote into an FStorage that was never created: access
+  // violation, exit 1, a 22-byte .ytp.
+  if FMaxSize <= FBufferSize then
   begin
     FOutput.WriteBuffer(Buffer, Count);
     exit(Count);

@@ -182,6 +182,16 @@ begin
     Result := False;
 end;
 
+// A precomp or decode that failed leaves no output behind: a half-written
+// .ytp (or restored file) looks like a result to whoever does not check the
+// exit code. Only a file it created: never stdout ("-") or a directory.
+procedure DropOutput(const Path: string);
+begin
+  if (Path <> '') and (Path <> '-') and FileExists(Path) and
+    not DirectoryExists(Path) then
+    DeleteFile(Path);
+end;
+
 // Size of the input file and the stream to read its position from, for the
 // progress line. Nothing for stdin, a URL or a directory.
 procedure SetProgressInput(Stream: TStream);
@@ -514,11 +524,17 @@ begin
         WriteLine('Processing input: ' + ParamArgSafe(1, 0));
         WriteLine('');
         try
-          PrecompMain.Parse(ParamArg[0], PrecompEnc);
-          PrecompMain.Encode(Input, Output, PrecompEnc);
-        finally
-          Input.Free;
-          Output.Free;
+          try
+            PrecompMain.Parse(ParamArg[0], PrecompEnc);
+            PrecompMain.Encode(Input, Output, PrecompEnc);
+          finally
+            Input.Free;
+            Output.Free;
+          end;
+        except
+          if not MatchStr('-scan', ParamArg[0]) then
+            DropOutput(ParamArgSafe(1, 1));
+          raise;
         end;
       end;
     if ParamStr(1).StartsWith(CommandAnalyze, True) then
@@ -614,18 +630,25 @@ begin
         try
           Input.ReadBuffer(I, I.Size);
           case I of
-            YTOOL_PRECOMP:
+            YTOOL_PRECOMP, YTOOL_PRECOMP2:
               begin
+                // XTP2 blocks carry a hash of their literal data; XTP1 do not
+                PrecompMain.LITHASH := I = YTOOL_PRECOMP2;
                 Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)
                   ), False, BufferSize);
                 PrecompMain.UIOutputStream := Output;
                 WriteLine('Processing input: ' + ParamArgSafe(1, 0));
                 WriteLine('');
                 try
-                  PrecompMain.Parse(ParamArg[0], PrecompDec);
-                  PrecompMain.Decode(Input, Output, PrecompDec);
-                finally
-                  Output.Free;
+                  try
+                    PrecompMain.Parse(ParamArg[0], PrecompDec);
+                    PrecompMain.Decode(Input, Output, PrecompDec);
+                  finally
+                    Output.Free;
+                  end;
+                except
+                  DropOutput(ParamArgSafe(1, 1));
+                  raise;
                 end;
               end;
             YTOOL_IODEC:
