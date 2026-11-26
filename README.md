@@ -75,9 +75,9 @@ uses `-dd`. If srep fails, precomp and decode fail with srep's own message.
 
 - **Own container format.** ytool's files are not xtool's and the two do not read each other's.
 - **Missing:** the `mp3` scanner (until PMPA is stable), the `ogg`, `bink` and `wwise` scanners, `gdeflate`,
-  `-cfgoodle`, and the brute mode (`-b`) for zstd and Oodle. `-cfgzlib:st<n>` (the deflate strategy),
-  `-cfgzstd` (window, hash, chain, search, min match), `-cfglz4` (acceleration, block size,
-  favorDecSpeed…), `-b` for lz4 and lz4f, and zipcrypto are there. How 0.9.9's `-b` and `-cfg` work, read from its binary:
+  `-cfgoodle`, and the brute mode (`-b`) for Oodle. `-cfgzlib:st<n>` (the deflate strategy), `-cfgzstd`
+  (all 13 of 0.9.9's keys), `-cfglz4` (acceleration, block size, favorDecSpeed…), `-b` for lz4, lz4f and
+  zstd (the same candidates and lines as 0.9.9, minutes faster), and zipcrypto are there. How 0.9.9's `-b` and `-cfg` work, read from its binary:
   [xtool 0.9.9 brute and cfg](https://github.com/YadeWira/ytool/wiki/xtool-0.9.9-brute-and-cfg).
 - **Prefetch** is `-p#` (0.9.9 renamed it `-pf#`).
 - **`-rA=B`** works as in 0.9.9 (streams A detects are processed with B instead). A `-r<codec>` with no

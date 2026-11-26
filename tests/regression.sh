@@ -374,6 +374,46 @@ EOF
       echo "-- -cfgzstd: omitido, no se pudo escribir el frame con $ZL --"
     fi
 
+    # -b (brute) con zstd y las claves que el formato de 0.9.9a no guardaba.
+    # El frame usa los parametros del candidato 1 de la lista barajada de
+    # 0.9.9 (wl23 hl27 cl16 sl8 mm4 tl1 st8, sin nivel): -b:n1 tiene que
+    # imprimir esa linea exacta y no procesar nada; la linea, pasada a
+    # -cfgzstd, procesa el stream (tl y st van como recurso del contenedor) y
+    # el decode lo devuelve sin opciones.
+    if python3 - "$ZL" "$P3/zb.zst" <<'EOF'
+import ctypes, sys, random
+z = ctypes.CDLL(sys.argv[1])
+z.ZSTD_createCCtx.restype = ctypes.c_void_p
+z.ZSTD_CCtx_setParameter.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+z.ZSTD_compressBound.restype = ctypes.c_size_t
+z.ZSTD_compressBound.argtypes = [ctypes.c_size_t]
+z.ZSTD_compress2.restype = ctypes.c_size_t
+z.ZSTD_compress2.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t]
+z.ZSTD_isError.argtypes = [ctypes.c_size_t]
+r = random.Random(3)
+w = [bytes(r.choice(b"abcdefghijklmnop") for _ in range(r.randint(2, 9))) for _ in range(3000)]
+data = b" ".join(r.choice(w) for _ in range(30000))
+c = z.ZSTD_createCCtx()
+for p, v in zip(range(101, 108), (23, 27, 16, 8, 4, 1, 8)):
+    z.ZSTD_CCtx_setParameter(c, p, v)
+cap = z.ZSTD_compressBound(len(data)); out = ctypes.create_string_buffer(cap)
+n = z.ZSTD_compress2(c, out, cap, data, len(data))
+sys.exit(1 if z.ZSTD_isError(n) else open(sys.argv[2], 'wb').write(out.raw[:n]) and 0)
+EOF
+    then
+      ZB_LINE="-cfgzstdwl23:hl27:cl16:sl8:mm4:tl1:st8"
+      "$XTOOL" precomp -mzstd -b:n1 "$P3/zb.zst" "$P3/zb0.ytp" > "$P3/zb0.log" 2>&1
+      ok=0; grep -qxF -- "$ZB_LINE [1]" "$P3/zb0.log" && \
+        [ "$(p3_streams "$P3/zb0.log")" = "Streams: 0 / 1" ] && ok=1
+      p3_check "-mzstd -b:n1 halla $ZB_LINE y no procesa nada" $ok
+      "$XTOOL" precomp -mzstd "$ZB_LINE" "$P3/zb.zst" "$P3/zb1.ytp" > "$P3/zb1.log" 2>&1
+      "$XTOOL" decode "$P3/zb1.ytp" "$P3/zb1.out" > /dev/null 2>&1
+      ok=0; [ "$(p3_streams "$P3/zb1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/zb.zst" "$P3/zb1.out" && ok=1
+      p3_check "esa linea en -cfgzstd: 1 / 1 (tl/st en un recurso), decode exacto" $ok
+    else
+      echo "-- -b zstd: omitido, no se pudo escribir el frame con $ZL --"
+    fi
+
     # -cfglz4 (0.9.9): ds = favorDecSpeed de lz4f (un frame de nivel 12 con
     # favorDecSpeed=1 solo sale con la opcion) y x/ac = tamano y aceleracion de
     # un bloque lz4 crudo (igual que -mlz4:s/a). Los escribe la misma liblz4.

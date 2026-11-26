@@ -301,7 +301,7 @@ begin
       4 * 1024 * 1024, $7FFFFFFF);
     S := ArgParse.AsString('-t', 0, '50p');
     S := ReplaceText(S, 'p', '%');
-    S := ReplaceText(S, '%', '%*' + CPUCount.ToString);
+    S := ReplaceText(S, '%', '%*' + CPUCores.ToString);
     Options.Threads := Max(1, Round(ExpParse.Evaluate(S)));
     ThrPty := TThreadPriority(EnsureRange(ArgParse.AsInteger('-T', 0,
       Integer(tpNormal)), Integer(tpIdle), Integer(tpTimeCritical)));
@@ -617,7 +617,7 @@ begin
     Options.Method := ArgParse.AsString('-m');
     S := ArgParse.AsString('-t', 0, '50p');
     S := ReplaceText(S, 'p', '%');
-    S := ReplaceText(S, '%', '%*' + CPUCount.ToString);
+    S := ReplaceText(S, '%', '%*' + CPUCores.ToString);
     Options.Threads := Max(1, Round(ExpParse.Evaluate(S)));
     Options.DThreads := Options.Threads;
     ThrPty := TThreadPriority(EnsureRange(ArgParse.AsInteger('-T', 0,

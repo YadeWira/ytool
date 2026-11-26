@@ -19,6 +19,9 @@ uses
 
 procedure ShowMessage(Msg: string; Caption: string = '');
 procedure WriteLine(S: String);
+// Logical processors. FPC 3.2.2's CPUCount is 1 on Linux (not implemented
+// there), which made "-t50p" (the default) one thread on every Linux machine.
+function CPUCores: Integer;
 function GetModuleName: string;
 {$IFDEF UNIX}
 procedure StartProcess(Proc: TProcess);
@@ -911,6 +914,21 @@ begin
   else
     WriteLn(ErrOutput, Msg);
 {$ENDIF}
+end;
+
+{$IFDEF LINUX}
+function libc_sysconf(name: LongInt): PtrInt; cdecl; external 'c' name 'sysconf';
+{$ENDIF}
+
+function CPUCores: Integer;
+begin
+{$IFDEF LINUX}
+  Result := libc_sysconf(84);   // _SC_NPROCESSORS_ONLN
+{$ELSE}
+  Result := CPUCount;
+{$ENDIF}
+  if Result < 1 then
+    Result := 1;
 end;
 
 procedure WriteLine(S: String);
@@ -4365,7 +4383,7 @@ function ConvertToThreads(S: string): Integer;
 begin
   if ContainsText(S, 'p') or ContainsText(S, '%') then
   begin
-    Result := Round((CPUCount * StrToInt(Copy(S, 1, Length(S) - 1))) / 100);
+    Result := Round((CPUCores * StrToInt(Copy(S, 1, Length(S) - 1))) / 100);
     if Result < 1 then
       Result := 1;
     exit;

@@ -108,7 +108,7 @@ begin
     Options.ChunkSize := Max(4194304, Round(ExpParse.Evaluate(S)));
     S := ArgParse.AsString('-t', 0, '50p');
     S := ReplaceText(S, 'p', '%');
-    S := ReplaceText(S, '%', '%*' + CPUCount.ToString);
+    S := ReplaceText(S, '%', '%*' + CPUCores.ToString);
     Options.Threads := Max(1, Round(ExpParse.Evaluate(S)));
     S := ArgParse.AsString('-c', 0, '1792mb');
     S := ReplaceText(S, 'KB', '* 1024^1');

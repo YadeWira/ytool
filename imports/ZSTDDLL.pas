@@ -138,6 +138,20 @@ var
   ZSTD_flushStream: function(zcs: Pointer; output: PZSTD_outBuffer)
     : size_t cdecl;
   ZSTD_endStream: function(zcs: Pointer; output: PZSTD_outBuffer): size_t cdecl;
+  // For -b (brute) on zstd: the parameters a compression would really use.
+  // ZSTD_getCParamsFromCCtxParams is not in zstd.h but libzstd exports it; its
+  // signature is the 1.5+/1.6 one (mode last), so it is only used from 1.5.0.
+  ZSTD_versionNumber: function: Cardinal cdecl;
+  ZSTD_isError: function(code: size_t): Cardinal cdecl;
+  ZSTD_createCCtxParams: function: Pointer cdecl;
+  ZSTD_freeCCtxParams: function(params: Pointer): size_t cdecl;
+  ZSTD_CCtxParams_init: function(params: Pointer; compressionLevel: Integer)
+    : size_t cdecl;
+  ZSTD_CCtxParams_setParameter: function(params: Pointer;
+    param: ZSTD_cParameter; value: Integer): size_t cdecl;
+  ZSTD_getCParamsFromCCtxParams: function(const params: Pointer;
+    srcSizeHint: UInt64; dictSize: size_t; mode: Integer)
+    : ZSTD_compressionParameters cdecl;
 
   ZSTD_getCParams: function(compressionLevel: Integer; estimatedSrcSize: UInt64;
     dictSize: size_t): ZSTD_compressionParameters;
@@ -218,6 +232,15 @@ begin
     @ZSTD_flushStream := Lib.GetProcAddr('ZSTD_flushStream');
     @ZSTD_endStream := Lib.GetProcAddr('ZSTD_endStream');
     @ZSTD_getCParams := Lib.GetProcAddr('ZSTD_getCParams');
+    @ZSTD_versionNumber := Lib.GetProcAddr('ZSTD_versionNumber');
+    @ZSTD_isError := Lib.GetProcAddr('ZSTD_isError');
+    @ZSTD_createCCtxParams := Lib.GetProcAddr('ZSTD_createCCtxParams');
+    @ZSTD_freeCCtxParams := Lib.GetProcAddr('ZSTD_freeCCtxParams');
+    @ZSTD_CCtxParams_init := Lib.GetProcAddr('ZSTD_CCtxParams_init');
+    @ZSTD_CCtxParams_setParameter :=
+      Lib.GetProcAddr('ZSTD_CCtxParams_setParameter');
+    @ZSTD_getCParamsFromCCtxParams :=
+      Lib.GetProcAddr('ZSTD_getCParamsFromCCtxParams');
     DLLLoaded := Assigned(ZSTD_compress) and Assigned(ZSTD_decompress);
   end;
 end;

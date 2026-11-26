@@ -5,8 +5,9 @@ interface
 uses
   ZSTDDLL,
   Utils,
+  Threading,
   PrecompUtils,
-  SysUtils, Classes, Math, StrUtils;
+  SysUtils, Classes, Math, StrUtils, Generics.Collections;
 
 var
   Codec: TPrecompressor;
@@ -33,13 +34,36 @@ var
   ZFastMode: Integer = Z_FASTMODE;
   ZWindowLog: Integer = Z_WINDOWLOG;
   ZBlockSize: Integer = Z_BLOCKSIZE;
-  // -cfgzstd[:]wl<n>:hl<n>:cl<n>:sl<n>:mm<n> (xtool 0.9.9): advanced
-  // parameters every encode attempt uses, for frames a level alone does not
-  // reproduce. Option has no free bits left, so each stream carries them in
-  // its Resource field (unused by this codec otherwise): hl 0-4, cl 5-9,
-  // sl 10-14, mm 15-17, wl 18-22, bit 31 set when any is. 0 means the
-  // library default; containers written before have Resource = 0.
+  // -cfgzstd (xtool 0.9.9): advanced parameters every encode attempt uses, for
+  // frames a level alone does not reproduce. Keys, as 0.9.9 reads them, each
+  // set only when given (0.9.9's x and b are ytool's -mzstd:s and :b):
+  //   wl hl cl sl mm tl st -> windowLog hashLog chainLog searchLog minMatch
+  //                           targetLength strategy (101-107)
+  //   cs                   -> targetCBlockSize (130)
+  //   ldm lhl lmm lbs lhr  -> enableLongDistanceMatching, ldmHashLog,
+  //                           ldmMinMatch, ldmBucketSizeLog, ldmHashRateLog
+  //                           (160-164)
+  // Stored per stream in its Resource field, so decode needs no option:
+  //  - wl hl cl sl mm only (as in 0.9.9a): packed, hl 0-4, cl 5-9, sl 10-14,
+  //    mm 15-17, wl 18-22, bit 31 set; containers written before have 0.
+  //  - anything else: the 13 values go once into a container resource, and
+  //    Resource is that resource's index with bits 31 and 30 set.
+  ZCFG_KEYS: array [0 .. 12] of String = ('wl', 'hl', 'cl', 'sl', 'mm', 'tl',
+    'st', 'cs', 'ldm', 'lhl', 'lmm', 'lbs', 'lhr');
+  ZCFG_PARAMS: array [0 .. 12] of Integer = (101, 102, 103, 104, 105, 106, 107,
+    130, 160, 161, 162, 163, 164);
+
+type
+  TZCfg = array [0 .. 12] of Integer;
+
+var
+  ZCfgVals: TZCfg = (-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  ZCfgExt: Boolean = False;   // needs the resource form
+  ZCfgResIdx: Integer = -1;
   ZCfg: Integer = 0;
+  ZFuncs: PPrecompFuncs = nil;
+  ZThreads: Integer = 1;
+  ZLock: TRTLCriticalSection;
 
 function ZCfgPack(WL, HL, CL, SL, MM: Integer): Integer;
 begin
@@ -50,20 +74,65 @@ begin
     ((MM and 7) shl 15) or ((WL and 31) shl 18) or Integer($80000000);
 end;
 
+// The Resource value a stream encoded now carries. In the resource form the
+// resource is added on first use, while encoding (decode never calls this).
+function ZCfgForStream: Integer;
+begin
+  if not ZCfgExt then
+    exit(ZCfg);
+  if ZCfgResIdx < 0 then
+  begin
+    EnterCriticalSection(ZLock);
+    try
+      if ZCfgResIdx < 0 then
+        ZCfgResIdx := ZFuncs^.AddResourceEx(@ZCfgVals, SizeOf(ZCfgVals));
+    finally
+      LeaveCriticalSection(ZLock);
+    end;
+  end;
+  Result := ZCfgResIdx or Integer($C0000000);
+end;
+
+// The 13 values a stream's Resource stands for (-1: not given).
+function ZCfgOf(Cfg: Integer): TZCfg;
+var
+  I, Size: Integer;
+begin
+  for I := Low(Result) to High(Result) do
+    Result[I] := -1;
+  if Cfg >= 0 then
+    exit;
+  if (Cfg and $40000000) <> 0 then
+  begin
+    Size := 0;
+    if Assigned(ZFuncs) and ZFuncs^.GetResource(Cfg and $3FFFFFFF, nil, @Size)
+      and (Size = SizeOf(Result)) then
+      ZFuncs^.GetResource(Cfg and $3FFFFFFF, @Result, @Size);
+    exit;
+  end;
+  // the packed form: 0 means the library default, as -1 does here
+  Result[1] := Cfg and 31;
+  Result[2] := (Cfg shr 5) and 31;
+  Result[3] := (Cfg shr 10) and 31;
+  Result[4] := (Cfg shr 15) and 7;
+  if (Cfg shr 18) and 31 > 0 then
+    Result[0] := (Cfg shr 18) and 31;
+end;
+
 // Sets (or, with no configuration, resets to the library default) the
 // parameters -cfgzstd controls. Always called: the context is reused from
-// stream to stream, so a value left by one would reach the next.
+// stream to stream, so a value left by one would reach the next. windowLog is
+// set only when given: the streaming path leaves the window to the level.
 procedure ZCfgApply(Ctx: Pointer; Cfg: Integer);
+var
+  V: TZCfg;
+  I: Integer;
 begin
-  if Cfg >= 0 then
-    Cfg := 0;
-  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_hashLog, Cfg and 31);
-  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_chainLog, (Cfg shr 5) and 31);
-  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_searchLog, (Cfg shr 10) and 31);
-  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_minMatch, (Cfg shr 15) and 7);
-  // Only when given: the streaming path leaves the window to the level.
-  if (Cfg shr 18) and 31 > 0 then
-    ZSTD_CCtx_setParameter(Ctx, ZSTD_c_windowLog, (Cfg shr 18) and 31);
+  V := ZCfgOf(Cfg);
+  for I := 1 to High(V) do
+    ZSTD_CCtx_setParameter(Ctx, ZSTD_cParameter(ZCFG_PARAMS[I]), Max(V[I], 0));
+  if V[0] > 0 then
+    ZSTD_CCtx_setParameter(Ctx, ZSTD_c_windowLog, V[0]);
 end;
 
 function ZSTDInit(Command: PChar; Count: Integer; Funcs: PPrecompFuncs)
@@ -78,19 +147,31 @@ begin
   // -cfgzstd, read as xtool 0.9.9 does: the rest of the argument, fields
   // split on ':' or ','. Out-of-range values are left to the library, which
   // rejects them (the attempt then fails and the stream stays raw).
+  ZFuncs := Funcs;
+  ZThreads := Max(1, Count);
   for I := 1 to ParamCount do
     if ParamStr(I).StartsWith('-cfgzstd', True) then
     begin
-      Options := [0, 0, 0, 0, 0];
       for S in ParamStr(I).Substring(8).Split([':', ',']) do
-        if Length(S) > 2 then
-          case IndexText(S.Substring(0, 2), ['wl', 'hl', 'cl', 'sl', 'mm']) of
-            0 .. 4:
-              Options[IndexText(S.Substring(0, 2), ['wl', 'hl', 'cl', 'sl',
-                'mm'])] := StrToIntDef(S.Substring(2), 0);
+        // longest key first: "lhl" before "hl"
+        for X := High(ZCFG_KEYS) downto Low(ZCFG_KEYS) do
+          if S.StartsWith(ZCFG_KEYS[X]) and
+            (Length(S) > Length(ZCFG_KEYS[X])) and
+            CharInSet(S[Length(ZCFG_KEYS[X]) + 1], ['0' .. '9']) then
+          begin
+            ZCfgVals[X] := StrToIntDef(S.Substring(Length(ZCFG_KEYS[X])), -1);
+            break;
           end;
-      ZCfg := ZCfgPack(Options[0], Options[1], Options[2], Options[3],
-        Options[4]);
+      // The 0.9.9a form when it holds everything given.
+      ZCfgExt := False;
+      for X := 5 to High(ZCfgVals) do
+        if ZCfgVals[X] >= 0 then
+          ZCfgExt := True;
+      if (ZCfgVals[4] > 7) or (ZCfgVals[0] > 31) or (ZCfgVals[1] > 31) or
+        (ZCfgVals[2] > 31) or (ZCfgVals[3] > 31) then
+        ZCfgExt := True;
+      ZCfg := ZCfgPack(Max(ZCfgVals[0], 0), Max(ZCfgVals[1], 0),
+        Max(ZCfgVals[2], 0), Max(ZCfgVals[3], 0), Max(ZCfgVals[4], 0));
     end;
   SetLength(SOList, Count);
   for X := Low(SOList) to High(SOList) do
@@ -325,6 +406,287 @@ begin
   end;
 end;
 
+// --- -b (brute) for zstd ---------------------------------------------------
+//
+// xtool 0.9.9's list, read from its binary: every combination of
+//   wl 14..27, hl 1..27, cl 12..25, sl 1..13, mm 3..7,
+//   tl in (0 1 2 4 8 12 16 32 48 64 128 256 512 999 1024), st 1..9
+// in that nesting (st innermost): 46,437,300 candidates. 0.9.9 shuffles them
+// (Fisher-Yates, Delphi's Random with RandSeed = 12911), tries the first
+// BruteCount of the shuffled list (5% by default: 2,321,865) with each
+// parameter set on a reset context (no level), and prints the matching ones as
+// -cfgzstdwl#:hl#:cl#:sl#:mm#:tl#:st#. Same list, same order, same lines here.
+//
+// Faster here, with the same result: two candidates whose parameters zstd
+// resolves to the same values (it rejects hl 1..5, shrinks the window to the
+// stream's size, ...) write the same bytes, so each set of resolved
+// parameters is compressed once (zstd's own ZSTD_getCParamsFromCCtxParams
+// says what they resolve to), and a stream's candidates run on several
+// threads. Also, the frame's checksum and content-size flags are set as the
+// frame has them, where 0.9.9 leaves the defaults and so never matches a
+// frame with a checksum.
+const
+  ZB_WL = 14; ZB_NWL = 14;
+  ZB_HL = 1; ZB_NHL = 27;
+  ZB_CL = 12; ZB_NCL = 14;
+  ZB_SL = 1; ZB_NSL = 13;
+  ZB_MM = 3; ZB_NMM = 5;
+  ZB_TL: array [0 .. 14] of Integer = (0, 1, 2, 4, 8, 12, 16, 32, 48, 64, 128,
+    256, 512, 999, 1024);
+  ZB_NST = 9;
+  ZB_TOTAL = ZB_NWL * ZB_NHL * ZB_NCL * ZB_NSL * ZB_NMM * 15 * ZB_NST;
+  ZB_CHUNK = 4096;
+
+type
+  TZBParams = array [0 .. 6] of Integer;   // wl hl cl sl mm tl st
+
+  PZBJob = ^TZBJob;
+
+  TZBJob = record
+    NewInput, OldInput: Pointer;
+    NewSize, OldSize: Integer;
+    Checksum, ContentSize: Integer;
+    Raw: TArray<Integer>;      // candidates to compress (indices into the list)
+    Hit: TArray<Boolean>;
+    Count: Integer;
+    Next: Integer;
+  end;
+
+var
+  ZBPerm: TArray<Integer>;
+  ZBActive: Integer = 0;
+
+function ZBParams(Raw: Integer): TZBParams;
+begin
+  Result[6] := Raw mod ZB_NST + 1;          Raw := Raw div ZB_NST;
+  Result[5] := ZB_TL[Raw mod 15];           Raw := Raw div 15;
+  Result[4] := Raw mod ZB_NMM + ZB_MM;      Raw := Raw div ZB_NMM;
+  Result[3] := Raw mod ZB_NSL + ZB_SL;      Raw := Raw div ZB_NSL;
+  Result[2] := Raw mod ZB_NCL + ZB_CL;      Raw := Raw div ZB_NCL;
+  Result[1] := Raw mod ZB_NHL + ZB_HL;      Raw := Raw div ZB_NHL;
+  Result[0] := Raw + ZB_WL;
+end;
+
+function ZBLine(Raw: Integer): String;
+var
+  P: TZBParams;
+begin
+  P := ZBParams(Raw);
+  Result := Format('-cfgzstdwl%d:hl%d:cl%d:sl%d:mm%d:tl%d:st%d',
+    [P[0], P[1], P[2], P[3], P[4], P[5], P[6]]);
+end;
+
+{$PUSH}{$Q-}{$R-}
+// Delphi's Random(Range) with its default generator, as 0.9.9 calls it.
+function ZBRandom(var Seed: Cardinal; Range: Cardinal): Cardinal;
+begin
+  Seed := Seed * $08088405 + 1;
+  Result := (UInt64(Seed) * Range) shr 32;
+end;
+
+// 0.9.9's shuffled order, built once (186 MB, as an array of the 46 million
+// candidate indices; 0.9.9 keeps the parameter records themselves, 1.3 GB).
+procedure ZBBuildPerm;
+var
+  I, J, T: Integer;
+  Seed: Cardinal;
+begin
+  EnterCriticalSection(ZLock);
+  try
+    if Length(ZBPerm) = ZB_TOTAL then
+      exit;
+    SetLength(ZBPerm, ZB_TOTAL);
+    for I := 0 to ZB_TOTAL - 1 do
+      ZBPerm[I] := I;
+    Seed := 12911;
+    for I := ZB_TOTAL - 1 downto 1 do
+    begin
+      J := ZBRandom(Seed, I + 1);
+      T := ZBPerm[I];
+      ZBPerm[I] := ZBPerm[J];
+      ZBPerm[J] := T;
+    end;
+  finally
+    LeaveCriticalSection(ZLock);
+  end;
+end;
+{$POP}
+
+procedure ZBSetParams(Ctx: Pointer; const P: TZBParams);
+var
+  I: Integer;
+begin
+  for I := 0 to 6 do
+    ZSTD_CCtx_setParameter(Ctx, ZSTD_cParameter(101 + I), P[I]);
+end;
+
+procedure ZBWorker(JobPtr, Unused: IntPtr);
+var
+  Job: PZBJob;
+  Ctx: Pointer;
+  Dst: Pointer;
+  I, Cap: Integer;
+  R: size_t;
+begin
+  Job := PZBJob(JobPtr);
+  Ctx := ZSTD_createCCtx;
+  // zstd refuses a capacity short of its worst case (measured: exactly the
+  // frame's size gives an error), so no stopping early on a long output.
+  Cap := Job^.NewSize + (Job^.NewSize shr 7) + 65536;
+  GetMem(Dst, Cap);
+  try
+    while True do
+    begin
+      I := AtomicIncrement(Job^.Next) - 1;
+      if I >= Job^.Count then
+        break;
+      ZSTD_CCtx_reset(Ctx, ZSTD_reset_parameters);
+      ZSTD_CCtx_setParameter(Ctx, ZSTD_c_checksumFlag, Job^.Checksum);
+      ZSTD_CCtx_setParameter(Ctx, ZSTD_c_contentSizeFlag, Job^.ContentSize);
+      ZBSetParams(Ctx, ZBParams(Job^.Raw[I]));
+      R := ZSTD_compress2(Ctx, Dst, Cap, Job^.NewInput, Job^.NewSize);
+      Job^.Hit[I] := (ZSTD_isError(R) = 0) and (R = size_t(Job^.OldSize)) and
+        CompareMem(Dst, Job^.OldInput, Job^.OldSize);
+    end;
+  finally
+    FreeMem(Dst);
+    ZSTD_freeCCtx(Ctx);
+  end;
+end;
+
+procedure ZSTDBrute(OldInput, NewInput: Pointer; StreamInfo: PStrInfo2);
+var
+  N, Pos, I, J, Matches, Threads: Integer;
+  Key: UInt64;
+  Keys: TDictionary<UInt64, Integer>;
+  Results: TArray<Boolean>;
+  Slot: TArray<Integer>;
+  Job: TZBJob;
+  Tasks: TArray<TTask>;
+  CP: Pointer;
+  P: TZBParams;
+  C: ZSTD_compressionParameters;
+
+  function KeyOf(Raw: Integer): UInt64;
+  var
+    K: Integer;
+  begin
+    P := ZBParams(Raw);
+    if Assigned(CP) then
+    begin
+      ZSTD_CCtxParams_init(CP, 3);
+      for K := 0 to 6 do
+        ZSTD_CCtxParams_setParameter(CP, ZSTD_cParameter(101 + K), P[K]);
+      C := ZSTD_getCParamsFromCCtxParams(CP, StreamInfo^.NewSize, 0, 0);
+      // Parameters zstd 1.6.0 does not read for that strategy (its sources:
+      // zstd_fast.c, zstd_double_fast.c, zstd_lazy.c, zstd_opt.c; checked on
+      // 831 pairs that differ only there: identical output every time).
+      case Ord(C.strategy) of
+        1:
+          begin
+            C.chainLog := 0;
+            C.searchLog := 0;
+          end;
+        2:
+          begin
+            C.searchLog := 0;
+            C.targetLength := 0;
+          end;
+        3 .. 5:
+          begin
+            C.targetLength := 0;
+            if C.windowLog > 14 then   // row matchfinder: no chain table
+              C.chainLog := 0;
+          end;
+        6:
+          C.targetLength := 0;
+      end;
+      Result := UInt64(C.windowLog) or (UInt64(C.hashLog) shl 6) or
+        (UInt64(C.chainLog) shl 12) or (UInt64(C.searchLog) shl 18) or
+        (UInt64(C.minMatch) shl 24) or (UInt64(Ord(C.strategy)) shl 28) or
+        (UInt64(C.targetLength) shl 32);
+    end
+    else
+      // without it, only exact repeats are skipped
+      Result := UInt64(Raw);
+  end;
+
+begin
+  N := BruteCount(ZB_TOTAL);
+  ZBBuildPerm;
+  CP := nil;
+  if Assigned(ZSTD_getCParamsFromCCtxParams) and Assigned(ZSTD_createCCtxParams)
+    and Assigned(ZSTD_versionNumber) and (ZSTD_versionNumber >= 10500) then
+    CP := ZSTD_createCCtxParams;
+  Threads := Max(1, ZThreads div Max(1, AtomicIncrement(ZBActive)));
+  Keys := TDictionary<UInt64, Integer>.Create;
+  try
+    Job.OldInput := OldInput;
+    Job.NewInput := NewInput;
+    Job.OldSize := StreamInfo^.OldSize;
+    Job.NewSize := StreamInfo^.NewSize;
+    Job.Checksum := GetBits(StreamInfo^.Option, 27, 1);
+    Job.ContentSize := Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0);
+    SetLength(Slot, ZB_CHUNK);
+    Matches := 0;
+    Pos := 0;
+    while (Pos < N) and (Matches < BRUTE_MATCHES) do
+    begin
+      // the chunk's candidates, each new set of resolved parameters once
+      Job.Count := 0;
+      SetLength(Job.Raw, ZB_CHUNK);
+      for I := Pos to Min(N, Pos + ZB_CHUNK) - 1 do
+      begin
+        Key := KeyOf(ZBPerm[I]);
+        if not Keys.TryGetValue(Key, J) then
+        begin
+          J := Length(Results) + Job.Count;
+          Keys.Add(Key, J);
+          Job.Raw[Job.Count] := ZBPerm[I];
+          Inc(Job.Count);
+        end;
+        Slot[I - Pos] := J;
+      end;
+      if Job.Count > 0 then
+      begin
+        SetLength(Job.Hit, Job.Count);
+        Job.Next := 0;
+        SetLength(Tasks, Min(Threads, Job.Count));
+        for I := 0 to High(Tasks) do
+        begin
+          Tasks[I] := TTask.Create(IntPtr(@Job), I);
+          Tasks[I].Perform(ZBWorker);
+          Tasks[I].Start;
+        end;
+        for I := 0 to High(Tasks) do
+        begin
+          Tasks[I].Wait;
+          Tasks[I].Free;
+        end;
+        J := Length(Results);
+        SetLength(Results, J + Job.Count);
+        for I := 0 to Job.Count - 1 do
+          Results[J + I] := Job.Hit[I];
+      end;
+      // matches in the list's order
+      for I := Pos to Min(N, Pos + ZB_CHUNK) - 1 do
+        if Results[Slot[I - Pos]] then
+        begin
+          BruteAdd(ZBLine(ZBPerm[I]));
+          Inc(Matches);
+          if Matches >= BRUTE_MATCHES then
+            break;
+        end;
+      Inc(Pos, ZB_CHUNK);
+    end;
+  finally
+    AtomicDecrement(ZBActive);
+    Keys.Free;
+    if Assigned(CP) then
+      ZSTD_freeCCtxParams(CP);
+  end;
+end;
+
 function ZSTDProcess(Instance, Depth: Integer; OldInput, NewInput: Pointer;
   StreamInfo: PStrInfo2; Output: _PrecompOutput; Funcs: PPrecompFuncs): Boolean;
 var
@@ -345,6 +707,14 @@ begin
   X := GetBits(StreamInfo^.Option, 0, 3);
   if BoolArray(CodecAvailable, False) or (CodecAvailable[X] = False) then
     exit;
+  // -b: search the stream's parameters instead of processing it (as 0.9.9)
+  if BRUTE then
+  begin
+    BruteRan;
+    if StreamInfo^.NewSize <= BRUTE_MAXSIZE then
+      ZSTDBrute(OldInput, NewInput, StreamInfo);
+    exit;
+  end;
   Buffer := Funcs^.Allocator(Instance, StreamInfo^.NewSize);
   SOList[Instance][X].Index := 0;
   while SOList[Instance][X].Get(I) >= 0 do
@@ -371,7 +741,7 @@ begin
           if not Assigned(cctx[Instance]) then
             cctx[Instance] := ZSTD_createCCtx;
           if StreamInfo^.Status <> TStreamStatus.Database then
-            StreamInfo^.Resource := ZCfg;
+            StreamInfo^.Resource := ZCfgForStream;
           if not Result then
           begin
             if GetBits(StreamInfo^.Option, 14, 13) = 0 then
@@ -635,6 +1005,7 @@ var
 
 initialization
 
+InitCriticalSection(ZLock);
 Codec.Names := [];
 for I := Low(ZSTDCodecs) to High(ZSTDCodecs) do
 begin

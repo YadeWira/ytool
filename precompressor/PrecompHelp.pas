@@ -141,9 +141,9 @@ begin
   HelpOption('-pa', 'patch every stream the level search could not reproduce');
 
   HelpSection('Tuning');
-  HelpOption('-cfg<codec>[:key#]', 'codec settings: zlib st; zstd wl hl cl sl mm;');
-  HelpOption('', 'lz4 x b ac ds af (see the wiki)');
-  HelpOption('-b[#][:n#][:s#]', 'brute: find the lz4/lz4f settings of the streams,');
+  HelpOption('-cfg<codec>[:key#]', 'codec settings: zlib st; zstd wl hl cl sl mm tl st');
+  HelpOption('', 'cs ldm lhl lmm lbs lhr; lz4 x b ac ds af (see the wiki)');
+  HelpOption('-b[#][:n#][:s#]', 'brute: find the lz4/lz4f/zstd settings of the streams,');
   HelpOption('', 'process nothing [5p of the candidates, n5 matches]');
   HelpOption('-lz4<lib>', 'use that library (also -zstd<lib>, -oodle<lib>)');
   HelpOption('-seed<hex>', 'srep seed, 64 hex digits, for reproducible -dd1..5');
