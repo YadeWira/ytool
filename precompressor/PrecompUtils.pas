@@ -917,6 +917,73 @@ begin
   end;
 end;
 
+// ZipCrypto: PKZIP's traditional encryption (APPNOTE 6.1). Three 32-bit keys
+// set from the password, updated by CRC-32 after every plain byte; the key
+// stream byte is ((t * (t xor 1)) shr 8) with t = (k2 or 2) and $FFFF. It runs
+// over the whole stream, the 12-byte encryption header included, so decrypting
+// and encrypting again gives back the same bytes. Added in xtool 0.8.8.
+var
+  ZipCryptoCRC: array [0 .. 255] of Cardinal;
+
+procedure ZipCryptoTable;
+var
+  I, J: Integer;
+  C: Cardinal;
+begin
+  if ZipCryptoCRC[1] <> 0 then
+    exit;
+  for I := 0 to 255 do
+  begin
+    C := I;
+    for J := 0 to 7 do
+      if C and 1 <> 0 then
+        C := (C shr 1) xor $EDB88320
+      else
+        C := C shr 1;
+    ZipCryptoCRC[I] := C;
+  end;
+end;
+
+procedure ZipCrypto(Buf: PByte; Size: Integer; Key: PByte; KeySize: Integer;
+  Decrypting: Boolean);
+var
+  K0, K1, K2: Cardinal;
+  I: Integer;
+  T: Word;
+  KS, P: Byte;
+
+  procedure Update(B: Byte);
+  begin
+    K0 := (K0 shr 8) xor ZipCryptoCRC[(K0 xor B) and $FF];
+    K1 := (K1 + (K0 and $FF)) * 134775813 + 1;
+    K2 := (K2 shr 8) xor ZipCryptoCRC[(K2 xor (K1 shr 24)) and $FF];
+  end;
+
+begin
+  ZipCryptoTable;
+  K0 := $12345678;
+  K1 := $23456789;
+  K2 := $34567890;
+  for I := 0 to KeySize - 1 do
+    Update(Key[I]);
+  for I := 0 to Size - 1 do
+  begin
+    T := (K2 or 2) and $FFFF;
+    KS := Byte((Cardinal(T) * (T xor 1)) shr 8);
+    if Decrypting then
+    begin
+      P := Buf[I] xor KS;
+      Buf[I] := P;
+    end
+    else
+    begin
+      P := Buf[I];
+      Buf[I] := P xor KS;
+    end;
+    Update(P);
+  end;
+end;
+
 function PrecompEncrypt(Codec: PChar; InBuff: Pointer; InSize: Integer;
   KeyBuff: Pointer; KeySize: Integer): Boolean;
 var
@@ -924,7 +991,7 @@ var
   RC4: TRC4;
 begin
   Result := False;
-  case IndexText(Codec, ['xor', 'aes', 'rc4']) of
+  case IndexText(Codec, ['xor', 'aes', 'rc4', 'zipcrypto']) of
     0:
       begin
         XorBuffer(InBuff, InSize, KeyBuff, KeySize);
@@ -946,6 +1013,11 @@ begin
         RC4.Encrypt(InBuff^, InBuff^, InSize);
         Result := True;
       end;
+    3:
+      begin
+        ZipCrypto(InBuff, InSize, KeyBuff, KeySize, False);
+        Result := True;
+      end;
   end;
 end;
 
@@ -956,7 +1028,7 @@ var
   RC4: TRC4;
 begin
   Result := False;
-  case IndexText(Codec, ['xor', 'aes', 'rc4']) of
+  case IndexText(Codec, ['xor', 'aes', 'rc4', 'zipcrypto']) of
     0:
       begin
         XorBuffer(InBuff, InSize, KeyBuff, KeySize);
@@ -976,6 +1048,11 @@ begin
       begin
         RC4.Init(KeyBuff^, KeySize);
         RC4.Encrypt(InBuff^, InBuff^, InSize);
+        Result := True;
+      end;
+    3:
+      begin
+        ZipCrypto(InBuff, InSize, KeyBuff, KeySize, True);
         Result := True;
       end;
   end;

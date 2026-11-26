@@ -13,11 +13,12 @@ var
 implementation
 
 const
-  CryptoCodecs: array of PChar = ['xor', 'aes', 'rc4'];
-  CODEC_COUNT = 3;
+  CryptoCodecs: array of PChar = ['xor', 'aes', 'rc4', 'zipcrypto'];
+  CODEC_COUNT = 4;
   XOR_CODEC = 0;
   AES_CODEC = 1;
   RC4_CODEC = 2;
+  ZIPCRYPTO_CODEC = 3; // xtool 0.8.8
 
 function CryptoInit(Command: PChar; Count: Integer;
   Funcs: PPrecompFuncs): Boolean;
@@ -54,6 +55,11 @@ begin
     else if (CompareText(S, CryptoCodecs[RC4_CODEC]) = 0) then
     begin
       SetBits(Option^, 2, 0, 3);
+      Result := True;
+    end
+    else if (CompareText(S, CryptoCodecs[ZIPCRYPTO_CODEC]) = 0) then
+    begin
+      SetBits(Option^, ZIPCRYPTO_CODEC, 0, 3);
       Result := True;
     end;
     Inc(I);
@@ -109,6 +115,8 @@ begin
         Funcs^.Decrypt('aes', NewInput, StreamInfo^.NewSize, Buffer, Res);
       RC4_CODEC:
         Funcs^.Decrypt('rc4', NewInput, StreamInfo^.NewSize, Buffer, Res);
+      ZIPCRYPTO_CODEC:
+        Funcs^.Decrypt('zipcrypto', NewInput, StreamInfo^.NewSize, Buffer, Res);
     else
       exit;
     end;
@@ -140,6 +148,8 @@ begin
         Funcs^.Encrypt('aes', Input, StreamInfo.NewSize, Buffer, Res);
       RC4_CODEC:
         Funcs^.Encrypt('rc4', Input, StreamInfo.NewSize, Buffer, Res);
+      ZIPCRYPTO_CODEC:
+        Funcs^.Encrypt('zipcrypto', Input, StreamInfo.NewSize, Buffer, Res);
     else
       exit;
     end;

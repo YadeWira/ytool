@@ -34,7 +34,12 @@ const
 
 var
   SOList: array of array [0 .. CODEC_COUNT - 1] of TSOList;
-  ZStream1: array of array [1 .. 9, 1 .. 9, 1 .. 7] of z_stream;
+  // [instance][level][memLevel][window][strategy]
+  ZStream1: array of array [1 .. 9, 1 .. 9, 1 .. 7, 0 .. 3] of z_stream;
+  // -cfgzlib:st<n> (xtool 0.9.9): the deflate strategy every attempt uses
+  // (0 default, 1 filtered, 2 Huffman only, 3 RLE). Stored per stream in
+  // Option bits 13-14, so decode needs no option; old containers have 0.
+  ZStrategy: Integer = 0;
   ZStream2: array of array [0 .. 7] of z_stream;
   ZWinBits: Integer = Z_WINBITS;
   CodecAvailable, CodecEnabled: TArray<Boolean>;
@@ -233,6 +238,14 @@ var
   W, X, Y, Z: Integer;
 begin
   Result := True;
+  // -cfgzlib[:]st<n>[:rl<n>], as xtool 0.9.9 reads it: the rest of the
+  // argument after "-cfgzlib", fields split on ':' or ','. rl (reflate's
+  // level) has no use since reflate was removed.
+  for I := 1 to ParamCount do
+    if ParamStr(I).StartsWith('-cfgzlib', True) then
+      for S in ParamStr(I).Substring(8).Split([':', ',']) do
+        if S.StartsWith('st', True) and (Length(S) > 2) then
+          ZStrategy := EnsureRange(StrToIntDef(S.Substring(2), 0), 0, 3);
   SetLength(SOList, Count);
   for X := Low(SOList) to High(SOList) do
     for Y := Low(SOList[X]) to High(SOList[X]) do
@@ -276,7 +289,7 @@ begin
       for X := Low(ZStream1[W]) to High(ZStream1[W]) do
         for Y := Low(ZStream1[W, X]) to High(ZStream1[W, X]) do
           for Z := Low(ZStream1[W, X, Y]) to High(ZStream1[W, X, Y]) do
-            FillChar(ZStream1[W, X, Y, Z], SizeOf(z_stream), 0);
+            FillChar(ZStream1[W, X, Y, Z], SizeOf(ZStream1[W, X, Y, Z]), 0);
   end;
   if not BoolArray(CodecAvailable, False) then
   begin
@@ -316,7 +329,7 @@ end;
 
 procedure ZlibFree(Funcs: PPrecompFuncs);
 var
-  W, X, Y, Z: Integer;
+  I, W, X, Y, Z: Integer;
 begin
   for X := Low(SOList) to High(SOList) do
     for Y := Low(SOList[X]) to High(SOList[X]) do
@@ -327,8 +340,9 @@ begin
       for X := Low(ZStream1[W]) to High(ZStream1[W]) do
         for Y := Low(ZStream1[W, X]) to High(ZStream1[W, X]) do
           for Z := Low(ZStream1[W, X, Y]) to High(ZStream1[W, X, Y]) do
-            if Assigned(ZStream1[W, X, Y, Z].zalloc) then
-              deflateEnd(ZStream1[W, X, Y, Z]);
+            for I := 0 to 3 do
+              if Assigned(ZStream1[W, X, Y, Z, I].zalloc) then
+                deflateEnd(ZStream1[W, X, Y, Z, I]);
   end;
   if not BoolArray(CodecAvailable, False) then
   begin
@@ -645,13 +659,20 @@ begin
                 Result := True;
             end;
           end;
+          // Every encode attempt uses -cfgzlib's strategy; a stream from the
+          // database already carries its own in these bits.
+          if StreamInfo^.Status <> TStreamStatus.Database then
+            SetBits(StreamInfo^.Option, ZStrategy, 13, 2);
           Params := 'l' + I.ToString + ':' + 'w' +
-            (GetBits(StreamInfo^.Option, 10, 3) + 8).ToString;
+            (GetBits(StreamInfo^.Option, 10, 3) + 8).ToString +
+            IfThen(GetBits(StreamInfo^.Option, 13, 2) > 0,
+            ':st' + GetBits(StreamInfo^.Option, 13, 2).ToString, '');
           ZStream := @ZStream1[Instance, L, M,
-            GetBits(StreamInfo^.Option, 10, 3)];
+            GetBits(StreamInfo^.Option, 10, 3), GetBits(StreamInfo^.Option, 13, 2)];
           if not Assigned(ZStream^.zalloc) then
             deflateInit2(ZStream^, L, Z_DEFLATED,
-              -(GetBits(StreamInfo^.Option, 10, 3) + 8), M, Z_DEFAULT_STRATEGY);
+              -(GetBits(StreamInfo^.Option, 10, 3) + 8), M,
+              GetBits(StreamInfo^.Option, 13, 2));
           if not Result then
           begin
             ZStream^.next_in := Pointer(NewInput);
@@ -746,11 +767,15 @@ begin
         L := GetBits(StreamInfo.Option, 3, 7) div 10;
         M := GetBits(StreamInfo.Option, 3, 7) mod 10;
         Params := 'l' + GetBits(StreamInfo.Option, 3, 7).ToString + ':' + 'w' +
-          (GetBits(StreamInfo.Option, 10, 3) + 8).ToString;
-        ZStream := @ZStream1[Instance, L, M, GetBits(StreamInfo.Option, 10, 3)];
+          (GetBits(StreamInfo.Option, 10, 3) + 8).ToString +
+          IfThen(GetBits(StreamInfo.Option, 13, 2) > 0,
+          ':st' + GetBits(StreamInfo.Option, 13, 2).ToString, '');
+        ZStream := @ZStream1[Instance, L, M, GetBits(StreamInfo.Option, 10, 3),
+          GetBits(StreamInfo.Option, 13, 2)];
         if not Assigned(ZStream^.zalloc) then
           deflateInit2(ZStream^, L, Z_DEFLATED,
-            -(GetBits(StreamInfo.Option, 10, 3) + 8), M, Z_DEFAULT_STRATEGY);
+            -(GetBits(StreamInfo.Option, 10, 3) + 8), M,
+            GetBits(StreamInfo.Option, 13, 2));
         ZStream^.next_in := Pointer(Input);
         ZStream^.avail_in := StreamInfo.NewSize;
         deflateReset(ZStream^);

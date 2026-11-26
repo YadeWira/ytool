@@ -320,6 +320,86 @@ if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ] && command -v gcc >/dev/null; th
     ok=0; [ "$(p3_streams "$P3/r2.log")" = "Streams: 0 / 6" ] && cmp -s "$Z" "$P3/r2.out" && ok=1
     p3_check "reassign -rzlib=lzo1x (0 / 6, nada perdido)" $ok
 
+    # -cfgzlib:st<n> (0.9.9): la estrategia de deflate. 24_zlib_mixed.bin tiene
+    # un stream Huffman-only: con st2, 0.9.9 procesa solo ese (1 / 8). La
+    # estrategia queda en el stream, asi que el decode no necesita la opcion.
+    M24="$CORPUS/24_zlib_mixed.bin"
+    if [ -f "$M24" ]; then
+      "$XTOOL" precomp -mzlib -cfgzlib:st2 -t2 "$M24" "$P3/cf.pmp" > "$P3/cf.log" 2>&1
+      "$XTOOL" decode "$P3/cf.pmp" "$P3/cf.out" > /dev/null 2>&1
+      ok=0; [ "$(p3_streams "$P3/cf.log")" = "Streams: 1 / 8" ] && cmp -s "$M24" "$P3/cf.out" && ok=1
+      p3_check "-cfgzlib:st2 (1 / 8, como 0.9.9)" $ok
+    fi
+
+    # -cfgzstd (0.9.9): parametros avanzados. El frame lo escribe la MISMA libzstd
+    # que carga ytool (la de al lado del binario, o la del sistema), via ctypes:
+    # nivel 9 con hashLog/chainLog/searchLog/minMatch que el nivel solo no da.
+    ZL="$ROOT/libzstd.so"; [ -f "$ZL" ] || ZL=libzstd.so.1
+    if python3 - "$ZL" "$P3/zc.zst" <<'EOF'
+import ctypes, sys
+z = ctypes.CDLL(sys.argv[1])
+z.ZSTD_createCCtx.restype = ctypes.c_void_p
+z.ZSTD_CCtx_setParameter.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+z.ZSTD_compressBound.restype = ctypes.c_size_t
+z.ZSTD_compressBound.argtypes = [ctypes.c_size_t]
+z.ZSTD_compress2.restype = ctypes.c_size_t
+z.ZSTD_compress2.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t]
+z.ZSTD_isError.argtypes = [ctypes.c_size_t]
+import random
+r = random.Random(7)   # texto irregular: un texto muy repetitivo da el mismo frame con o sin los parametros
+w = [bytes(r.choice(b"etaoinshrdlu") for _ in range(r.randint(2, 9))) for _ in range(3000)]
+data = b" ".join(r.choice(w) for _ in range(60000))
+c = z.ZSTD_createCCtx()
+for p, v in [(100, 9), (201, 1), (102, 18), (103, 17), (104, 3), (105, 4)]:
+    z.ZSTD_CCtx_setParameter(c, p, v)
+cap = z.ZSTD_compressBound(len(data)); out = ctypes.create_string_buffer(cap)
+n = z.ZSTD_compress2(c, out, cap, data, len(data))
+sys.exit(1 if z.ZSTD_isError(n) else open(sys.argv[2], 'wb').write(out.raw[:n]) and 0)
+EOF
+    then
+      "$XTOOL" precomp -mzstd -t2 "$P3/zc.zst" "$P3/zs0.pmp" > "$P3/zs0.log" 2>&1
+      "$XTOOL" precomp -mzstd -cfgzstd:hl18:cl17:sl3:mm4 -t2 "$P3/zc.zst" "$P3/zs1.pmp" > "$P3/zs1.log" 2>&1
+      "$XTOOL" decode "$P3/zs1.pmp" "$P3/zs1.out" > /dev/null 2>&1
+      ok=0; [ "$(p3_streams "$P3/zs0.log")" = "Streams: 0 / 1" ] && \
+        [ "$(p3_streams "$P3/zs1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/zc.zst" "$P3/zs1.out" && ok=1
+      p3_check "-cfgzstd (0 / 1 sin, 1 / 1 con; decode sin la opcion)" $ok
+    else
+      echo "-- -cfgzstd: omitido, no se pudo escribir el frame con $ZL --"
+    fi
+
+    # zipcrypto (0.8.8): un plugin INI marca un stream cifrado con la clave en
+    # un archivo; descifrado, adentro hay deflate que zlib reconstruye a -d1.
+    ZD="$P3/plugZ"; mkdir -p "$ZD"
+    printf 'secret' > "$ZD/k.key"
+    printf '[Stream1]\nName=zc\nCodec=zipcrypto:k.key\nBigEndian=0\nSignature=0x3152435A\nStructure=Signature(4),CSize(4),Stream\nCompressedSize=CSize\nDecompressedSize=CSize\n' > "$ZD/zc.ini"
+    python3 - "$P3/zc.bin" "$CORPUS/11_text_8m.bin" <<'EOF'
+import random, struct, sys, zlib
+crc = []
+for i in range(256):
+    c = i
+    for _ in range(8):
+        c = (c >> 1) ^ 0xEDB88320 if c & 1 else c >> 1
+    crc.append(c)
+k = [0x12345678, 0x23456789, 0x34567890]
+def upd(b):
+    k[0] = (k[0] >> 8) ^ crc[(k[0] ^ b) & 0xff]
+    k[1] = ((k[1] + (k[0] & 0xff)) * 134775813 + 1) & 0xffffffff
+    k[2] = (k[2] >> 8) ^ crc[(k[2] ^ (k[1] >> 24)) & 0xff]
+for ch in b'secret': upd(ch)
+r = random.Random(7)
+co = zlib.compressobj(6, zlib.DEFLATED, -15)
+plain = bytes(r.getrandbits(8) for _ in range(12)) + co.compress(open(sys.argv[2], 'rb').read()[:150000]) + co.flush()
+enc = bytearray()
+for p in plain:
+    t = (k[2] | 2) & 0xffff
+    enc.append(p ^ (((t * (t ^ 1)) >> 8) & 0xff)); upd(p)
+open(sys.argv[1], 'wb').write(bytes(r.getrandbits(8) for _ in range(300)) + b'ZCR1' + struct.pack('<I', len(enc)) + bytes(enc) + bytes(r.getrandbits(8) for _ in range(300)))
+EOF
+    "$XTOOL" precomp -mzc+zlib -d1 -bd"$ZD" -t2 "$P3/zc.bin" "$P3/zc.pmp" > "$P3/zc.log" 2>&1 </dev/null
+    "$XTOOL" decode -bd"$ZD" "$P3/zc.pmp" "$P3/zc.out" > /dev/null 2>&1 </dev/null
+    ok=0; [ "$(p3_streams "$P3/zc.log")" = "Streams: 2 / 2" ] && cmp -s "$P3/zc.bin" "$P3/zc.out" && ok=1
+    p3_check "zipcrypto + zlib a -d1 (2 / 2)" $ok
+
     # plugins INI: formato de juguete TOY1 + codec externo rle en sus tres formas.
     python3 - "$P3/toy.bin" <<'EOF'
 import random, struct, sys

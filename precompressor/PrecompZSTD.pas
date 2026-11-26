@@ -6,7 +6,7 @@ uses
   ZSTDDLL,
   Utils,
   PrecompUtils,
-  SysUtils, Classes, Math;
+  SysUtils, Classes, Math, StrUtils;
 
 var
   Codec: TPrecompressor;
@@ -33,6 +33,38 @@ var
   ZFastMode: Integer = Z_FASTMODE;
   ZWindowLog: Integer = Z_WINDOWLOG;
   ZBlockSize: Integer = Z_BLOCKSIZE;
+  // -cfgzstd[:]wl<n>:hl<n>:cl<n>:sl<n>:mm<n> (xtool 0.9.9): advanced
+  // parameters every encode attempt uses, for frames a level alone does not
+  // reproduce. Option has no free bits left, so each stream carries them in
+  // its Resource field (unused by this codec otherwise): hl 0-4, cl 5-9,
+  // sl 10-14, mm 15-17, wl 18-22, bit 31 set when any is. 0 means the
+  // library default; containers written before have Resource = 0.
+  ZCfg: Integer = 0;
+
+function ZCfgPack(WL, HL, CL, SL, MM: Integer): Integer;
+begin
+  Result := 0;
+  if (WL or HL or CL or SL or MM) = 0 then
+    exit;
+  Result := (HL and 31) or ((CL and 31) shl 5) or ((SL and 31) shl 10) or
+    ((MM and 7) shl 15) or ((WL and 31) shl 18) or Integer($80000000);
+end;
+
+// Sets (or, with no configuration, resets to the library default) the
+// parameters -cfgzstd controls. Always called: the context is reused from
+// stream to stream, so a value left by one would reach the next.
+procedure ZCfgApply(Ctx: Pointer; Cfg: Integer);
+begin
+  if Cfg >= 0 then
+    Cfg := 0;
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_hashLog, Cfg and 31);
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_chainLog, (Cfg shr 5) and 31);
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_searchLog, (Cfg shr 10) and 31);
+  ZSTD_CCtx_setParameter(Ctx, ZSTD_c_minMatch, (Cfg shr 15) and 7);
+  // Only when given: the streaming path leaves the window to the level.
+  if (Cfg shr 18) and 31 > 0 then
+    ZSTD_CCtx_setParameter(Ctx, ZSTD_c_windowLog, (Cfg shr 18) and 31);
+end;
 
 function ZSTDInit(Command: PChar; Count: Integer; Funcs: PPrecompFuncs)
   : Boolean;
@@ -43,6 +75,23 @@ var
   X, Y: Integer;
 begin
   Result := True;
+  // -cfgzstd, read as xtool 0.9.9 does: the rest of the argument, fields
+  // split on ':' or ','. Out-of-range values are left to the library, which
+  // rejects them (the attempt then fails and the stream stays raw).
+  for I := 1 to ParamCount do
+    if ParamStr(I).StartsWith('-cfgzstd', True) then
+    begin
+      Options := [0, 0, 0, 0, 0];
+      for S in ParamStr(I).Substring(8).Split([':', ',']) do
+        if Length(S) > 2 then
+          case IndexText(S.Substring(0, 2), ['wl', 'hl', 'cl', 'sl', 'mm']) of
+            0 .. 4:
+              Options[IndexText(S.Substring(0, 2), ['wl', 'hl', 'cl', 'sl',
+                'mm'])] := StrToIntDef(S.Substring(2), 0);
+          end;
+      ZCfg := ZCfgPack(Options[0], Options[1], Options[2], Options[3],
+        Options[4]);
+    end;
   SetLength(SOList, Count);
   for X := Low(SOList) to High(SOList) do
     for Y := Low(SOList[X]) to High(SOList[X]) do
@@ -321,6 +370,8 @@ begin
             .ToString;
           if not Assigned(cctx[Instance]) then
             cctx[Instance] := ZSTD_createCCtx;
+          if StreamInfo^.Status <> TStreamStatus.Database then
+            StreamInfo^.Resource := ZCfg;
           if not Result then
           begin
             if GetBits(StreamInfo^.Option, 14, 13) = 0 then
@@ -333,6 +384,7 @@ begin
                 GetBits(StreamInfo^.Option, 27, 1));
               ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
                 Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0));
+              ZCfgApply(cctx[Instance], StreamInfo^.Resource);
               if Assigned(ZSTD_compress2) then
                 Res1 := ZSTD_compress2(cctx[Instance], Buffer,
                   StreamInfo^.NewSize, NewInput, StreamInfo^.NewSize)
@@ -368,6 +420,7 @@ begin
                 GetBits(StreamInfo^.Option, 27, 1));
               ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
                 Ord(GetBits(StreamInfo^.Option, 28, 2) <> 0));
+              ZCfgApply(cctx[Instance], StreamInfo^.Resource);
               if Assigned(ZSTD_CCtx_setPledgedSrcSize) then
                 ZSTD_CCtx_setPledgedSrcSize(cctx[Instance],
                   StreamInfo^.NewSize);
@@ -491,6 +544,7 @@ begin
             GetBits(StreamInfo.Option, 27, 1));
           ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
             Ord(GetBits(StreamInfo.Option, 28, 2) <> 0));
+          ZCfgApply(cctx[Instance], StreamInfo.Resource);
           if Assigned(ZSTD_compress2) then
             Res1 := ZSTD_compress2(cctx[Instance], Buffer, StreamInfo.NewSize,
               Input, StreamInfo.NewSize)
@@ -530,6 +584,7 @@ begin
             GetBits(StreamInfo.Option, 27, 1));
           ZSTD_CCtx_setParameter(cctx[Instance], ZSTD_c_contentSizeFlag,
             Ord(GetBits(StreamInfo.Option, 28, 2) <> 0));
+          ZCfgApply(cctx[Instance], StreamInfo.Resource);
           if Assigned(ZSTD_CCtx_setPledgedSrcSize) then
             ZSTD_CCtx_setPledgedSrcSize(cctx[Instance], StreamInfo.NewSize);
           while Progress < StreamInfo.NewSize do
