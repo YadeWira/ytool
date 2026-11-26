@@ -3,11 +3,11 @@
 # the mingw-w64 cross-compiler from Linux. Windows equivalent of
 # build-native-linux.sh.
 #
-# Why only xxHash and lzma: the repo ships prebuilt Windows objects for zstd
-# (zstd4delphi.*.x64.o) and lz4 (LZ4DELPHI.*.X64.OBJ) inherited from the original
-# Delphi project, but did NOT bring xxHash's (xxhashlib expected it but it never existed).
-# Here we generate it from the same C source used on Linux. lzma is a new
-# addition (PrecompLZMA.pas) with no prebuilt object at all.
+# Builds xxHash, lzma, and (since 0.9.9a) zstd and lz4 from pinned sources.
+# Until 0.9.9a the zstd (zstd4delphi.*.x64.o) and lz4 (lz4delphi.*.x64.obj)
+# objects were the prebuilt ones inherited from the original Delphi project,
+# with no stated origin; xxHash's never existed (xxhashlib expected it), and
+# lzma is ytool's own addition (PrecompLZMA.pas).
 #
 # Output (referenced by contrib/XXHASH4Delphi/xxhashlib.pas on the WIN64 branch):
 #   contrib/XXHASH4Delphi/XXHASH4DELPHI.SSE2.X64.O
@@ -36,22 +36,14 @@ mkdir -p "$CSRC"
 # Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
 # puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
 # que aplicarse tambien sobre un checkout que ya existe.
-XXHASH_REF="e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7"
+XXHASH_REF="c87183a77d67f7d37e3d2d1b7eaac5e7c695e4f0"   # v0.8.4
 
 pin_repo https://github.com/Cyan4973/xxHash "$CSRC/xxhash" "$XXHASH_REF"
-if [ ! -d "$CSRC/lzma-sdk-ref" ]; then
-  SEVENZ="$(command -v 7z || command -v 7za || true)"
-  if [ -z "$SEVENZ" ]; then
-    echo "ERROR: LZMA SDK sources missing and no 7z/7za found to extract them." >&2
-    echo "       Install p7zip (e.g. 'apt install p7zip-full') or place the" >&2
-    echo "       extracted SDK yourself at $CSRC/lzma-sdk-ref/C/*.c" >&2
-    exit 1
-  fi
-  # Pinned to 19.00, see build-native-linux.sh for why.
-  curl -sL -o "$CSRC/lzma-sdk.7z" https://www.7-zip.org/a/lzma1900.7z
-  mkdir -p "$CSRC/lzma-sdk-ref"
-  "$SEVENZ" x -y -o"$CSRC/lzma-sdk-ref" "$CSRC/lzma-sdk.7z" >/dev/null
-fi
+# lz4 pinned by SHA, same revision as build-native-linux.sh and the plugin
+# scripts (they share $CSRC/lz4).
+LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
+. "$(dirname "$CSRC")/fetch-lzma-sdk.sh"
+fetch_lzma_sdk || exit 1
 
 CC=x86_64-w64-mingw32-gcc
 command -v "$CC" >/dev/null || { echo "ERROR: falta $CC (instala mingw-w64)"; exit 1; }
@@ -65,7 +57,27 @@ echo "==> XXHASH4DELPHI.AVX2.X64.O"
   -o XXHASH4Delphi/XXHASH4DELPHI.AVX2.X64.O XXHASH4Delphi/xxhash4delphi.avx2.c
 
 echo "==> lzmadelphi.win64.x64.o"
-"$CC" -c -O2 -I "$CSRC/lzma-sdk-ref/C" \
+"$CC" -c -O2 -I "$LZMA_SDK_C" \
   -o LZMADelphi/lzmadelphi.win64.x64.o LZMADelphi/lzmadelphi.c
+
+# zstd/lz4: rebuilt from the pinned sources (zstd v1.5.2 for these internal
+# objects, lz4 $LZ4_REF) as on Linux. The objects committed before were the
+# inherited Delphi-era builds (zstd 1.5.2, lz4 1.9.3, no stated origin). Both
+# names of each pair get the same object: the AVX2 one is only linked with
+# -dAVX2, which no build here sets. They leave XXH32/XXH64 undefined, for the
+# xxhash object above, as the old ones did.
+pin_repo https://github.com/facebook/zstd "$CSRC/zstd" v1.5.2
+pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
+echo "==> zstd4delphi.{sse2,avx2}.x64.o"
+"$CC" -c -O2 -DZSTD_DISABLE_ASM \
+  -I "$CSRC/zstd/lib" -I "$CSRC/zstd/lib/common" \
+  -I "$CSRC/zstd/lib/compress" -I "$CSRC/zstd/lib/decompress" \
+  -o ZSTD4Delphi/zstd4delphi.sse2.x64.o ZSTD4Delphi/zstd4delphi.c
+cp ZSTD4Delphi/zstd4delphi.sse2.x64.o ZSTD4Delphi/zstd4delphi.avx2.x64.o
+echo "==> lz4delphi.{sse2,avx2}.x64.obj"
+printf '#include "lz4.c"\n#include "lz4hc.c"\n#include "lz4frame.c"\n' > "$CSRC/lz4delphi_x64.c"
+"$CC" -c -O2 -I "$CSRC/lz4/lib" \
+  -o LZ4Delphi/lz4delphi.sse2.x64.obj "$CSRC/lz4delphi_x64.c"
+cp LZ4Delphi/lz4delphi.sse2.x64.obj LZ4Delphi/lz4delphi.avx2.x64.obj
 
 echo "OK: objetos Windows generados."

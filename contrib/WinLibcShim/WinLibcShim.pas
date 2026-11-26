@@ -29,6 +29,9 @@ implementation
 {$IFDEF WIN32}
 
 {$L chkstk.x86.o}
+// ___chkstk_ms: the stack probe current mingw emits (zstd/lz4 objects rebuilt
+// from source in 0.9.9a); chkstk.x86.o above covers the older __alloca.
+{$L chkstk_ms.x86.o}
 // GCC's compiler-rt-style 64-bit arithmetic helpers: i386 has no native
 // 64-bit divide/modulo/shift instructions, so any C code doing Int64/UInt64
 // division, modulo, or shifts by a non-constant amount (xxHash/zstd do
@@ -81,6 +84,15 @@ end;
 procedure ShimFree(p: Pointer); cdecl; public name '_free';
 begin
   if p <> nil then FreeMem(p);
+end;
+
+// LZMA SDK 21+ (Alloc.c's MyRealloc). C semantics: realloc(nil, n) allocates,
+// realloc(p, 0) frees and returns nil; ReAllocMem does both.
+function ShimRealloc(p: Pointer; n: NativeUInt): Pointer; cdecl;
+  public name '_realloc';
+begin
+  Result := p;
+  ReAllocMem(Result, n);
 end;
 
 {$ENDIF}

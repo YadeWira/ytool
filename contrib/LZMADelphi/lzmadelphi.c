@@ -2,6 +2,9 @@
    exposing LzmaCompress/LzmaUncompress, compiled as a static object linked
    directly into ytool (same pattern as LZ4Delphi/ZSTD4Delphi). */
 #define _7ZIP_ST
+/* SDK 21+ spells it Z7_ST. With it LzmaEnc.c no longer references the
+   multithreaded match finder, so LzFindMt.c/Threads.c stay out. */
+#define Z7_ST
 
 /* Alloc.c's g_Alloc (the only allocator any entry point below passes in) is
    the plain malloc/free one, always available regardless of platform. Its
@@ -23,10 +26,27 @@
    Alloc.c's function bodies, not any declaration. */
 #define VirtualAlloc(addr, size, alloctype, protect) malloc(size)
 #define VirtualFree(addr, size, freetype) free(addr)
+/* SDK 21+: Alloc.c's SetLargePageSize looks up GetLargePageMinimum through
+   GetModuleHandle/GetProcAddress. Nothing here calls it, but the call sites
+   would still import both; with no module and no address it does nothing. */
+#undef GetModuleHandle
+#define GetModuleHandle(name) ((HMODULE)0)
+#define GetProcAddress(mod, name) ((FARPROC)0)
 #endif
 #include "Alloc.c"
 
+/* SDK 21+: LzFind.c picks an SSE4.1/AVX2 version of one hash-table
+   normalization in LzFindPrepare, asking CpuArch.c. CpuArch.c is left out on
+   purpose: on Windows it imports GetModuleHandleA/GetProcAddress/
+   IsProcessorFeaturePresent, which a {$L}-linked object cannot resolve (same
+   problem as VirtualAlloc above). Saying "not supported" keeps the scalar
+   path; the normalization's result, and so the encoded bytes, are the same. */
+#include "CpuArch.h"
+BoolInt CPU_IsSupported_SSE41(void) { return False; }
+BoolInt CPU_IsSupported_AVX2(void) { return False; }
+BoolInt CPU_IsSupported_NEON(void) { return False; }
 #include "LzFind.c"
+#include "LzFindOpt.c"
 #include "LzmaDec.c"
 #include "LzmaEnc.c"
 #include "LzmaLib.c"

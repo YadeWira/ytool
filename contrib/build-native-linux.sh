@@ -4,18 +4,18 @@
 #
 # Sources expected in contrib/.csrc (gitignored). If missing, they are fetched:
 #   zstd v1.5.2 (must match ZSTD_VERSION_STRING in ZSTDLib.pas)
-#   lz4  (recent release)
-#   LZMA SDK (Igor Pavlov, public domain; official 7-zip.org distribution,
-#   only ships as a .7z archive -- needs 7z/7za/p7zip installed)
+#   lz4  $LZ4_REF (v1.11.1)
+#   xxHash $XXHASH_REF (v0.8.4)
+#   LZMA SDK 26.06 (Igor Pavlov, public domain) via fetch-lzma-sdk.sh, from the
+#   7-Zip GitHub release; a .7z archive, so 7z/7za/p7zip must be installed
 #
 # Key notes:
 #  - zstd: -DZSTD_DISABLE_ASM (avoids huf_decompress .S files; uses C fallback,
-#    identical output). xxhash.c is NOT included: zstd leaves XXH64 undefined and
-#    it is resolved at final link from the lz4 object (which DOES include xxhash.c).
-#    This avoids XXH* symbol clashes when linking lz4lib + ZSTDLib together.
-#  - lz4: includes xxhash.c -> is the "owner" of the XXH* symbols (also used
-#    by the xxhashlib unit).
-#  - lzma: single-threaded (_7ZIP_ST, avoids needing Threads.c); LzFind.c is the
+#    identical output). xxhash.c is NOT included: zstd leaves XXH64 undefined.
+#  - lz4: does NOT include xxhash.c either (XXH32 left undefined).
+#  - xxhash4delphi.linux.x64.o is the sole owner of the XXH* symbols; both are
+#    resolved from it at final link, which avoids XXH* clashes.
+#  - lzma: single-threaded (_7ZIP_ST/Z7_ST, avoids needing Threads.c); LzFind.c is the
 #    match finder LzmaEnc.c needs. lzmadelphi.c adds two small wrappers on top of
 #    LzmaLib.h's LzmaCompress/LzmaUncompress (see its own comments) to control the
 #    end-of-stream marker, needed for the "unknown uncompressed size" stream
@@ -28,7 +28,7 @@ mkdir -p "$CSRC"
 # Revisiones fijadas a lo que efectivamente se construyo y publico. Un tag se
 # puede mover; un SHA no. Ver contrib/pin-repo.sh para por que el pin tiene
 # que aplicarse tambien sobre un checkout que ya existe.
-XXHASH_REF="e573d4d2aaeaba0f3e5a0a9a54144a1f2b4b56e7"
+XXHASH_REF="c87183a77d67f7d37e3d2d1b7eaac5e7c695e4f0"   # v0.8.4
 
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
@@ -50,22 +50,8 @@ LZ4_REF="aa4647fad575d01a874aaaadcdbe8e6a40e072f5"   # v1.11.1
 pin_repo https://github.com/facebook/zstd "$CSRC/zstd" v1.5.2
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
 pin_repo https://github.com/Cyan4973/xxHash "$CSRC/xxhash" "$XXHASH_REF"
-if [ ! -d "$CSRC/lzma-sdk-ref" ]; then
-  SEVENZ="$(command -v 7z || command -v 7za || true)"
-  if [ -z "$SEVENZ" ]; then
-    echo "ERROR: LZMA SDK sources missing and no 7z/7za found to extract them." >&2
-    echo "       Install p7zip (e.g. 'apt install p7zip-full') or place the" >&2
-    echo "       extracted SDK yourself at $CSRC/lzma-sdk-ref/C/*.c" >&2
-    exit 1
-  fi
-  # Pinned to 19.00, not the current release: from 20.xx+ onward LzmaEnc.c
-  # references MatchFinderMt_* unconditionally (needs LzFindMt.c/Threads.c
-  # even under _7ZIP_ST); 19.00 still guards them with #ifndef _7ZIP_ST,
-  # matching this single-threaded build.
-  curl -sL -o "$CSRC/lzma-sdk.7z" https://www.7-zip.org/a/lzma1900.7z
-  mkdir -p "$CSRC/lzma-sdk-ref"
-  "$SEVENZ" x -y -o"$CSRC/lzma-sdk-ref" "$CSRC/lzma-sdk.7z" >/dev/null
-fi
+. "$(dirname "$CSRC")/fetch-lzma-sdk.sh"
+fetch_lzma_sdk || exit 1
 
 echo "==> xxhash4delphi.linux.x64.o (dueno unico de los simbolos XXH*, incl. XXH3)"
 gcc -c -O2 -fPIC -I "$CSRC/xxhash" \
@@ -87,7 +73,7 @@ gcc -c -O2 -fPIC -I "$CSRC/lz4/lib" \
   -o LZ4Delphi/lz4delphi.linux.x64.o "$CSRC/lz4delphi_lin.c"
 
 echo "==> lzmadelphi.linux.x64.o"
-gcc -c -O2 -fPIC -I "$CSRC/lzma-sdk-ref/C" \
+gcc -c -O2 -fPIC -I "$LZMA_SDK_C" \
   -o LZMADelphi/lzmadelphi.linux.x64.o LZMADelphi/lzmadelphi.c
 
 echo "OK: objetos Linux generados."

@@ -24,7 +24,7 @@ mkdir -p "$CSRC"
 PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
 FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
-BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
+BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no newer tag than v0.1, 2019)
 CXX="$(command -v clang++ || command -v g++)"
 CC="$(command -v gcc || command -v clang || command -v cc)"
 

@@ -33,7 +33,7 @@ FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
 WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
 PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
-BRUNSLI_REF="24bbf683d018cf5f2197dfee4cee08e91d71b90c"
+BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no newer tag than v0.1, 2019)
 
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
 
