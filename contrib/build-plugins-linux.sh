@@ -23,7 +23,6 @@ mkdir -p "$CSRC"
 # que aplicarse tambien sobre un checkout que ya existe.
 PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
 FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
-PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
 BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no newer tag than v0.1, 2019)
 CXX="$(command -v clang++ || command -v g++)"
 CC="$(command -v gcc || command -v clang || command -v cc)"
@@ -91,8 +90,8 @@ fi
 # packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
 # The library is PJA's released build (FreePascal plus C), downloaded and
-# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
-# below; the version is spelled once.
+# checked against the SHA-256 in that release's SHA256SUMS; the version is
+# spelled once.
 PJA_VER="0.9.14"
 PJA_ASSET="pja-${PJA_VER}-lib-linux-x86_64.tar.gz"
 PJA_SHA256="2b8cf9ecbb8e6b0669b4f8d7fc9e760ebb9ea466edbe50f7fff4ce2718410d83"
@@ -157,7 +156,7 @@ pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "
     -o "$ROOT/libfast-lzma2.so" ) \
   && echo "   OK -> libfast-lzma2.so" || echo "   (fast-lzma2 fallo)"
 
-# ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
+# ── brunsli (JPEG media codec, alternative to PJA) — requires cmake ────────
 echo "==> brunsli (libbrunsli.so)"
 pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
@@ -173,83 +172,6 @@ if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
     && echo "   OK -> libbrunsli.so" || echo "   (brunsli link fallo)"
 else
   echo "   (brunsli: falta cmake o el clone)"
-fi
-
-# ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
-# Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
-# support (was MPEG-1 Layer III only), CBR/VBR, intra-file/-th batch threading,
-# retuned entropy models. Same 4 source files, same BUILD_LIB/BUILD_DLL macros,
-# same pmplib_* function set the Pascal binding already expects -- no API changes.
-# BREAKING (v1.0g -> v2.0a only): entropy models were retuned there, so that
-# jump broke the compressed bitstream (their own release notes said so
-# explicitly) -- any .pmp made with -mpackmp3 before that migration can no
-# longer be decoded. Accepted given ytool is pre-1.0, same call as omega-srep.
-# v2.0a -> v3.0d is NOT another break: v3.0's own release notes state v2.0/v2.1
-# .pm3 archives still decode correctly (purely additive format, version-gated),
-# and v3.0d keeps the archive version stamp at 31 with .pm3 sizes identical.
-#
-# v2.0 (the initial tag) failed to build: source/packmp3.cpp uses std::atomic/
-# std::thread (new -k/-th chunking) without #include <atomic>/<thread> anywhere
-# in the tree -- reproduced with both clang++ and g++14, so a real upstream bug,
-# not a compiler-strictness artifact. Already fixed on their master along with a
-# proper extern "C" on the library headers (see below); v2.0a is that fix,
-# cut as a new tag at our request so this pins to something reproducible
-# instead of a moving branch. The old sed C-linkage patch for Linux .so builds
-# is no longer needed as of v2.0a (headers now declare extern "C" natively).
-#
-# Bumped first to v3.0c for 2 real detection-bug fixes (VBR MPEG-2/2.5 Layer III was
-# rejected outright -- a wrong frame_size_table entry double-counted the frame
-# size; and Layer I/II files with their first frame past an 8KB scan window
-# were misdetected as Layer III and refused). v3.0 added MP1/MP2 support (via
-# a new sibling packMP2 dependency) and ID3v2 cover-art recompression (via
-# packJPG/packPNG) -- both CLI-only, properly guarded behind
-# `#if !defined(BUILD_LIB) && !defined(BUILD_DLL)` in packmp3.cpp, so the
-# library/DLL build we use doesn't link either. The ONE new requirement that
-# does reach BUILD_LIB: packmp3.cpp unconditionally #includes packMP2's
-# header (not gated, unlike the packJPG/packPNG includes right below it --
-# confirmed empirically, not just by reading the guard) even though nothing
-# under BUILD_LIB actually calls into it, so only the header needs to be
-# present at compile time, not the built packMP2 library itself.
-echo "==> packmp3 (libpackmp3.so)"
-pin_repo https://github.com/YadeWira/packMP3 "$CSRC/packMP3" v3.0f
-pin_repo https://github.com/YadeWira/packMP2 \
-  "$CSRC/packMP3/source/vendor/packmp2-src" "$PACKMP2_REF"
-if [ -d "$CSRC/packMP3" ]; then
-  ( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -fPIC -shared \
-    source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
-    -lpthread -o "$ROOT/libpackmp3.so" ) \
-    && echo "   OK -> libpackmp3.so" || echo "   (packmp3 fallo)"
-fi
-
-# ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
-# Building it from source requires Rust (cross-compile) + cmake for kanzi-cpp --
-# much heavier than the rest of this script (only clang++/g++/cmake). Instead,
-# the already-built .so is downloaded from a versioned packPNG release
-# (same author, not an unknown third party) -- reproducible without a new toolchain.
-echo "==> packpng (libpackpng.so)"
-# Version appears once. It used to be spelled twice -- interpolated into the
-# URL path and hardcoded into the asset filename -- so bumping the variable
-# alone produced a 404 for an asset path that still named the OLD version.
-PACKPNG_VER="v2.0l"
-PACKPNG_NUM="${PACKPNG_VER#v}"
-# -f matters: without it curl treats a 404 as success and writes the 9-byte
-# body "Not Found" to the output file, which then passes the -s (non-empty)
-# guard below and fails later at extraction, silently leaving the previous
-# binary in place. With -f curl exits 22 and writes nothing.
-if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-linux-x64-lib.tar.gz" \
-  -o "$CSRC/packpng-lib.tar.gz" 2>/dev/null && [ -s "$CSRC/packpng-lib.tar.gz" ]; then
-  # Wildcard match, not the bare member name: the tarball's internal layout is
-  # not stable across releases (<=v2.0d stored "libpackpng.so" at the root,
-  # v2.0h stores "./libpackpng.so"), and `tar x <exact-name>` silently extracts
-  # nothing when the stored name has the "./" prefix. --wildcards matches either
-  # form; --no-anchored keeps it matching regardless of leading path components.
-  tar -xzf "$CSRC/packpng-lib.tar.gz" -C "$CSRC" \
-      --wildcards --no-anchored --transform 's|.*/||' 'libpackpng.so' 2>/dev/null \
-    && mv -f "$CSRC/libpackpng.so" "$ROOT/libpackpng.so" \
-    && echo "   OK -> libpackpng.so (prebuilt $PACKPNG_VER)" \
-    || echo "   (packpng: extraccion fallo)"
-else
-  echo "   (packpng: descarga fallo)"
 fi
 
 echo "Hecho. Plugins .so en la raiz del repo (gitignored)."

@@ -84,8 +84,8 @@ try {
   $Methods = @(
     "", "-mzlib", "-mzlib+zstd", "-mzlib -dd", "-mzlib -dd1", "-mzlib -r zstd",
     "-mzlib -r xor", "-mzlib -r aes", "-mzlib -r rc4", "-mlzo1x", "-mwavpack",
-    "-mflac", "-mpng", "-mpackpng", "-mpreflate", "-mreflate", "-mlz4f",
-    "-mpackjpg", "-mbrunsli", "-mpackmp3", "-mlzma"
+    "-mflac", "-mpng", "-mpreflate", "-mlz4f", "-mzstd", "-mpja", "-mbrunsli",
+    "-mlzma"
   )
 
   $pass = 0; $fail = 0

@@ -33,19 +33,11 @@ trap 'rm -rf "$WORK"' EXIT
 # CryptoScan1 is a no-op, they only activate by reassigning streams already detected by another
 # codec (same as "-r zstd" already did) -> real round-trip on 20_zlib_streams.bin.
 # "-mpng" exercises the PNG container (61_png_min.bin, generated in situ, no dependencies).
-# "-mpackpng" exercises the packPNG codec (sibling repo YadeWira/packPNG, preflate +
-# WebP-lossless) on 62_png_photo.bin -- unlike 61_png_min.bin (pure noise,
-# only useful for -mpng which doesn't model pixels), this PNG has a real gradient so
-# the image codec has something to gain. Requires libpackpng.so/packpng.dll in the
-# repo (not vendored yet, see Phase 6); if missing, DLLLoaded=False and the method runs
-# over 0 streams -> trivially reversible, same criterion as preflate/srep when missing.
-# "-mpreflate" exercises ReflateDLL/PreflateDLL against the same streams from
-# 20_zlib_streams.bin; preflate DOES have a .so in this repo -> real coverage. "-mreflate"
-# is left as-is in case that lib is ever added: if missing, it falls back to 0 streams (trivially
-# reversible), same criterion as "-dd1" with srep.
-# "-mlz4f"/"-mpja"/"-mbrunsli"/"-mpackmp3" depend on OPTIONAL corpus files
-# (see gen_corpus.py: they require the python module "lz4", Pillow, and the "lame"
-# binary respectively). If missing, those files aren't generated and the method runs over 0
+# "-mpreflate" exercises PreflateDLL against the same streams from 20_zlib_streams.bin.
+# (-mpackpng, -mpackmp3 and -mreflate were removed in 0.9.9a.)
+# "-mlz4f"/"-mpja"/"-mbrunsli" depend on OPTIONAL corpus files (see gen_corpus.py:
+# they require the python module "lz4" and Pillow; 64_jpeg2000.bin also needs Pillow
+# built with OpenJPEG). If missing, those files aren't generated and the method runs over 0
 # streams -> trivially reversible, no real coverage until the machine has them.
 # NOTE "-mlz4f": the generated LZ4 frame IS detected (magic 0x184D2204) but the
 # recompression doesn't reproduce the original frame byte for byte -> it falls back to the safe
@@ -60,8 +52,7 @@ trap 'rm -rf "$WORK"' EXIT
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpackpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" \
-  "-mpackmp3" "-mlzma")
+  "-mpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" "-mlzma")
 
 fail=0; pass=0; err=0; dead=0
 echo "== ytool regression =="
@@ -143,7 +134,6 @@ CODEC_EXPECT="
 60_wav_pcm.bin|-mflac|1
 61_png_min.bin|-mpng|1
 62_png_photo.bin|-mpng|1
-62_png_photo.bin|-mpackpng|1
 63_lzma_alone.bin|-mlzma|1
 70_lz4f.bin|-mlz4f|1
 73_lz4f_crc.bin|-mlz4f|1
@@ -154,7 +144,7 @@ CODEC_EXPECT="
 50_lzo1x.bin|-mlzo1x|1
 71_jpeg_min.bin|-mpja|1
 71_jpeg_min.bin|-mbrunsli|1
-72_mp3_min.bin|-mpackmp3|1
+64_jpeg2000.bin|-mpja|2
 "
 
 # Escape valvula para la UNICA configuracion donde no tener codecs es

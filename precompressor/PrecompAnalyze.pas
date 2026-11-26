@@ -32,9 +32,9 @@ const
   // TDataStore instances are never reset/freed between calls, and the
   // second invocation always ends in an Access Violation). Doing it via a
   // subprocess reuses the real "precomp" path, already tested exhaustively.
-  Candidates: array [0 .. 15] of String = ('zlib', 'preflate',
+  Candidates: array [0 .. 13] of String = ('zlib', 'preflate',
     'lz4', 'lz4hc', 'lz4f', 'lzo1x', 'lzo2a', 'lzo1c', 'zstd', 'flac',
-    'wavpack', 'pja', 'brunsli', 'packmp3', 'packpng', 'png');
+    'wavpack', 'pja', 'brunsli', 'png');
 
 type
   TTrialResult = record

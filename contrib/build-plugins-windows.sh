@@ -7,9 +7,6 @@
 # Requirements: git, mingw-w64 (x86_64-w64-mingw32-gcc/g++), cmake. Each plugin is
 # independent: if a source fails to clone or the cross-compile fails, it is skipped and continues.
 #
-# jojpeg_dll.dll is NOT built: no public/open source exists for jojpeg (like
-# oodle), so that codec also stays dormant in the Windows build.
-#
 # LESSON MinGW: upstream headers (packjpg/packmp3/fast-lzma2) define their
 # EXPORT/API macro with __declspec(dllexport) only under certain -D (BUILD_DLL, BUILD_LIB,
 # FL2_DLL_EXPORT...); to avoid depending on each one being correctly wired, ALL
@@ -30,7 +27,6 @@ PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
 FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
 WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
-PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
 BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no newer tag than v0.1, 2019)
 
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
@@ -147,8 +143,8 @@ fi
 # packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
 # The library is PJA's released build (FreePascal plus C), downloaded and
-# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
-# below; the version is spelled once.
+# checked against the SHA-256 in that release's SHA256SUMS; the version is
+# spelled once.
 PJA_VER="0.9.14"
 PJA_ASSET="pja-${PJA_VER}-lib-windows-x64.zip"
 PJA_SHA256="a1529e2b5ff9884899de3b7852aef876e7f4d196c7770c9f8af21450a756b354"
@@ -200,27 +196,6 @@ pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "
   *.c lzma_dec_x86_64.o -static-libgcc -o "$ROOT/fast-lzma2.dll" ) \
   && echo "   OK -> fast-lzma2.dll" || echo "   (fast-lzma2 fallo)"
 
-# ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
-# Migrated to YadeWira/packMP3 (same author as packJPG/packPNG): full MP3 family
-# support (was MPEG-1 Layer III only), CBR/VBR, threading, retuned entropy
-# models. Same source files/macros/pmplib_* functions, no build recipe changes.
-# BREAKING (v1.0g -> v2.0a only): retuned entropy models made that jump's
-# bitstream incompatible -- old .pmp using -mpackmp3 from before it can no
-# longer be decoded. v2.0a -> v3.0c is NOT another break (purely additive,
-# version-gated per v3.0's own release notes).
-# v2.0 (initial tag) failed to build (missing <atomic>/<thread> includes);
-# v2.0a is the fix, cut upstream at our request -- see build-plugins-linux.sh's
-# packmp3 comment for the full story, including why v3.0c needs packMP2's
-# header (not its built library) even for this BUILD_LIB-only recipe.
-echo "==> packmp3 (packmp3_dll.dll)"
-pin_repo https://github.com/YadeWira/packMP3 "$CSRC/packMP3" v3.0f
-pin_repo https://github.com/YadeWira/packMP2 \
-  "$CSRC/packMP3/source/vendor/packmp2-src" "$PACKMP2_REF"
-( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
-  source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
-  -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll.dll" ) \
-  && echo "   OK -> packmp3_dll.dll" || echo "   (packmp3 fallo)"
-
 # ── FLAC (lossless WAV media codec) ──────────────────────────────────────────
 echo "==> FLAC (libFLAC_dynamic.dll)"
 pin_repo https://github.com/xiph/flac "$CSRC/flac" "$FLAC_REF"
@@ -256,7 +231,7 @@ else
   echo "   (WavPack: falta cmake o el clone)"
 fi
 
-# ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
+# ── brunsli (JPEG media codec, alternative to PJA) — requires cmake ────────
 echo "==> brunsli (brunsli.dll)"
 pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
@@ -276,29 +251,4 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
-# Same criteria as in build-plugins-linux.sh: building from source requires Rust
-# (cross-compile to x86_64-pc-windows-gnu) + cmake for kanzi-cpp -- instead the
-# already-built .dll is downloaded from a versioned packPNG release.
-echo "==> packpng (packpng.dll)"
-# See build-plugins-linux.sh for why the version is spelled once and why curl
-# needs -f. The extraction uses a quoted wildcard with -j for the same reason
-# the Linux tar step does: a release whose zip stores "./packpng.dll" instead
-# of "packpng.dll" makes extract-by-exact-name match nothing and exit 11,
-# which 2>/dev/null then hides. Today's assets store plain names, so this is
-# insurance against a layout change, not a live failure -- but the tar side of
-# exactly this already bit us once when packPNG changed its tarball layout.
-PACKPNG_VER="v2.0l"
-PACKPNG_NUM="${PACKPNG_VER#v}"
-if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win64-lib.zip" \
-  -o "$CSRC/packpng-lib.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib.zip" ]; then
-  ( cd "$CSRC" && unzip -joq packpng-lib.zip "*packpng.dll" ) 2>/dev/null \
-    && mv -f "$CSRC/packpng.dll" "$ROOT/packpng.dll" \
-    && echo "   OK -> packpng.dll (prebuilt $PACKPNG_VER)" \
-    || echo "   (packpng: extraccion fallo)"
-else
-  echo "   (packpng: descarga fallo)"
-fi
-
 echo "Hecho. Plugins .dll en la raiz del repo (gitignored)."
-echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."

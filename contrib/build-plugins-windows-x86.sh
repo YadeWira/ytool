@@ -17,8 +17,6 @@
 # reports unavailable, same as an already-missing .dll does on the win64
 # build today. zlib1.dll is the one exception: it's a hard load-time
 # dependency (see its own step below), not lazily loaded.
-#
-# jojpeg_dll.dll is NOT built: no public/open source exists (like oodle).
 set -euo pipefail
 cd "$(dirname "$0")"                 # contrib/
 CSRC="$(pwd)/.csrc"
@@ -32,7 +30,6 @@ PREFLATE_REF="609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e"
 FLZMA2_REF="756d1c9f0c5806873c6a4c9e59f270e3daf445c7"   # fast-lzma2-v1.2.0
 FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
 WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
-PACKMP2_REF="9a81732b1ae84c22f868af51749072d5f0bf1eb1"
 BRUNSLI_REF="c18b9625ef045b0b89ebb4439ae2339e2160df71"   # master 2026-09-10 (no newer tag than v0.1, 2019)
 
 . "$(dirname "$CSRC")/pin-repo.sh"   # $CSRC es absoluto; $0 no sirve, cada script hace cd distinto
@@ -142,8 +139,8 @@ fi
 # packJPG 5.0f 50 and 80.81%, brunsli 47 and 79.71%.
 #
 # The library is PJA's released build (FreePascal plus C), downloaded and
-# checked against the SHA-256 in that release's SHA256SUMS, like packPNG
-# below; the version is spelled once.
+# checked against the SHA-256 in that release's SHA256SUMS; the version is
+# spelled once.
 PJA_VER="0.9.14"
 PJA_ASSET="pja-${PJA_VER}-lib-windows-x86.zip"
 PJA_SHA256="36a3bde0e0546cb5de65a765ed4f51f028a108515b907682eed3b1c0c14ba4ac"
@@ -195,24 +192,6 @@ pin_repo https://github.com/YadeWira/ultra-fast-lzma2 "$CSRC/ultra-fast-lzma2" "
 # (the x86_64-only asm decoder files, lzma_dec_x86_64.asm/.S, aren't matched
 # by the *.c glob and are additionally guarded by 64-bit-only preprocessor
 # checks in the C sources -- they never enter this 32-bit build.)
-
-# ── packmp3 (MP3 media codec) — user's fork v3.0d (successor of packjpg/packMP3 v1.0g) ──
-# See build-plugins-linux.sh's packmp3 comment for the full story (full MP3
-# family support, threading, retuned entropy models -- BREAKING bitstream
-# change v1.0g->v2.0a only, old .pmp from before that can no longer be
-# decoded; v2.0a fixes a missing-includes build bug present in the initial
-# v2.0 tag; v3.0c fixes 2 real detection bugs (VBR MPEG-2/2.5 Layer III,
-# Layer I/II first-frame-past-8KB) and is NOT another bitstream break --
-# needs packMP2's header, not its built library, even for this BUILD_LIB
-# recipe).
-echo "==> packmp3 (packmp3_dll-x86.dll)"
-pin_repo https://github.com/YadeWira/packMP3 "$CSRC/packMP3" v3.0f
-pin_repo https://github.com/YadeWira/packMP2 \
-  "$CSRC/packMP3/source/vendor/packmp2-src" "$PACKMP2_REF"
-( cd "$CSRC/packMP3" && "$CXX" -O3 -std=c++17 -DBUILD_LIB -Wl,--export-all-symbols \
-  source/aricoder.cpp source/bitops.cpp source/huffmp3.cpp source/packmp3.cpp \
-  -shared -static-libgcc -static-libstdc++ -o "$ROOT/packmp3_dll-x86.dll" ) \
-  && echo "   OK -> packmp3_dll-x86.dll" || echo "   (packmp3 fallo)"
 
 # ── FLAC (lossless WAV media codec) ──────────────────────────────────────────
 # Fresh out-win-x86 build dir -- do NOT reuse the win64 script's out-win/,
@@ -273,7 +252,7 @@ else
   echo "   (WavPack: falta cmake o el clone)"
 fi
 
-# ── brunsli (JPEG media codec, alternative to packjpg) — requires cmake ────────
+# ── brunsli (JPEG media codec, alternative to PJA) — requires cmake ────────
 echo "==> brunsli (brunsli-x86.dll)"
 pin_repo https://github.com/google/brunsli "$CSRC/brunsli" "$BRUNSLI_REF"
 if [ -d "$CSRC/brunsli" ] && command -v cmake >/dev/null; then
@@ -293,29 +272,7 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
-# ── packpng (PNG/APNG/JNG/MNG codec) — sibling repo of ytool's author ───────
-# Confirmed real: YadeWira/packPNG's own Makefile has win-x86/lib-win-x86
-# targets (i686-w64-mingw32-g++, Rust i686-pc-windows-gnu for preflate-rs),
-# and the packPNG release ships a packPNG-<ver>-win32-lib.zip with a genuine
-# PE32 (Intel i386) packpng-x86.dll -- verified with `file`, not a renamed
-# x64 one (confirmed again on v2.0c, wire format unchanged since v2.0a).
-echo "==> packpng (packpng-x86.dll)"
-# See build-plugins-windows.sh's packpng step for the rationale on -f, the
-# single-spelled version, and the quoted-wildcard extraction.
-PACKPNG_VER="v2.0l"
-PACKPNG_NUM="${PACKPNG_VER#v}"
-if curl -sfL "https://github.com/YadeWira/packPNG/releases/download/${PACKPNG_VER}/packPNG-${PACKPNG_NUM}-win32-lib.zip" \
-  -o "$CSRC/packpng-lib-x86.zip" 2>/dev/null && [ -s "$CSRC/packpng-lib-x86.zip" ]; then
-  ( cd "$CSRC" && unzip -joq packpng-lib-x86.zip "*packpng-x86.dll" ) 2>/dev/null \
-    && mv -f "$CSRC/packpng-x86.dll" "$ROOT/packpng-x86.dll" \
-    && echo "   OK -> packpng-x86.dll (prebuilt $PACKPNG_VER, win32)" \
-    || echo "   (packpng: extraccion fallo)"
-else
-  echo "   (packpng: descarga fallo)"
-fi
-
 echo "Hecho. Plugins -x86.dll en la raiz del repo (gitignored)."
-echo "jojpeg_dll.dll NO se construye (sin fuente abierta conocida, como oodle)."
 echo "Al empaquetar: renombrar cada uno quitando el sufijo -x86 junto al ytool.exe"
-echo "de 32-bit (packpng-x86.dll -> packpng.dll, zlib1-x86.dll -> zlib1.dll, etc.),"
+echo "de 32-bit (pja-x86.dll -> pja.dll, zlib1-x86.dll -> zlib1.dll, etc.),"
 echo "NO junto al de 64-bit."

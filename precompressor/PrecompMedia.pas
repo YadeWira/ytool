@@ -5,7 +5,7 @@ unit PrecompMedia;
 interface
 
 uses
-  BrunsliDLL, FLACDLL, PJADLL, PackMP3DLL, WavPackDLL,
+  BrunsliDLL, FLACDLL, PJADLL, WavPackDLL,
   Utils,
   PrecompUtils,
   SysUtils, Classes, Math;
@@ -19,13 +19,13 @@ const
   // Removed in 0.9.9a, their slots kept empty so no codec number stored in a
   // container ever means something else: 1 was 'packjpg' (replaced by 'pja',
   // which has a new number on purpose: an old packJPG stream must not reach
-  // PJA's decoder), 3 was 'jojpeg' (no source or binary available anywhere).
-  MediaCodecs: array of PChar = ['flac', '', 'brunsli', '', 'packmp3',
+  // PJA's decoder), 3 was 'jojpeg' (no source or binary available anywhere),
+  // 4 was 'packmp3' (PMPA, its successor, is not stable yet).
+  MediaCodecs: array of PChar = ['flac', '', 'brunsli', '', '',
     'wavpack', 'pja'];
   CODEC_COUNT = 7;
   FLAC_CODEC = 0;
   BRUNSLI_CODEC = 2;
-  MP3_CODEC = 4;
   WAVPACK_CODEC = 5;
   PJA_CODEC = 6;
 
@@ -601,76 +601,220 @@ begin
   end;
 end;
 
-// Detects an MP3 stream (MPEG-1/2/2.5 Layer III) starting at InBuff: optional
-// ID3v2 + consecutive Layer III frames + optional ID3v1. Returns the total size
-// in StreamSize. Conservative (>=2 frames) to avoid false positives with stray
-// 0xFF bytes; a failure only means "not recompressed" (reversibility is
-// guaranteed by ytool's fallback to literal).
-function GetMP3Info(InBuff: PByte; InSize: NativeInt;
-  StreamSize: PCardinal): Boolean;
+// What PJA takes: the JPEG family (JPEG, JPEG-LS, lossless JPEG) and JPEG 2000
+// (raw codestreams and the JP2/JPX/MJ2 box formats). Each function returns the
+// candidate's size in bytes, or 0. A candidate only has to be a plausible cut:
+// pja_compress refuses what it does not take and verifies what it does, so a
+// wrong cut costs a stream left raw, never wrong output.
 const
-  BR1: array [0 .. 15] of Integer = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128,
-    160, 192, 224, 256, 320, 0); // MPEG1 LayerIII kbps
-  BR2: array [0 .. 15] of Integer = (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96,
-    112, 128, 144, 160, 0); // MPEG2/2.5 LayerIII kbps
-  MP3SR: array [0 .. 3, 0 .. 3] of Integer = ((11025, 12000, 8000, 0), (0, 0, 0,
-    0), (22050, 24000, 16000, 0), (44100, 48000, 32000, 0));
-var
-  Pos, Start: NativeInt;
-  b0, b1, b2: Byte;
-  ver, lay, bri, sri, pad, br, sr, flen, frames, sz: Integer;
+  PJA_MAXSIZE = 256 * 1024 * 1024; // PJA's own limit for one file
+
+function PjaBE16(P: PByte): Cardinal; inline;
 begin
-  Result := False;
-  StreamSize^ := 0;
-  Pos := 0;
-  if (InSize > 10) and (InBuff[0] = Ord('I')) and (InBuff[1] = Ord('D')) and
-    (InBuff[2] = Ord('3')) then
-  begin
-    sz := ((InBuff[6] and $7F) shl 21) or ((InBuff[7] and $7F) shl 14) or
-      ((InBuff[8] and $7F) shl 7) or (InBuff[9] and $7F);
-    Pos := 10 + sz;
-  end;
-  Start := Pos;
-  frames := 0;
-  while Pos + 4 <= InSize do
-  begin
-    b0 := InBuff[Pos];
-    b1 := InBuff[Pos + 1];
-    b2 := InBuff[Pos + 2];
-    if (b0 <> $FF) or ((b1 and $E0) <> $E0) then
-      break;
-    ver := (b1 shr 3) and 3;
-    lay := (b1 shr 1) and 3;
-    if (ver = 1) or (lay <> 1) then // reserved version / not Layer III (01)
-      break;
-    bri := (b2 shr 4) and $F;
-    sri := (b2 shr 2) and 3;
-    pad := (b2 shr 1) and 1;
-    if (bri = 0) or (bri = 15) or (sri = 3) then
-      break;
-    sr := MP3SR[ver, sri];
-    if sr = 0 then
-      break;
-    if ver = 3 then
-      br := BR1[bri]
-    else
-      br := BR2[bri];
-    if ver = 3 then
-      flen := (144 * br * 1000) div sr + pad
-    else
-      flen := (72 * br * 1000) div sr + pad;
-    if flen < 4 then
-      break;
-    Inc(Pos, flen);
-    Inc(frames);
-  end;
-  if frames < 2 then
+  Result := (Cardinal(P[0]) shl 8) or P[1];
+end;
+
+function PjaBE32(P: PByte): Cardinal; inline;
+begin
+  Result := (Cardinal(P[0]) shl 24) or (Cardinal(P[1]) shl 16) or
+    (Cardinal(P[2]) shl 8) or P[3];
+end;
+
+// SOI, then the markers: segments by their length; after each SOS the
+// entropy-coded bytes up to the next marker (JPEG: FF 00 and the RSTs are
+// data; JPEG-LS, after an SOF55: FF then a byte under 80 is data); up to the
+// EOI. The same walk PJA's own filter does (its doc/LIBRARY.md). Unlike
+// GetJPEGInfo it needs no quantization table (JPEG-LS and lossless JPEG have
+// none) and does not stop at the first FF D9 after the first scan.
+function PjaJPEGSize(B: PByte; N: NativeInt): NativeInt;
+var
+  Pos: NativeInt;
+  M: Byte;
+  L: Cardinal;
+  SawSOF, SawSOS, IsLS: Boolean;
+begin
+  Result := 0;
+  if (N < 4) or (B[0] <> $FF) or (B[1] <> $D8) or (B[2] <> $FF) then
     exit;
-  if (Pos + 128 <= InSize) and (InBuff[Pos] = Ord('T')) and
-    (InBuff[Pos + 1] = Ord('A')) and (InBuff[Pos + 2] = Ord('G')) then
-    Inc(Pos, 128);
-  StreamSize^ := Pos;
-  Result := Pos > Start;
+  N := Min(N, PJA_MAXSIZE);
+  Pos := 2;
+  SawSOF := False;
+  SawSOS := False;
+  IsLS := False;
+  while Pos + 2 <= N do
+  begin
+    if B[Pos] <> $FF then
+      exit;
+    M := B[Pos + 1];
+    if M = $FF then // fill byte before a marker
+    begin
+      Inc(Pos);
+      continue;
+    end;
+    if M = $D9 then
+    begin
+      if SawSOF and SawSOS then
+        Result := Pos + 2;
+      exit;
+    end;
+    if (M = $D8) or (M = $01) or (M in [$D0 .. $D7]) or (M = $00) then
+      exit;
+    if Pos + 4 > N then
+      exit;
+    L := PjaBE16(B + Pos + 2);
+    if (L < 2) or (Pos + 2 + L > N) then
+      exit;
+    if (M in [$C0 .. $CF]) and not(M in [$C4, $C8, $CC]) then
+      SawSOF := True
+    else if M = $F7 then // SOF55: JPEG-LS
+    begin
+      SawSOF := True;
+      IsLS := True;
+    end;
+    Inc(Pos, 2 + L);
+    if M = $DA then
+    begin
+      SawSOS := True;
+      while Pos + 1 < N do
+      begin
+        if B[Pos] <> $FF then
+          Inc(Pos)
+        else if B[Pos + 1] in [$D0 .. $D7] then
+          Inc(Pos, 2)
+        else if (not IsLS) and (B[Pos + 1] = $00) then
+          Inc(Pos, 2)
+        else if IsLS and (B[Pos + 1] < $80) then
+          Inc(Pos, 2)
+        else
+          break; // a marker
+      end;
+    end;
+  end;
+end;
+
+// A raw JPEG 2000 codestream: SOC SIZ, the main header's segments up to the
+// first SOT, then one tile-part after another by its Psot, up to the EOC.
+// Psot = 0 (the last tile-part runs to the EOC) gives no length to follow
+// here, so such a codestream is left alone unless a jp2c box gives its size.
+function PjaJ2KSize(B: PByte; N: NativeInt): NativeInt;
+var
+  Pos: NativeInt;
+  M, L, Psot: Cardinal;
+begin
+  Result := 0;
+  if (N < 6) or (PjaBE16(B) <> $FF4F) or (PjaBE16(B + 2) <> $FF51) then
+    exit;
+  N := Min(N, PJA_MAXSIZE);
+  Pos := 2;
+  while True do
+  begin
+    if Pos + 4 > N then
+      exit;
+    M := PjaBE16(B + Pos);
+    if M = $FF90 then
+      break;
+    if (M and $FF00) <> $FF00 then
+      exit;
+    L := PjaBE16(B + Pos + 2);
+    if L < 2 then
+      exit;
+    Inc(Pos, 2 + L);
+  end;
+  while True do
+  begin
+    if Pos + 2 > N then
+      exit;
+    M := PjaBE16(B + Pos);
+    if M = $FFD9 then
+      exit(Pos + 2);
+    if (M <> $FF90) or (Pos + 12 > N) or (PjaBE16(B + Pos + 2) <> 10) then
+      exit;
+    Psot := PjaBE32(B + Pos + 6);
+    if Psot < 14 then
+      exit;
+    Inc(Pos, Psot);
+  end;
+end;
+
+// JP2, JPX, MJ2 (and JPM, same signature box): boxes by their length, as
+// long as the next 8 bytes look like a box. A jp2c box whose length is 0
+// (runs to the end of the file) is measured by its codestream.
+function PjaJP2Size(B: PByte; N: NativeInt): NativeInt;
+const
+  SIG: array [0 .. 11] of Byte = ($00, $00, $00, $0C, $6A, $50, $20, $20,
+    $0D, $0A, $87, $0A);
+  JP2C = $6A703263; // 'jp2c'
+  FTYP = $66747970; // 'ftyp'
+var
+  Pos, BoxLen, C: NativeInt;
+  L, T: Cardinal;
+  I: Integer;
+  Printable, SawFtyp: Boolean;
+begin
+  Result := 0;
+  if N < 20 then
+    exit;
+  for I := 0 to 11 do
+    if B[I] <> SIG[I] then
+      exit;
+  N := Min(N, PJA_MAXSIZE);
+  Pos := 0;
+  SawFtyp := False;
+  while Pos + 8 <= N do
+  begin
+    L := PjaBE32(B + Pos);
+    T := PjaBE32(B + Pos + 4);
+    Printable := True;
+    for I := 4 to 7 do
+      if not((B + Pos)[I] in [$20 .. $7E]) then
+        Printable := False;
+    if not Printable then
+      break;
+    if L = 1 then
+    begin
+      if (Pos + 16 > N) or (PjaBE32(B + Pos + 8) <> 0) then
+        break;
+      BoxLen := PjaBE32(B + Pos + 12);
+      if BoxLen < 16 then
+        break;
+    end
+    else if L = 0 then
+    begin
+      if T <> JP2C then
+        break;
+      C := PjaJ2KSize(B + Pos + 8, N - Pos - 8);
+      if C = 0 then
+        exit;
+      Inc(Pos, 8 + C);
+      break;
+    end
+    else
+    begin
+      BoxLen := L;
+      if BoxLen < 8 then
+        break;
+    end;
+    if Pos + BoxLen > N then
+      break;
+    if T = FTYP then
+      SawFtyp := True;
+    Inc(Pos, BoxLen);
+  end;
+  if SawFtyp then
+    Result := Pos;
+end;
+
+function PjaCandidateSize(B: PByte; N: NativeInt): NativeInt;
+begin
+  Result := 0;
+  if N < 4 then
+    exit;
+  if (B[0] = $FF) and (B[1] = $D8) then
+    Result := PjaJPEGSize(B, N)
+  else if (B[0] = $FF) and (B[1] = $4F) then
+    Result := PjaJ2KSize(B, N)
+  else if (B[0] = 0) and (B[1] = 0) and (B[2] = 0) and (B[3] = $0C) then
+    Result := PjaJP2Size(B, N);
 end;
 
 function BrunsliWriter(cd: Pointer; data: Pointer; Size: NativeUInt)
@@ -700,7 +844,6 @@ begin
   CodecAvailable[FLAC_CODEC] := FLACDLL.DLLLoaded;
   CodecAvailable[PJA_CODEC] := PJADLL.DLLLoaded;
   CodecAvailable[BRUNSLI_CODEC] := BrunsliDLL.DLLLoaded;
-  CodecAvailable[MP3_CODEC] := PackMP3DLL.DLLLoaded;
   CodecAvailable[WAVPACK_CODEC] := WavPackDLL.DLLLoaded;
   X := 0;
   while Funcs^.GetCodec(Command, X, False) <> '' do
@@ -718,9 +861,6 @@ begin
     else if (CompareText(S, MediaCodecs[BRUNSLI_CODEC]) = 0) and BrunsliDLL.DLLLoaded
     then
       CodecEnabled[BRUNSLI_CODEC] := True
-    else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
-    then
-      CodecEnabled[MP3_CODEC] := True
     else if (CompareText(S, MediaCodecs[WAVPACK_CODEC]) = 0) and
       WavPackDLL.DLLLoaded then
       CodecEnabled[WAVPACK_CODEC] := True;
@@ -808,12 +948,6 @@ begin
       SetBits(Option^, BRUNSLI_CODEC, 0, 3);
       Result := True;
     end
-    else if (CompareText(S, MediaCodecs[MP3_CODEC]) = 0) and PackMP3DLL.DLLLoaded
-    then
-    begin
-      SetBits(Option^, MP3_CODEC, 0, 3);
-      Result := True;
-    end
     else if (CompareText(S, MediaCodecs[WAVPACK_CODEC]) = 0) and
       WavPackDLL.DLLLoaded then
     begin
@@ -886,8 +1020,28 @@ begin
         continue;
       end;
     end;
-    if (CodecEnabled[PJA_CODEC] or CodecEnabled[BRUNSLI_CODEC]) and
-      (PWord(Input + Pos)^ = JPG_HEADER) then
+    // PJA first when enabled: it takes more than brunsli does (JPEG-LS,
+    // lossless and 12-bit JPEG, JPEG 2000) and writes less.
+    if CodecEnabled[PJA_CODEC] then
+    begin
+      Y := PjaCandidateSize(Input + Pos, SizeEx - Pos);
+      if Y > 0 then
+      begin
+        Output(Instance, Input + Pos, Y);
+        SI.Position := Pos;
+        SI.OldSize := Y;
+        SI.NewSize := Y;
+        SI.Resource := 0;
+        SI.Option := 0;
+        SetBits(SI.Option, PJA_CODEC, 0, 3);
+        SI.Status := TStreamStatus.None;
+        Funcs^.LogScan1(MediaCodecs[PJA_CODEC], SI.Position, SI.OldSize, -1);
+        Add(Instance, @SI, nil, nil);
+        Inc(Pos, SI.OldSize);
+        continue;
+      end;
+    end;
+    if CodecEnabled[BRUNSLI_CODEC] and (PWord(Input + Pos)^ = JPG_HEADER) then
     begin
       Y := SizeEx - Pos;
       if GetJPEGInfo(Input + Pos, Y, @data_size, @progressive) then
@@ -912,46 +1066,7 @@ begin
         // file, varying run-to-run with process/stack layout.
         SI.Resource := 0;
         SI.Option := 0;
-        if CodecEnabled[BRUNSLI_CODEC] then
-          SetBits(SI.Option, BRUNSLI_CODEC, 0, 3)
-        else if CodecEnabled[PJA_CODEC] then
-          SetBits(SI.Option, PJA_CODEC, 0, 3);
-        SI.Status := TStreamStatus.None;
-        Funcs^.LogScan1(MediaCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
-          SI.OldSize, -1);
-        Add(Instance, @SI, nil, nil);
-        Inc(Pos, SI.OldSize);
-        continue;
-      end;
-    end;
-    if CodecEnabled[MP3_CODEC] and
-      ((((Input + Pos)^ = $FF) and (((Input + Pos + 1)^ and $E0) = $E0)) or
-      ((PWord(Input + Pos)^ = $4449) and ((Input + Pos + 2)^ = Ord('3')))) then
-    begin
-      Y := SizeEx - Pos;
-      if GetMP3Info(Input + Pos, Y, @data_size) then
-        Y := data_size
-      else
-        Y := 0;
-      if Y > 0 then
-      begin
-        Z := data_size;
-        Output(Instance, Input + Pos, Z);
-        SI.Position := Pos;
-        SI.OldSize := Y;
-        SI.NewSize := Z;
-        // Real non-determinism (found investigating a zpaq-std report,
-        // reproduced down to a single stream, confirmed deterministic
-        // outside ytool via an isolated brunsli test harness under valgrind
-        // memcheck): SI is a stack-local _StrInfo1 and its Resource field
-        // was never assigned here, unlike PrecompLZMA/PrecompSearch which
-        // give it real meaning -- this codec has none, but the field still
-        // flows into TStreamHeader.Resource and gets written to the output
-        // verbatim, so leftover stack garbage ended up embedded in the .pmp
-        // file, varying run-to-run with process/stack layout.
-        SI.Resource := 0;
-        SI.Option := 0;
-        SetBits(SI.Option, MP3_CODEC, 0, 3);
+        SetBits(SI.Option, BRUNSLI_CODEC, 0, 3);
         SI.Status := TStreamStatus.None;
         Funcs^.LogScan1(MediaCodecs[GetBits(SI.Option, 0, 3)], SI.Position,
           SI.OldSize, -1);
@@ -987,16 +1102,14 @@ begin
         else
           Y := 0;
       end;
-    PJA_CODEC, BRUNSLI_CODEC:
+    PJA_CODEC:
+      begin
+        Y := PjaCandidateSize(Input, Y);
+        data_size := Y; // what the code below copies out
+      end;
+    BRUNSLI_CODEC:
       begin
         if GetJPEGInfo(Input, Y, @data_size, @progressive) then
-          Y := data_size
-        else
-          Y := 0;
-      end;
-    MP3_CODEC:
-      begin
-        if GetMP3Info(Input, Y, @data_size) then
           Y := data_size
         else
           Y := 0;
@@ -1114,20 +1227,6 @@ begin
           brunsli_free_JPEGData(ctx);
         end;
       end;
-    MP3_CODEC:
-      begin
-        Buffer := nil;
-        Res := StreamInfo.OldSize;
-        pmplib_init_streams(OldInput, pmplib_memory, StreamInfo^.OldSize,
-          Buffer, pmplib_memory);
-        if pmplib_convert_stream2mem(@Buffer, @Res, nil) and
-          (Res < StreamInfo^.NewSize) then
-        begin
-          Move(Buffer^, NewInput^, Res);
-          StreamInfo^.NewSize := Res;
-          Result := True;
-        end;
-      end;
   end;
   Funcs^.LogProcess(MediaCodecs[GetBits(StreamInfo^.Option, 0, 3)],
     PChar(Params), StreamInfo^.OldSize, StreamInfo^.NewSize, -1, Result);
@@ -1226,16 +1325,6 @@ begin
           brunsli_free_JPEGData(ctx);
         end;
         Res := RestoreSize[Instance];
-      end;
-    MP3_CODEC:
-      begin
-        Buffer := nil;
-        pmplib_init_streams(Input, pmplib_memory, StreamInfo.NewSize, Buffer,
-          pmplib_memory);
-        Res := StreamInfo.OldSize;
-        Result := pmplib_convert_stream2mem(@Buffer, @Res, nil);
-        if Result then
-          Output(Instance, Buffer, Res);
       end;
   end;
   Funcs^.LogRestore(MediaCodecs[GetBits(StreamInfo.Option, 0, 3)],

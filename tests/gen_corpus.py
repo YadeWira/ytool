@@ -62,10 +62,9 @@ def make_png(w, h, seed):
 
 
 def make_png_photo(w, h, seed):
-    """PNG with real spatial structure (gradient + pattern), not noise, for
-    -mpackpng: a real image codec (WebP-lossless) only wins over data with
-    correlation; pure noise (like make_png) defeats it the same as any
-    image compressor, giving a trivial fallback with no real coverage.
+    """PNG with real spatial structure (gradient + pattern), not noise. Was
+    written for -mpackpng (removed in 0.9.9a) and kept for -mpng, and for
+    PPA when it joins: an image codec only wins over correlated data.
     61_png_min.bin (make_png) is left untouched, it's used for -mpng."""
     raw = bytearray()
     for y in range(h):
@@ -298,6 +297,36 @@ def make_jpeg(seed):
         os.unlink(path)
 
 
+def make_jpeg2000(seed):
+    """A JP2 file (lossless) and a raw J2K codestream (lossy), between noise.
+
+    Exercises -mpja's JPEG 2000 detection: the JP2 box walk and the J2K
+    tile-part walk (PrecompMedia.PjaJP2Size / PjaJ2KSize). Both images are
+    large enough for PJA to gain on them (tiny ones come out bigger and are
+    rightly left raw). Needs Pillow built with OpenJPEG."""
+    try:
+        from PIL import Image, features
+        if not features.check('jpg_2000'):
+            return None
+    except ImportError:
+        return None
+    import io
+    r = random.Random(seed + 64)
+    im = Image.new('RGB', (192, 144))
+    px = im.load()
+    for x in range(192):
+        for y in range(144):
+            px[x, y] = ((x * 3 + r.randrange(8)) & 255,
+                        (y * 4 + r.randrange(8)) & 255, ((x + y) * 2) & 255)
+    jp2 = io.BytesIO()
+    im.save(jp2, 'JPEG2000', irreversible=False)
+    j2k = io.BytesIO()
+    im.save(j2k, 'JPEG2000', irreversible=True, quality_mode='rates',
+            quality_layers=[20], no_jp2=True)
+    return (rng_bytes(300, seed + 640) + jp2.getvalue() + rng_bytes(200, seed + 641)
+            + j2k.getvalue() + rng_bytes(300, seed + 642))
+
+
 def make_mp3(seed):
     """Real CBR MP3 via 'lame' (external CLI), if available."""
     lame = shutil.which('lame')
@@ -437,9 +466,7 @@ def main():
     #     PNG container, not just raw deflate already covered by 20_zlib_streams.bin) ---
     write(d, '61_png_min.bin', make_png(24, 24, SEED))
 
-    # --- PNG with real spatial structure (gradient): genuinely exercises -mpackpng
-    #     (packPNG/WebP-lossless) -- pure noise like make_png() doesn't
-    #     work, no image codec wins over uncorrelated data ---
+    # --- PNG with real spatial structure (gradient), see make_png_photo ---
     write(d, '62_png_photo.bin', make_png_photo(48, 48, SEED))
 
     # --- raw LZMA1 stream (stdlib 'lzma', always available): exercises
@@ -451,7 +478,7 @@ def main():
     # --- The following 3 are OPTIONAL: they require an external tool
     #     present on the machine generating the corpus (not at ytool runtime).
     #     If missing, the file simply isn't written and the corresponding method
-    #     (-mlz4f/-mpja+-mbrunsli/-mpackmp3 in regression.sh) still runs but
+    #     (-mlz4f/-mpja+-mbrunsli in regression.sh) still runs but
     #     without finding the real stream -> trivial reversibility, codec coverage = 0
     #     for that run (same criterion already used with 50_lzo1x.bin/gcc+liblzo2).
     lz4f = make_lz4f(SEED)
@@ -495,8 +522,15 @@ def main():
     if mp3 is not None:
         write(d, '72_mp3_min.bin', mp3)
     else:
-        print('aviso: "lame" no disponible, se omite 72_mp3_min.bin '
-              '(sin cobertura real de -mpackmp3)', file=sys.stderr)
+        print('aviso: "lame" no disponible, se omite 72_mp3_min.bin',
+              file=sys.stderr)
+
+    j2 = make_jpeg2000(SEED)
+    if j2 is not None:
+        write(d, '64_jpeg2000.bin', j2)
+    else:
+        print('aviso: Pillow sin OpenJPEG, se omite 64_jpeg2000.bin '
+              '(sin cobertura de JPEG 2000 en -mpja)', file=sys.stderr)
 
     files = sorted(os.listdir(d))
     print('corpus generado en %s: %d archivos' % (d, len(files)))
