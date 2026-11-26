@@ -91,8 +91,12 @@ pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 # propiedad del build de FPC, no una garantia.
 echo "==> liblz4.so ($ARCH)"
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
-if [ -d "$CSRC/lz4/lib" ]; then
-  ( cd "$CSRC/lz4/lib" && "$CC" $M -shared -fPIC -O2 -Wl,-Bsymbolic \
+LZ4SRC="$CSRC/lz4/lib"
+# x86: the patched copy, whose fast mode writes what 64-bit lz4 writes (see
+# lz4_lib32 in pin-repo.sh); otherwise x86-64 .ytp files did not decode.
+[ "$ARCH" = x86 ] && { lz4_lib32 "$CSRC/lz4" "$CSRC/lz4-lib32" && LZ4SRC="$CSRC/lz4-lib32" || LZ4SRC=""; }
+if [ -n "$LZ4SRC" ] && [ -d "$LZ4SRC" ]; then
+  ( cd "$LZ4SRC" && "$CC" $M -shared -fPIC -O2 -Wl,-Bsymbolic \
       lz4.c lz4hc.c lz4frame.c xxhash.c -o "$OUT/liblz4.so" ) \
     && echo "   OK -> liblz4.so" || echo "   (liblz4 fallo)"
 fi

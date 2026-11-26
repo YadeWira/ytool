@@ -102,8 +102,9 @@ pin_repo https://github.com/facebook/zstd "$CSRC/zstd-lib" "$ZSTD_LIB_REF"
 # que su propio build system define; compilando los .c sueltos no aplica.
 echo "==> liblz4.dll (i686)"
 pin_repo https://github.com/lz4/lz4 "$CSRC/lz4" "$LZ4_REF"
-if [ -d "$CSRC/lz4/lib" ]; then
-  ( cd "$CSRC/lz4/lib" && "$CC" -shared -O2 -Wl,--export-all-symbols \
+# The patched copy: fast mode as on 64-bit (see lz4_lib32 in pin-repo.sh).
+if [ -d "$CSRC/lz4/lib" ] && lz4_lib32 "$CSRC/lz4" "$CSRC/lz4-lib32"; then
+  ( cd "$CSRC/lz4-lib32" && "$CC" -shared -O2 -Wl,--export-all-symbols \
       lz4.c lz4hc.c lz4frame.c xxhash.c -static-libgcc -o "$ROOT/liblz4-x86.dll" ) \
     && echo "   OK -> liblz4-x86.dll" || echo "   (liblz4 fallo)"
 fi

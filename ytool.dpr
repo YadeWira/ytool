@@ -113,7 +113,7 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
-  YTOOL_VERSION = '0.9.9a';
+  YTOOL_VERSION = '0.9.9b';
 
 procedure ProgramInfo;
 begin

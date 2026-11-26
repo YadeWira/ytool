@@ -76,3 +76,18 @@ pin_repo() {
 
   echo "   pin: $pr_name @ $pr_got"
 }
+
+# lz4_lib32 <lz4 checkout> <out dir>: a copy of lz4's lib/ for a 32-bit
+# build whose fast mode writes the same bytes as a 64-bit one. lz4.c picks
+# its match finder's hash by register size (LZ4_hash5 on 64-bit, LZ4_hash4
+# on 32-bit), so a 32-bit lz4 does not reproduce a fast-mode stream a 64-bit
+# lz4 wrote, and a .ytp made on x64 holding one failed to decode on x86.
+# reg_t becomes 64 bits everywhere, as lz4 already does for the x32 ABI.
+# Measured: 39 settings (fast acceleration 1-1000, HC 1-12, frames) x 8
+# inputs, all equal to x86-64; 64-bit builds are unchanged by it.
+lz4_lib32() {
+  local src="$1/lib" out="$2"
+  rm -rf "$out" && mkdir -p "$out" && cp "$src"/*.c "$src"/*.h "$out"/ || return 1
+  sed -i 's|^#if defined(__x86_64__)$|#if 1  /* ytool: 64-bit reg_t on 32-bit too (lz4_lib32 in contrib/pin-repo.sh) */|' "$out/lz4.c"
+  grep -q 'ytool: 64-bit reg_t' "$out/lz4.c" || { echo "   lz4_lib32: the reg_t line moved; check lz4.c" >&2; return 1; }
+}

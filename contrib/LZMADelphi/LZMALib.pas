@@ -43,12 +43,15 @@ implementation
   name-decoration the linker must match), while LzmaCompressEx/
   LzmaDecodeToEndMark are ytool's own plain "int" functions (cdecl, no
   decoration). Getting this wrong wouldn't just fail to link on Win32 --
-  a stdcall/cdecl mismatch corrupts the stack at runtime. }
+  a stdcall/cdecl mismatch corrupts the stack at runtime.
+  Linux i386 has no stdcall here, but FPC's default there is its own
+  register convention, so cdecl must be said on every i386 target (without
+  it -mlzma crashed in Scan1 and restored nothing). }
 function LzmaCompressEx(Dest: PByte; DestLen: PNativeUInt; Src: PByte;
   SrcLen: NativeUInt; OutProps: PByte; OutPropsSize: PNativeUInt;
   Level: Integer; DictSize: Cardinal; Lc, Lp, Pb, Fb: Integer;
   NumThreads: Integer; WriteEndMark: Integer): Integer;
-  {$IFDEF WIN32}cdecl;{$ENDIF} external;
+  {$IFDEF CPU386}cdecl;{$ENDIF} external;
 
 function LzmaUncompress(Dest: PByte; DestLen: PNativeUInt; Src: PByte;
   SrcLen: PNativeUInt; Props: PByte; PropsSize: NativeUInt): Integer;
@@ -57,11 +60,11 @@ function LzmaUncompress(Dest: PByte; DestLen: PNativeUInt; Src: PByte;
   // bare `stdcall; external;` here links against the literal, undecorated
   // Pascal name and fails) -- name it explicitly to match what the object
   // actually exports (6 params x 4 bytes = 24).
-  {$IFDEF WIN32}stdcall; external name '_LzmaUncompress@24';{$ELSE}external;{$ENDIF}
+  {$IFDEF WIN32}stdcall; external name '_LzmaUncompress@24';{$ELSE}{$IFDEF CPU386}cdecl;{$ENDIF} external;{$ENDIF}
 
 function LzmaDecodeToEndMark(Dest: PByte; DestLen: PNativeUInt; Src: PByte;
   SrcLen: PNativeUInt; Props: PByte; PropsSize: NativeUInt): Integer;
-  {$IFDEF WIN32}cdecl;{$ENDIF} external;
+  {$IFDEF CPU386}cdecl;{$ENDIF} external;
 
 {$IFDEF WIN32}
 {$L lzmadelphi.win32.x86.o}
