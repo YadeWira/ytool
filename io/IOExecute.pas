@@ -293,6 +293,19 @@ var
   WorkDir: TArray<String>;
   Tasks: TArray<TTask>;
   State: TArray<Byte>;
+  ChunkNo: Integer;
+
+  function FileSizeOf(const Name: String): Int64;
+  begin
+    Result := -1;
+    if FileExists(Name) then
+      with TFileStream.Create(Name, fmOpenRead or fmShareDenyNone) do
+        try
+          Result := Size;
+        finally
+          Free;
+        end;
+  end;
 
   procedure Load(X: Integer);
   begin
@@ -336,6 +349,7 @@ begin
   end;
   First := True;
   Done := False;
+  ChunkNo := 0;
   try
     while State[0] <> STATE_DONE do
     begin
@@ -351,13 +365,24 @@ begin
         if State[I] = STATE_DONE then
           continue;
         B := 0;
-        if State[I] = STATE_EXECUTED then
-          S := IncludeTrailingPathDelimiter(WorkDir[I]) + LCtx.OutFile
-        else
+        S := IncludeTrailingPathDelimiter(WorkDir[I]) + LCtx.OutFile;
+        // A program that exits 0 without writing its output (wrong syntax,
+        // e.g. {filein} where the program needs the name, [filein]) used to
+        // be stored as an empty chunk: exit 0, and decode gave nothing back
+        // for it. No output, or an empty one for a non-empty chunk, is a
+        // failure: the chunk is stored as it is, as for a program that
+        // failed.
+        if (State[I] <> STATE_EXECUTED) or (not FileExists(S)) or
+          ((FileSizeOf(S) = 0) and (FileSizeOf(IncludeTrailingPathDelimiter
+          (WorkDir[I]) + LCtx.InFile) > 0)) then
         begin
+          if State[I] = STATE_EXECUTED then
+            WriteLine(Format('execute: no output for chunk %d, stored as it is',
+              [ChunkNo]));
           S := IncludeTrailingPathDelimiter(WorkDir[I]) + LCtx.InFile;
           B := 1;
         end;
+        Inc(ChunkNo);
         SStream := TFileStreamEx.Create(S);
         try
           Output.WriteBuffer(B, B.Size);

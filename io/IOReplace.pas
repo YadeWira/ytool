@@ -124,6 +124,10 @@ begin
             (Utils.Hash32(CRC, Ptr + Pos + MinSize1, SearchInfo[C, D,
             Y].CRCSize - MinSize1) = SearchInfo[C, D, Y].CRC2) then
           begin
+            // The unused tail of Filename (String[255]) was written as it was
+            // on the stack, so identical runs wrote different files. xtool
+            // 0.9.9 does the same; zeroed here so the output is reproducible.
+            FillChar(E, SizeOf(E), 0);
             E.Filename := SearchInfo[C, D, Y].Filename;
             E.Position := DataStore.Position(X) + Pos;
             E.Size := SearchInfo[C, D, Y].CRCSize;
