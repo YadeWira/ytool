@@ -1,64 +1,33 @@
-ytool - Windows x86-64 build (open-source recreation of xtool by Razor12911)
-=============================================================================
-ytool.exe: binario principal (precomp/decode/extract/erase/execute/find/replace/generate).
-srep.exe NO viene incluido. La deduplicacion externa (-dd<N>) necesita SREP 3.93a
-          (Bulat Ziganshin, "All rights reserved": no se puede redistribuir). Si lo
-          tienes, pon srep.exe junto a ytool.exe. Builds personales y sus scripts:
-          https://github.com/YadeWira/srep-builds . La dedup en memoria (-dd) no lo necesita.
+ytool - Windows (x64 y x86)
+Recreacion open-source de xtool (Razor12911). https://github.com/YadeWira/ytool
+==================================================================================
 
-DLLs incluidas (todas cross-compiladas con mingw-w64 desde fuente abierta,
-ver contrib/build-plugins-windows.sh):
-  zlib1.dll            - zlib 1.4 (unidad ZLib de FPC)
-  lzo2.dll             - LZO (Oberhumer, lzo1x/lzo1c/lzo2a)
-  pja.dll              - PJA 0.9.14 (JPEG; sucesor de packJPG, -mpja)
-  brunsli.dll          - brunsli (JPEG, alternativa a PJA)
-  packmp3_dll.dll      - packMP3 (MP3)
-  libFLAC_dynamic.dll  - FLAC (WAV lossless)
-  wavpackdll.dll       - WavPack (WAV lossless, alternativa a FLAC)
-  preflate_dll.dll     - preflate (mejora la reconstruccion de deflate)
-  fast-lzma2.dll       - compresor final interno (-l#)
-  packpng.dll          - packPNG (PNG/APNG/JNG, preflate + WebP-lossless), de
-                          https://github.com/YadeWira/packPNG (mismo autor);
-                          ratio 45.7% vs el -mpng clasico (~100%, no modela pixeles)
+ytool.exe            el programa (precomp, decode, extract, erase, execute, find, replace, generate)
+pja.dll              PJA 0.9.14: JPEG, JPEG-LS y JPEG 2000 (-mpja)
+brunsli.dll          brunsli: JPEG, alternativa a PJA (-mbrunsli)
+preflate_dll.dll     preflate: deflate de cualquier compresor (-mpreflate)
+liblz4.dll           lz4 1.11.1 (-mlz4, -mlz4hc, -mlz4f)
+libzstd.dll          zstd 1.6.0 (-mzstd)
+lzo2.dll             LZO (-mlzo1x, -mlzo1c, -mlzo2a)
+libFLAC_dynamic.dll  FLAC (-mflac)
+wavpackdll.dll       WavPack (-mwavpack)
+fast-lzma2.dll       compresion final (-l#)
+zlib1.dll            zlib 1.4, necesaria para arrancar
 
-  liblz4.dll           - lz4 (necesaria para -mlz4 / -mlz4hc / -mlz4f)
-  libzstd.dll          - zstd 1.6.0 (necesaria para -mzstd)
+Sin una DLL, su codec no hace nada: guarda los streams tal cual, sin error.
+Las DLL solo importan DLL del sistema (KERNEL32, msvcrt, y user32/oleaut32 en pja).
 
-lz4 y zstd estan de las dos formas: objetos nativos dentro de ytool.exe para usos
-internos, y liblz4.dll / libzstd.dll para los codecs -mlz4* y -mzstd. Sin esas DLL
-esos codecs quedan MUERTOS -- procesan 0 streams y el .pmp sale mas grande que la
-entrada, sin ningun error.
+x86 (32 bits): un .lz4 en modo rapido con bloques enlazados, escrito por un lz4 de
+64 bits, no se puede reproducir en 32 bits (lz4 usa otro hash segun el tamano de
+palabra). Al comprimir en x86 se guarda tal cual; y un .pmp hecho en 64 bits que
+contiene uno de esos streams no se decodifica en x86: sale con error (exit 1) y no
+escribe nada, nunca datos incorrectos. Para mover archivos entre maquinas, usa x64.
 
-Limitacion del build x86 (32-bit) con -mlz4*: un .lz4 comprimido en MODO RAPIDO
-(el default del CLI, sin -N) por un lz4 de 64 bits no se puede reproducir desde
-32 bits, salvo cuando usa bloques de 64KB independientes. lz4 elige un hash
-distinto segun el tamano de palabra (lz4.c:808), asi que el match finder del
-camino rapido emite otros bytes. Esos streams se guardan literales: el
-round-trip sigue siendo bit-exacto, solo comprime menos. Los niveles 3..12
-(camino HC) no estan afectados y enganchan igual en x86 y x64. Medido sobre una
-matriz de tamano de bloque x nivel x dependencia de bloques en Windows real.
-La otra cara: un .pmp hecho en 64 bits (Linux o Windows x64) que contiene uno de
-esos streams NO se puede decodificar con el build x86: decode sale con error
-("Error in the method 'lz4f'", exit 1) y no escribe nada. Nunca da datos
-incorrectos. Para mover archivos entre arquitecturas, usa x64 en los dos lados.
-
-La version de lz4 esta pinneada a proposito (1.11.1). Cada version comprime
-distinto en varios niveles (1.11 cambia el modo rapido y los niveles 1, 2 y 10-12
-respecto de 1.10); como el .pmp guarda el nivel y no el stream original, mezclar
-versiones entre codificar y restaurar puede dar salida incorrecta. Un .lz4 escrito
-por lz4 1.10 en modo rapido (-1, el default del CLI) o en -12 se guarda literal.
-
-NO incluido: oodle (propietario, requiere que
-el usuario aporte su propia oo2core/oo2ext DLL).
-
-Verificado: round-trip bit-exacto en la VM Windows para CADA codec de esta lista
-(pja, brunsli, packmp3, flac, wavpack, lzo1x, preflate, fast-lzma2 final,
-dedup en memoria -dd, reassign -r, packpng).
+srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
+pones srep.exe junto a ytool.exe (builds: https://github.com/YadeWira/srep-builds);
+sin el, ytool avisa y usa la dedup en memoria (-dd).
+Oodle tampoco: es propietario; si tienes oo2core/oo2ext, ponla junto a ytool.exe.
 
 Uso:
-  ytool.exe precomp -mzlib+zstd input.bin output.pmp
-  ytool.exe precomp -mpackpng image.png output.pmp
-  ytool.exe precomp -mzlib -dd1 input.bin output.pmp   (dedup externo, requiere tu srep.exe)
-  ytool.exe decode output.pmp restored.bin
-
-Repo: https://github.com/YadeWira/ytool
+  ytool.exe precomp -mzlib+zstd+pja entrada salida.pmp
+  ytool.exe decode salida.pmp restaurado
