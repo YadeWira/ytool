@@ -111,13 +111,11 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
-  YTOOL_VERSION = '0.9.8';
+  YTOOL_VERSION = '0.9.9';
 
 procedure ProgramInfo;
 begin
-  WriteLine('ytool - open-source recreation of xtool by Razor12911');
-  WriteLine('');
-  WriteLine('Version ' + YTOOL_VERSION);
+  WriteLine('ytool ' + YTOOL_VERSION + ' - open-source recreation of xtool, by YadeWira');
   WriteLine('');
 end;
 
