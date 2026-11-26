@@ -305,10 +305,16 @@ if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ] && command -v gcc >/dev/null; th
     # reassign: -rzlib=preflate manda los streams de zlib a preflate (0.9.9:
     # "preflate = 6"); un destino que no puede con ellos no procesa ninguno.
     Z="$CORPUS/20_zlib_streams.bin"
-    "$XTOOL" precomp -mzlib -rzlib=preflate -t2 "$Z" "$P3/r1.pmp" > "$P3/r1.log" 2>&1
-    "$XTOOL" decode "$P3/r1.pmp" "$P3/r1.out" > /dev/null 2>&1
-    ok=0; grep -q -- "- preflate = 6 " "$P3/r1.log" && cmp -s "$Z" "$P3/r1.out" && ok=1
-    p3_check "reassign -rzlib=preflate (todo a preflate)" $ok
+    # Needs libpreflate (the CI does not build the plugins): skipped without it.
+    "$XTOOL" precomp -mpreflate -t2 "$Z" /dev/null > "$P3/r0.log" 2>&1
+    if [ "$(p3_streams "$P3/r0.log")" = "Streams: 6 / 6" ]; then
+      "$XTOOL" precomp -mzlib -rzlib=preflate -t2 "$Z" "$P3/r1.pmp" > "$P3/r1.log" 2>&1
+      "$XTOOL" decode "$P3/r1.pmp" "$P3/r1.out" > /dev/null 2>&1
+      ok=0; grep -q -- "- preflate = 6 " "$P3/r1.log" && cmp -s "$Z" "$P3/r1.out" && ok=1
+      p3_check "reassign -rzlib=preflate (todo a preflate)" $ok
+    else
+      echo "-- reassign -rzlib=preflate: omitido, preflate no disponible --"
+    fi
     "$XTOOL" precomp -mzlib -rzlib=lzo1x -t2 "$Z" "$P3/r2.pmp" > "$P3/r2.log" 2>&1
     "$XTOOL" decode "$P3/r2.pmp" "$P3/r2.out" > /dev/null 2>&1
     ok=0; [ "$(p3_streams "$P3/r2.log")" = "Streams: 0 / 6" ] && cmp -s "$Z" "$P3/r2.out" && ok=1
