@@ -427,6 +427,24 @@ var
   FutureSICmp: TFutureSIComparer;
   StockMethods, ExternalMethods: TStringList;
   Resources: array of TResData;
+  // -b[expr][:n<count>][:s<size>] (xtool 0.9.9's brute mode). Streams are not
+  // processed: each codec with a brute search tries parameters its normal
+  // search does not, on every stream up to BRUTE_MAXSIZE, stops a stream after
+  // BRUTE_MATCHES matches, and at the end the matching command lines are
+  // printed with how often each matched. BRUTE_FACTOR: how much of a codec's
+  // candidate list to try, a fraction (0.05 = 5%) or, above 1, a count.
+  BRUTE: Boolean = False;
+  BRUTE_FACTOR: Single = 0.05;
+  BRUTE_MATCHES: Integer = 5;
+  BRUTE_MAXSIZE: Integer = MaxInt;
+
+// How many of a list of Total candidates -b tries.
+function BruteCount(Total: Integer): Integer;
+// Count one match of a command line; Ran marks that a brute search ran.
+procedure BruteAdd(const Line: String);
+procedure BruteRan;
+// Prints the result once, if any codec ran a brute search.
+procedure BruteReport;
 
 implementation
 
@@ -1803,6 +1821,81 @@ begin
 end;
 {$ENDIF}
 
+var
+  BruteLock: TRTLCriticalSection;
+  BruteLines: TArray<String>;
+  BruteCounts: TArray<Integer>;
+  BruteActive: Boolean = False;
+
+function BruteCount(Total: Integer): Integer;
+begin
+  if BRUTE_FACTOR > 1 then
+    Result := Round(BRUTE_FACTOR)
+  else
+    Result := Round(Total * BRUTE_FACTOR);
+  Result := EnsureRange(Result, 1, Total);
+end;
+
+procedure BruteAdd(const Line: String);
+var
+  I: Integer;
+begin
+  EnterCriticalSection(BruteLock);
+  try
+    for I := Low(BruteLines) to High(BruteLines) do
+      if BruteLines[I] = Line then
+      begin
+        Inc(BruteCounts[I]);
+        exit;
+      end;
+    Insert(Line, BruteLines, Length(BruteLines));
+    Insert(1, BruteCounts, Length(BruteCounts));
+  finally
+    LeaveCriticalSection(BruteLock);
+  end;
+end;
+
+procedure BruteRan;
+begin
+  BruteActive := True;
+end;
+
+// As 0.9.9 prints it. Its lines come out in its dictionary's order; here the
+// most frequent first (ties in the order they were found).
+procedure BruteReport;
+var
+  I, J, K: Integer;
+  S: String;
+begin
+  if not BruteActive then
+    exit;
+  BruteActive := False;
+  for I := 1 to High(BruteLines) do
+  begin
+    J := I;
+    while (J > 0) and (BruteCounts[J - 1] < BruteCounts[J]) do
+    begin
+      S := BruteLines[J];
+      BruteLines[J] := BruteLines[J - 1];
+      BruteLines[J - 1] := S;
+      K := BruteCounts[J];
+      BruteCounts[J] := BruteCounts[J - 1];
+      BruteCounts[J - 1] := K;
+      Dec(J);
+    end;
+  end;
+  if Length(BruteLines) > 0 then
+  begin
+    WriteLine('Possible parameters:');
+    WriteLine('');
+    for I := Low(BruteLines) to High(BruteLines) do
+      WriteLine(BruteLines[I] + ' [' + BruteCounts[I].ToString + ']');
+  end
+  else
+    WriteLine('No possible parameters match');
+  WriteLine('');
+end;
+
 function PrecompAcceptPatch(OldSize, NewSize, PatchSize: Integer): Boolean;
 begin
   Result := False;
@@ -1881,6 +1974,8 @@ var
   I: Integer;
 
 initialization
+
+InitCriticalSection(BruteLock);
 
 EncodeSICmp := TEncodeSIComparer.Create;
 FutureSICmp := TFutureSIComparer.Create;

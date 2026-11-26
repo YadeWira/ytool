@@ -257,6 +257,9 @@ begin
   WriteLine('  -lm# - low memory mode (0-3) [0]');
   WriteLine('  -s   - skip stream verification');
   WriteLine('  -v   - enables verbose mode');
+  WriteLine('  -b[#][:n#][:s#] - brute: search lz4/lz4f parameters, process nothing');
+  WriteLine('               [5p: share of candidates; n5: matches per stream]');
+  WriteLine('  -cfg<codec>[:key#]... - zlib st; zstd wl hl cl sl mm; lz4 x b ac ds af');
   WriteLine(
     '  -bar - emit machine-parseable "PROGRESS done total" lines to stderr,');
   WriteLine(
@@ -300,7 +303,7 @@ var
   ExpParse: TExpressionParser;
   List: TStringDynArray;
   I, J: Integer;
-  S: String;
+  S, A, F: String;
   B: Boolean;
 begin
   FillChar(Options, SizeOf(TEncodeOptions), 0);
@@ -497,6 +500,39 @@ begin
             SrepCfg := S.Substring(1).ToLower;
         end;
       Inc(I);
+    end;
+    // -b[expr][:n<count>][:s<size>], read as 0.9.9 does: -b alone, or -b and
+    // a value (-bar and -bd are other options). The first field is the share
+    // of each codec's candidates to try (5p, 0.1, 1000), then n (matches per
+    // stream before stopping) and s (largest stream, a size).
+    for A in ParamArg do
+    begin
+      if not (SameText(A, '-b') or ((Length(A) > 2) and A.StartsWith('-b') and
+        CharInSet(A[3], ['0' .. '9', '.', ':']))) then
+        continue;
+      BRUTE := True;
+      J := 0;
+      for F in A.Substring(2).Split([':']) do
+      begin
+        S := F;
+        if (J = 0) and (S <> '') then
+        begin
+          S := ReplaceText(S, 'KB', '* 1024^1');
+          S := ReplaceText(S, 'MB', '* 1024^2');
+          S := ReplaceText(S, 'GB', '* 1024^3');
+          S := ReplaceText(S, 'K', '* 1024^1');
+          S := ReplaceText(S, 'M', '* 1024^2');
+          S := ReplaceText(S, 'G', '* 1024^3');
+          S := ReplaceText(S, 'p', '%');
+          BRUTE_FACTOR := Max(0, ExpParse.Evaluate(S));
+        end
+        else if (Length(S) > 1) and (S[1] = 'n') then
+          BRUTE_MATCHES := Max(1, StrToIntDef(S.Substring(1), BRUTE_MATCHES))
+        else if (Length(S) > 1) and (S[1] = 's') then
+          BRUTE_MAXSIZE := EnsureRange(ConvertToBytes(S.Substring(1)), 1,
+            MaxInt);
+        Inc(J);
+      end;
     end;
     SCANONLY := ArgParse.AsBoolean('-scan');
     SrepSeed := ArgParse.AsString('-seed', 0, '').ToLower;
@@ -1124,6 +1160,21 @@ begin
     begin
       LCodec := CurCodec[Instance];
       LOption := Info^.Option;
+    end;
+    // A stream must also end inside the data that is really there. A codec
+    // that reported a wrong size (lz4's scan kept the previous attempt's
+    // sizes when the decoder raised) made the container hash and store the
+    // zeros past the end of the input, and decode then wrote them out:
+    // decode(precomp(x)) was x plus 50,285 zero bytes. Only for a stream
+    // whose output is already here (the branch below that hashes it from
+    // memory now); a future stream is read from the input later.
+    if (CurDepth[Instance] = 0) and (Info^.NewSize > 0) and
+      (MemOutput1[Instance].Position - CurPos1[Instance] = Info^.NewSize) and
+      ((Info^.OldSize <= 0) or (Info^.Position + Info^.OldSize >
+      DataStore.ActualSize(Instance))) then
+    begin
+      MemOutput1[Instance].Position := CurPos1[Instance];
+      exit;
     end;
     if (Info^.NewSize > 0) and (Info^.Position < DataStore.Size(Instance)) and
       (MemOutput1[Instance].Position - CurPos1[Instance] = Info^.NewSize) and
@@ -3912,6 +3963,10 @@ begin
     EncodeStats;
   ConTask.Wait;
   ConTask.Free;
+  // After the last redraw of the stats block: printed earlier, the block's
+  // cursor-up redraw wrote over it.
+  if IsLibrary = False then
+    BruteReport;
   if (EncInfo.DecMem3 > 0) and (IsLibrary = False) then
   begin
     WriteLine('Additional decoding memory is ' +

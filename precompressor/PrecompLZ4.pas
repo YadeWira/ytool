@@ -40,6 +40,22 @@ var
   LBlockDependency: Integer = L_BLOCKDEPENDENCY;
   LBlockSize1: Integer = L_BLOCKSIZE1;
   LBlockSize2: Integer = L_BLOCKSIZE2;
+  // -cfglz4 ds/af (xtool 0.9.9): favorDecSpeed and autoFlush of the frame
+  // preferences, -1 = not given. Stored in each lz4f stream (bits 7 and 8,
+  // unused by lz4f), so decode needs no option.
+  LFavorDecSpeed: Integer = -1;
+  LAutoFlush: Integer = -1;
+
+// lz4's acceleration. Option bits 7-13 hold up to 127; lz4 takes up to
+// 65537 and -b suggests values in the thousands, so a larger one is kept in
+// the stream's Resource (0 = use the bits, as every container before did).
+function LZ4Accel(Option, Resource: Integer): Integer;
+begin
+  if Resource > 0 then
+    Result := Resource
+  else
+    Result := GetBits(Option, 7, 7);
+end;
 
 function LZ4Init(Command: PChar; Count: Integer; Funcs: PPrecompFuncs): Boolean;
 var
@@ -104,6 +120,28 @@ begin
     end;
     Inc(X);
   end;
+  // -cfglz4, read as xtool 0.9.9 does: the rest of the argument, fields split
+  // on ':' or ','. x: the largest size a raw block may decode to (-mlz4:s);
+  // b: the block size of lz4/lz4hc, a size (64kb); ac: lz4's acceleration;
+  // ds/af: lz4f's favorDecSpeed/autoFlush; le: 0.9.9 calls the old
+  // LZ4_compressHC2 instead of LZ4_compress_HC, which writes the same bytes,
+  // so it is accepted and has no effect. Given values win over -m's.
+  for I := 1 to ParamCount do
+    if ParamStr(I).StartsWith('-cfglz4', True) then
+      for S in ParamStr(I).Substring(7).Split([':', ',']) do
+        if (Length(S) > 1) and (S[1] = 'x') then
+          LMaxSize := ConvertToBytes(S.Substring(1))
+        else if (Length(S) > 1) and (S[1] = 'b') then
+          LBlockSize1 := ConvertToBytes(S.Substring(1)) div 1024
+        else if Length(S) > 2 then
+          case IndexText(S.Substring(0, 2), ['ac', 'ds', 'af', 'le']) of
+            0:
+              LAcceleration := StrToIntDef(S.Substring(2), LAcceleration);
+            1:
+              LFavorDecSpeed := StrToIntDef(S.Substring(2), -1);
+            2:
+              LAutoFlush := StrToIntDef(S.Substring(2), -1);
+          end;
   for X := Low(SOList) to High(SOList) do
     if SOList[X, LZ4_CODEC].Count = 0 then
       SOList[X, LZ4_CODEC].Update([1]);
@@ -241,6 +279,13 @@ begin
     begin
       if (Input + Pos)^ in [$F0 .. $F4] then
       begin
+        // Reset on every attempt: when the decoder raises, the except below
+        // swallowed it and X/Y kept the previous position's values (or the
+        // stack's, on the first), so a stream that is not there was added.
+        // Seen as 1 run in ~12 finding 150 streams where there is 1, and that
+        // container did not decode back to the input.
+        X := 0;
+        Y := 0;
         try
           X := LZ4_decompress_generic(Input + Pos, Buffer, SizeEx - Pos,
             LMaxSize, Integer(endOnOutputSize));
@@ -264,7 +309,9 @@ begin
               SetBits(SI.Option, LZ4_CODEC, 0, 3)
             else
               SetBits(SI.Option, LZ4HC_CODEC, 0, 3);
-            SetBits(SI.Option, LAcceleration, 7, 7);
+            SetBits(SI.Option, Min(LAcceleration, 127), 7, 7);
+            if LAcceleration > 127 then
+              SI.Resource := LAcceleration;
             SetBits(SI.Option, LBlockSize1, 15, 13);
             SI.Status := TStreamStatus.None;
             Funcs^.LogScan1(LZ4Codecs[GetBits(SI.Option, 0, 3)], SI.Position,
@@ -299,6 +346,8 @@ begin
           SetBits(SI.Option, Ord(FF and 1 <> 0), 28, 1);
           SetBits(SI.Option, Ord(FF and 2 <> 0), 29, 1);
           SetBits(SI.Option, Ord(FF and 4 <> 0), 30, 1);
+          SetBits(SI.Option, Ord(LFavorDecSpeed > 0), 7, 1);
+          SetBits(SI.Option, Ord(LAutoFlush > 0), 8, 1);
           SI.Status := TStreamStatus.None;
           Funcs^.LogScan1(LZ4Codecs[GetBits(SI.Option, 0, 3)], SI.Position,
             SI.OldSize, SI.NewSize);
@@ -370,6 +419,98 @@ begin
     LZ4F_blockChecksum_t(GetBits(Option, 29, 1));
   if GetBits(Option, 30, 1) = 1 then
     Prefs.frameInfo.contentSize := NewSize;
+  Prefs.favorDecSpeed := GetBits(Option, 7, 1);
+  Prefs.autoFlush := GetBits(Option, 8, 1);
+end;
+
+// Raw lz4 at a given acceleration, in one call or in linked blocks of
+// BlockKB KB, as Process and Restore write it.
+function LZ4RawEncode(Instance: Integer; Input: Pointer; Size: Integer;
+  Buffer: PByte; Cap, Accel, BlockKB: Integer): NativeInt;
+var
+  A, B: Integer;
+begin
+  if BlockKB = 0 then
+    Result := LZ4_compress_fast(Input, Buffer, Size, Cap, Accel)
+  else
+  begin
+    if cctx1[Instance] = nil then
+      cctx1[Instance] := LZ4_createStream;
+    LZ4_resetStream(cctx1[Instance]);
+    B := 0;
+    Result := 0;
+    while B < Size do
+    begin
+      A := LZ4_compress_fast_continue(cctx1[Instance], PByte(Input) + B,
+        Buffer + Result, Min(BlockKB * 1024, Size - B), Size - Result, Accel);
+      if A <= 0 then
+        break;
+      Inc(Result, A);
+      Inc(B, BlockKB * 1024);
+    end;
+  end;
+end;
+
+// -b (xtool 0.9.9's brute mode) for one stream: the parameters the normal
+// search does not try. lz4: accelerations from 2 up (65536 of them, of which
+// BruteCount says how many), printed as -cfglz4ac<n>. lz4f: levels 12 to 1
+// with autoFlush/favorDecSpeed on, printed as -mlz4f:l<n> -cfglz4af<n>:ds<n>.
+// 0.9.9 meant the same 36 lz4f combinations, but its fill loop stops after
+// level 12 and leaves 33 entries at level 0 with both off, which is why it
+// prints "-mlz4f:l0 -cfglz4af0:ds0"; here all 36 are tried. lz4hc has no brute
+// mode in 0.9.9 either.
+procedure LZ4Brute(Instance: Integer; OldInput, NewInput: Pointer;
+  StreamInfo: PStrInfo2; Buffer: PByte; Cap: Integer);
+var
+  I, L, AF, DS, Matches: Integer;
+  Res: NativeInt;
+  Prefs: LZ4F_preferences_t;
+
+  function Hit(const Line: String): Boolean;
+  begin
+    Result := False;
+    if (Res = StreamInfo^.OldSize) and CompareMem(OldInput, Buffer,
+      StreamInfo^.OldSize) then
+    begin
+      BruteAdd(Line);
+      Inc(Matches);
+      Result := Matches >= BRUTE_MATCHES;
+    end;
+  end;
+
+begin
+  Matches := 0;
+  case GetBits(StreamInfo^.Option, 0, 3) of
+    LZ4_CODEC:
+      begin
+        for I := 2 to BruteCount(65536) + 1 do
+        begin
+          Res := LZ4RawEncode(Instance, NewInput, StreamInfo^.NewSize, Buffer,
+            Cap, I, GetBits(StreamInfo^.Option, 15, 13));
+          if Hit('-cfglz4ac' + I.ToString) then
+            exit;
+        end;
+      end;
+    LZ4F_CODEC:
+      begin
+        for L := 12 downto 1 do
+          for AF := 0 to 1 do
+            for DS := 0 to 1 do
+              if (AF <> 0) or (DS <> 0) then
+              begin
+                LZ4FillFrameInfo(Prefs, StreamInfo^.Option,
+                  StreamInfo^.NewSize);
+                Prefs.compressionLevel := L;
+                Prefs.autoFlush := AF;
+                Prefs.favorDecSpeed := DS;
+                Res := NativeInt(LZ4F_compressFrame(Buffer, Cap, NewInput,
+                  StreamInfo^.NewSize, @Prefs));
+                if Hit('-mlz4f:l' + L.ToString + ' -cfglz4af' + AF.ToString +
+                  ':ds' + DS.ToString) then
+                  exit;
+              end;
+      end;
+  end;
 end;
 
 function LZ4Process(Instance, Depth: Integer; OldInput, NewInput: Pointer;
@@ -397,6 +538,14 @@ begin
   else
     Y := LZ4F_compressFrameBound(StreamInfo^.NewSize, nil);
   Buffer := Funcs^.Allocator(Instance, Y);
+  // -b: search only, nothing is processed (as in 0.9.9).
+  if BRUTE then
+  begin
+    BruteRan;
+    if StreamInfo^.NewSize <= BRUTE_MAXSIZE then
+      LZ4Brute(Instance, OldInput, NewInput, StreamInfo, Buffer, Y);
+    exit;
+  end;
   SOList[Instance][X].Index := 0;
   while SOList[Instance][X].Get(I) >= 0 do
   begin
@@ -415,13 +564,13 @@ begin
     case X of
       LZ4_CODEC:
         begin
-          Params := 'a' + GetBits(StreamInfo^.Option, 7, 7).ToString + ':' + 'b'
+          Params := 'a' + LZ4Accel(StreamInfo^.Option, StreamInfo^.Resource).ToString + ':' + 'b'
             + GetBits(StreamInfo^.Option, 15, 13).ToString;
           if not Result then
           begin
             if GetBits(StreamInfo^.Option, 15, 13) = 0 then
               Res1 := LZ4_compress_fast(NewInput, Buffer, StreamInfo^.NewSize,
-                Y, GetBits(StreamInfo^.Option, 7, 7))
+                Y, LZ4Accel(StreamInfo^.Option, StreamInfo^.Resource))
             else
             begin
               if cctx1[Instance] = nil then
@@ -435,7 +584,7 @@ begin
                   PByte(NewInput) + B, Buffer + Res1,
                   Min(GetBits(StreamInfo^.Option, 15, 13) * 1024,
                   StreamInfo^.NewSize - B), StreamInfo^.NewSize - Res1,
-                  GetBits(StreamInfo^.Option, 7, 7));
+                  LZ4Accel(StreamInfo^.Option, StreamInfo^.Resource));
                 if A > 0 then
                 begin
                   Inc(Res1, A);
@@ -554,11 +703,11 @@ begin
   case X of
     LZ4_CODEC:
       begin
-        Params := 'a' + GetBits(StreamInfo.Option, 7, 7).ToString + ':' + 'b' +
+        Params := 'a' + LZ4Accel(StreamInfo.Option, StreamInfo.Resource).ToString + ':' + 'b' +
           GetBits(StreamInfo.Option, 15, 13).ToString;
         if GetBits(StreamInfo.Option, 15, 13) = 0 then
           Res1 := LZ4_compress_fast(Input, Buffer, StreamInfo.NewSize, Cap,
-            GetBits(StreamInfo.Option, 7, 7))
+            LZ4Accel(StreamInfo.Option, StreamInfo.Resource))
         else
         begin
           if cctx1[Instance] = nil then
@@ -571,7 +720,7 @@ begin
             A := LZ4_compress_fast_continue(cctx1[Instance], PByte(Input) + B,
               Buffer + Res1, Min(GetBits(StreamInfo.Option, 15, 13) * 1024,
               StreamInfo.NewSize - B), StreamInfo.NewSize - Res1,
-              GetBits(StreamInfo.Option, 7, 7));
+              LZ4Accel(StreamInfo.Option, StreamInfo.Resource));
             if A > 0 then
             begin
               Inc(B, GetBits(StreamInfo.Option, 15, 13) * 1024);
@@ -613,21 +762,10 @@ begin
       end;
     LZ4F_CODEC:
       begin
-        FillChar(LZ4FT, SizeOf(LZ4F_preferences_t), 0);
+        // The same descriptor Process built (LZ4FillFrameInfo), or decode
+        // rebuilds a different frame.
+        LZ4FillFrameInfo(LZ4FT, StreamInfo.Option, StreamInfo.NewSize);
         LZ4FT.compressionLevel := GetBits(StreamInfo.Option, 3, 4);
-        LZ4FT.frameInfo.blockSizeID :=
-          LZ4F_blockSizeID_t(GetBits(StreamInfo.Option, 15, 13) + 4);
-        LZ4FT.frameInfo.blockMode :=
-          LZ4F_blockMode_t(GetBits(StreamInfo.Option, 14, 1));
-        // Must mirror Process exactly, or decode rebuilds a different frame.
-        // Old .pmp files predate bits 28..30, which read back as 0 there and
-        // reproduce the previous no-checksum behaviour unchanged.
-        LZ4FT.frameInfo.contentChecksumFlag :=
-          LZ4F_contentChecksum_t(GetBits(StreamInfo.Option, 28, 1));
-        LZ4FT.frameInfo.blockChecksumFlag :=
-          LZ4F_blockChecksum_t(GetBits(StreamInfo.Option, 29, 1));
-        if GetBits(StreamInfo.Option, 30, 1) = 1 then
-          LZ4FT.frameInfo.contentSize := StreamInfo.NewSize;
         Params := 'l' + GetBits(StreamInfo.Option, 3, 4).ToString + ':' + 'b' +
           (GetBits(StreamInfo.Option, 15, 13) + 4).ToString + ':' + 'd' +
           GetBits(StreamInfo.Option, 14, 1).ToString;

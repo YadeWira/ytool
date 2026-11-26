@@ -367,6 +367,89 @@ EOF
       echo "-- -cfgzstd: omitido, no se pudo escribir el frame con $ZL --"
     fi
 
+    # -cfglz4 (0.9.9): ds = favorDecSpeed de lz4f (un frame de nivel 12 con
+    # favorDecSpeed=1 solo sale con la opcion) y x/ac = tamano y aceleracion de
+    # un bloque lz4 crudo (igual que -mlz4:s/a). Los escribe la misma liblz4.
+    L4="$ROOT/liblz4.so"; [ -f "$L4" ] || L4=liblz4.so.1
+    if python3 - "$L4" "$P3" <<'EOF'
+import ctypes, sys, random
+z = ctypes.CDLL(sys.argv[1]); r = random.Random(7)
+w = [bytes(r.choice(b"etaoinshrdlu") for _ in range(r.randint(2, 9))) for _ in range(3000)]
+data = b" ".join(r.choice(w) for _ in range(40000))
+class FI(ctypes.Structure):
+    _fields_ = [("bs", ctypes.c_int), ("bm", ctypes.c_int), ("cc", ctypes.c_int), ("ft", ctypes.c_int),
+                ("csz", ctypes.c_ulonglong), ("did", ctypes.c_uint), ("bc", ctypes.c_int)]
+class P(ctypes.Structure):
+    _fields_ = [("fi", FI), ("lvl", ctypes.c_int), ("af", ctypes.c_uint), ("ds", ctypes.c_uint),
+                ("r", ctypes.c_uint * 3)]
+z.LZ4F_compressFrameBound.restype = ctypes.c_size_t
+z.LZ4F_compressFrame.restype = ctypes.c_size_t
+z.LZ4F_isError.argtypes = [ctypes.c_size_t]
+p = P(); p.lvl = 12; p.ds = 1
+cap = z.LZ4F_compressFrameBound(ctypes.c_size_t(len(data)), ctypes.byref(p))
+out = ctypes.create_string_buffer(cap)
+n = z.LZ4F_compressFrame(out, ctypes.c_size_t(cap), data, ctypes.c_size_t(len(data)), ctypes.byref(p))
+if z.LZ4F_isError(ctypes.c_size_t(n)): sys.exit(1)
+open(sys.argv[2] + "/ds.lz4", "wb").write(out.raw[:n])
+blk = data[:65536]
+cap = z.LZ4_compressBound(len(blk)); out = ctypes.create_string_buffer(cap)
+n = z.LZ4_compress_fast(blk, out, len(blk), cap, 8)
+if n <= 0: sys.exit(1)
+open(sys.argv[2] + "/ac.bin", "wb").write(b"HEAD" * 100 + out.raw[:n] + b"TAIL" * 100)
+# una aceleracion > 127 (no cabe en los bits de Option): la primera desde 150
+# que el scan de lz4 crudo reconoce (primer byte F0..F4) y que comprime
+r = random.Random(7)
+w = [bytes(r.choice(b"etaoinshrdlu") for _ in range(r.randint(2, 9))) for _ in range(60)]
+blk = b" ".join(r.choice(w) for _ in range(30000))[:65536]
+cap = z.LZ4_compressBound(len(blk)); out = ctypes.create_string_buffer(cap)
+n0 = z.LZ4_compress_fast(blk, out, len(blk), cap, 1); b0 = out.raw[:n0]
+for a in range(150, 3000):
+    n = z.LZ4_compress_fast(blk, out, len(blk), cap, a)
+    if 0xF0 <= out.raw[0] <= 0xF4 and n < 60000 and out.raw[:n] != b0:
+        open(sys.argv[2] + "/abig.bin", "wb").write(b"HEAD" * 100 + out.raw[:n] + b"TAIL" * 100)
+        break
+else:
+    sys.exit(1)
+EOF
+    then
+      "$XTOOL" precomp -mlz4f -t2 "$P3/ds.lz4" "$P3/l0.pmp" > "$P3/l0.log" 2>&1
+      "$XTOOL" precomp -mlz4f -cfglz4:ds1 -t2 "$P3/ds.lz4" "$P3/l1.pmp" > "$P3/l1.log" 2>&1
+      "$XTOOL" decode "$P3/l1.pmp" "$P3/l1.out" > /dev/null 2>&1
+      ok=0; [ "$(p3_streams "$P3/l0.log")" = "Streams: 0 / 1" ] && \
+        [ "$(p3_streams "$P3/l1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/ds.lz4" "$P3/l1.out" && ok=1
+      p3_check "-cfglz4:ds1 (lz4f favorDecSpeed: 0 / 1 sin, 1 / 1 con)" $ok
+      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/ac.bin" "$P3/a0.pmp" > "$P3/a0.log" 2>&1
+      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:ac8 -t2 "$P3/ac.bin" "$P3/a1.pmp" > "$P3/a1.log" 2>&1
+      "$XTOOL" decode "$P3/a1.pmp" "$P3/a1.out" > /dev/null 2>&1
+      ok=0; [ "$(p3_streams "$P3/a0.log")" = "Streams: 0 / 1" ] && \
+        [ "$(p3_streams "$P3/a1.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/ac.bin" "$P3/a1.out" && ok=1
+      p3_check "-cfglz4:x64kb:ac8 (bloque lz4 crudo: 0 / 1 sin, 1 / 1 con)" $ok
+      # -b (0.9.9): busqueda bruta, no procesa nada; imprime las lineas que
+      # reconstruyen cada stream. Sobre los mismos ds.lz4 y ac.bin.
+      "$XTOOL" precomp -mlz4f -b -t2 "$P3/ds.lz4" "$P3/b0.pmp" > "$P3/b0.log" 2>&1
+      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/ac.bin" "$P3/b1.pmp" > "$P3/b1.log" 2>&1
+      ok=0; grep -qx -- '-mlz4f:l12 -cfglz4af0:ds1 \[1\]' "$P3/b0.log" && \
+        grep -qx -- '-cfglz4ac8 \[1\]' "$P3/b1.log" && \
+        [ "$(p3_streams "$P3/b1.log")" = "Streams: 0 / 1" ] && ok=1
+      p3_check "-b (lz4f: l12 ds1; lz4: ac8; sin procesar)" $ok
+      "$XTOOL" precomp -mlz4:s64kb -b3 -t2 "$P3/ac.bin" "$P3/b2.pmp" > "$P3/b2.log" 2>&1
+      ok=0; grep -qx 'No possible parameters match' "$P3/b2.log" && ok=1
+      p3_check "-b3 (3 aceleraciones, 2..4: ninguna coincide)" $ok
+      # lo que -b encuentra en un bloque con aceleracion > 127 se usa tal cual:
+      # 0 / 1 sin la opcion, 1 / 1 con ella, y decode lo rehace (Resource)
+      "$XTOOL" precomp -mlz4:s64kb -b -t2 "$P3/abig.bin" "$P3/b3.pmp" > "$P3/b3.log" 2>&1
+      AC=$(grep -m1 -oE '^-cfglz4ac[0-9]+' "$P3/b3.log" | sed 's/^-cfglz4//')
+      "$XTOOL" precomp -mlz4:s64kb -t2 "$P3/abig.bin" "$P3/b4.pmp" > "$P3/b4.log" 2>&1
+      "$XTOOL" precomp -mlz4 -cfglz4:x64kb:$AC -t2 "$P3/abig.bin" "$P3/b5.pmp" > "$P3/b5.log" 2>&1
+      "$XTOOL" decode "$P3/b5.pmp" "$P3/b5.out" > /dev/null 2>&1
+      ok=0; [ -n "$AC" ] && [ "${AC#ac}" -gt 127 ] && \
+        [ "$(p3_streams "$P3/b4.log")" = "Streams: 0 / 1" ] && \
+        [ "$(p3_streams "$P3/b5.log")" = "Streams: 1 / 1" ] && cmp -s "$P3/abig.bin" "$P3/b5.out" && ok=1
+      p3_check "-b encuentra -cfglz4$AC (> 127) y con ella 1 / 1, decode exacto" $ok
+    else
+      echo "-- -cfglz4: omitido, no se pudieron escribir los frames con $L4 --"
+    fi
+
     # zipcrypto (0.8.8): un plugin INI marca un stream cifrado con la clave en
     # un archivo; descifrado, adentro hay deflate que zlib reconstruye a -d1.
     ZD="$P3/plugZ"; mkdir -p "$ZD"
