@@ -66,6 +66,8 @@ type
     Option: Integer;
     Checksum: XXH128_hash_t;
     Status: TStreamStatus;
+    // 1-based entry in the stats composition table ("zlib:l98 = N"), 0 = none.
+    Comp: Integer;
     DepthStreams: TArray<TDepthStream>;
   end;
 

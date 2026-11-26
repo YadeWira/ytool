@@ -249,7 +249,7 @@ begin
   WriteLine(
     '  -l#  - compression level for fast lzma2 (separate params with ":") [0]');
   WriteLine('               d# - dictionary size');
-  WriteLine('  -lm  - low memory mode');
+  WriteLine('  -lm# - low memory mode (0-3) [0]');
   WriteLine('  -s   - skip stream verification');
   WriteLine('  -v   - enables verbose mode');
   WriteLine(
@@ -434,11 +434,13 @@ begin
         'm':
           begin
             Options.LowMem := True;
-            // 0.9.2: -lm[1..3] low-memory levels (default 1).
-            if (Length(S) > 1) and (S[2] in ['1' .. '3']) then
+            // 0.9.2: -lm[0..3] low-memory levels; bare -lm is 1. xtool's help
+            // says "(0-3) [0]", so -lm0 is the default: off.
+            if (Length(S) > 1) and (S[2] in ['0' .. '3']) then
               Options.LowMemLevel := Ord(S[2]) - Ord('0')
             else
               Options.LowMemLevel := 1;
+            Options.LowMem := Options.LowMemLevel > 0;
           end;
       else
         if S <> '' then
@@ -709,6 +711,70 @@ var
   // stream's final outcome is known. Threads are forced to 1 when extracting.
   ExtCodec: String;
   ExtSize: Integer;
+  // 0.9.9 "detailed stream composition": one row per codec:level, in order of
+  // first appearance, as xtool prints it ("- zlib:l98 = 2 (49.51%)"). The
+  // percentage is the streams' own size (OldSize) over the input size.
+  CompNames: TArray<String>;
+  CompCounts: TArray<Integer>;
+  CompSizes: TArray<Int64>;
+  // Where each row's first stream sits (depth, then offset), so the rows come
+  // out in file order whatever order the threads finish in.
+  CompFirst: TArray<Int64>;
+  // Not GlobalSync: EncFree frees that before the stats thread's last refresh.
+  CompSync: TCriticalSection;
+
+threadvar
+  // Label of the attempt that succeeded, set by PrecompLogProcess on the
+  // thread that runs the codec; Process reads it right after the call.
+  CompLabel: String;
+
+function CompAdd(const Name: String; Size: Integer; First: Int64): Integer;
+var
+  I: Integer;
+begin
+  CompSync.Acquire;
+  try
+    Result := -1;
+    for I := Low(CompNames) to High(CompNames) do
+      if CompNames[I] = Name then
+      begin
+        Result := I;
+        break;
+      end;
+    if Result < 0 then
+    begin
+      Result := Length(CompNames);
+      SetLength(CompNames, Succ(Result));
+      SetLength(CompCounts, Succ(Result));
+      SetLength(CompSizes, Succ(Result));
+      SetLength(CompFirst, Succ(Result));
+      CompNames[Result] := Name;
+      CompFirst[Result] := First;
+      CompCounts[Result] := 0;
+      CompSizes[Result] := 0;
+    end;
+    Inc(CompCounts[Result]);
+    Inc(CompSizes[Result], Size);
+    if First < CompFirst[Result] then
+      CompFirst[Result] := First;
+    Inc(Result);
+  finally
+    CompSync.Release;
+  end;
+end;
+
+procedure CompSub(Comp, Size: Integer);
+begin
+  if Comp <= 0 then
+    exit;
+  CompSync.Acquire;
+  try
+    Dec(CompCounts[Pred(Comp)]);
+    Dec(CompSizes[Pred(Comp)], Size);
+  finally
+    CompSync.Release;
+  end;
+end;
 
 procedure CodecInit(Count: Integer; Method: String);
 var
@@ -877,6 +943,15 @@ begin
         ' has failed';
     WriteLine(Format(S2, [CurDepth[0], Codec, LogInt64.ToHexString, Size1,
       Size2, Size3]));
+  end;
+  if Status then
+  begin
+    // xtool labels a row with the codec and the first field of its
+    // parameters: "l98:w15" -> "zlib:l98".
+    S1 := String(Method);
+    if System.Pos(':', S1) > 0 then
+      S1 := Copy(S1, 1, Pred(System.Pos(':', S1)));
+    CompLabel := String(Codec) + IfThen(S1 <> '', ':' + S1, '');
   end;
   if EXTRACT and (CurDepth[0] = 0) then
   begin
@@ -1552,6 +1627,7 @@ begin
     CurPos1[Index] := MemOutput1[Index].Position;
     CurCodec[Index] := SI2.Codec;
     CurDepth[Index] := Depth;
+    CompLabel := '';
     try
       if NOVERIFY and not(SI2.Codec in [5]) then
         Result := True
@@ -1637,6 +1713,13 @@ begin
     if Result then
     begin
       AtomicIncrement(EncInfo.Processed);
+      // -s (no verify) skips the codec call, so no attempt named a level.
+      if CompLabel = '' then
+        CompLabel := Codecs[SI2.Codec].Names
+          [EnsureRange(GetBits(SI1.Option, 0, 3), 0,
+          Pred(Length(Codecs[SI2.Codec].Names)))];
+      SI2.Comp := CompAdd(CompLabel, SI1.OldSize, (Int64(Depth) shl 56) +
+        DataStore.Position(ThreadIndex) + SI2.ActualPosition);
       SI2.OldSize := SI1.OldSize;
       SI2.NewSize := SI1.NewSize;
       SI2.Resource := SI1.Resource;
@@ -2382,7 +2465,10 @@ begin
               if LastStream > StreamInfo.ActualPosition then
               begin
                 if StreamInfo.Status = TStreamStatus.Success then
+                begin
                   AtomicDecrement(EncInfo.Processed);
+                  CompSub(StreamInfo.Comp, StreamInfo.OldSize);
+                end;
                 AtomicDecrement(EncInfo.Count);
               end;
               InfoStore1[I].Delete(J);
@@ -3418,6 +3504,9 @@ var
 {$ENDIF}
     I64: Int64;
     CovStr: string;
+    Rows: TStringList;
+    Order: TArray<Integer>;
+    J: Integer;
   begin
     // stderr (not stdout): "-" as input/output means real stdin/stdout piping
     // of the actual payload -- stdout must stay clean for that. Bytes, not
@@ -3468,16 +3557,51 @@ var
       IfThen(StoreDD > 0, ' >> ' + ConvertKB2TB((EncInfo.SrepSize) div 1024),
       '') + IfThen(COMPRESS > 0, ' >> ' + ConvertKB2TB((EncInfo.CompSize)
       div 1024), '') + '      ';
+    Rows := TStringList.Create;
+    try
+      Rows.Assign(SL);
+      CompSync.Acquire;
+      try
+        SetLength(Order, Length(CompNames));
+        for I := Low(Order) to High(Order) do
+        begin
+          // insertion sort by first position; a handful of rows
+          J := I;
+          while (J > 0) and (CompFirst[Order[Pred(J)]] > CompFirst[I]) do
+          begin
+            Order[J] := Order[Pred(J)];
+            Dec(J);
+          end;
+          Order[J] := I;
+        end;
+        for J := High(Order) downto Low(Order) do
+          if CompCounts[Order[J]] > 0 then
+            Rows.Insert(1, Format('  - %s = %d (%.2f%%)',
+              [CompNames[Order[J]], CompCounts[Order[J]],
+              IfThen(EncInfo.InSize > 0, CompSizes[Order[J]] / EncInfo.InSize
+              * 100, 0.0)]));
+      finally
+        CompSync.Release;
+      end;
 {$IFDEF MSWINDOWS}
-    SetConsoleCursorPosition(FHandle, Coords);
-    WriteConsole(FHandle, PChar(SL.Text), Length(SL.Text), ulLength, nil);
+      // Rows shift down as the composition grows, so each one must cover
+      // whatever longer row was drawn at its position before.
+      for I := 0 to Rows.Count - 1 do
+        Rows[I] := Rows[I] + StringOfChar(' ', Max(0, 48 - Length(Rows[I])));
+      SetConsoleCursorPosition(FHandle, Coords);
+      WriteConsole(FHandle, PChar(Rows.Text), Length(Rows.Text), ulLength, nil);
 {$ELSE}
-    if CLine > 0 then
-      Write(ErrOutput, #27'[', CLine, 'A');
-    CLine := SL.Count;
-    Write(ErrOutput, SL.Text);
-    Flush(ErrOutput);
+      // Up to the first row, then clear to the end of the screen: rows shift
+      // down as the composition grows.
+      if CLine > 0 then
+        Write(ErrOutput, #27'[', CLine, 'A'#27'[J');
+      CLine := Rows.Count;
+      Write(ErrOutput, Rows.Text);
+      Flush(ErrOutput);
 {$ENDIF}
+    finally
+      Rows.Free;
+    end;
   end;
 
 begin
@@ -3798,6 +3922,8 @@ begin
 end;
 
 initialization
+
+CompSync := TCriticalSection.Create;
 
 PrecompFunctions.GetCodec := @PrecompGetCodec;
 PrecompFunctions.GetParam := @PrecompGetParam;

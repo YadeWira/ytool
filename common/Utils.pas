@@ -879,6 +879,10 @@ begin
   // (no exception, no output, exit 0). WriteLn(ErrOutput,...) is just as
   // valid with a real console and also works redirected -> same path as Unix.
   WriteLn(ErrOutput, S);
+  // FPC's ErrOutput is a threadvar with its own buffer per thread, flushed
+  // only at a line end on a terminal. Redirected, the main thread's lines sat
+  // in its buffer until exit and came out after the stats thread's.
+  Flush(ErrOutput);
 end;
 
 function GetModuleName: string;

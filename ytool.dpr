@@ -121,6 +121,8 @@ procedure ProgramInfo;
 begin
   WriteLine('ytool - open-source recreation of xtool by Razor12911');
   WriteLine('');
+  WriteLine('Version ' + YTOOL_VERSION);
+  WriteLine('');
 end;
 
 procedure ListCommands;
@@ -448,6 +450,9 @@ begin
         else
           Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)),
             False, BufferSize);
+        // as xtool 0.9.9 does, before the stats
+        WriteLine('Processing input: ' + ParamArgSafe(1, 0));
+        WriteLine('');
         try
           PrecompMain.Parse(ParamArg[0], PrecompEnc);
           PrecompMain.Encode(Input, Output, PrecompEnc);
@@ -552,6 +557,8 @@ begin
               begin
                 Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)
                   ), False, BufferSize);
+                WriteLine('Processing input: ' + ParamArgSafe(1, 0));
+                WriteLine('');
                 try
                   PrecompMain.Parse(ParamArg[0], PrecompDec);
                   PrecompMain.Decode(Input, Output, PrecompDec);

@@ -122,6 +122,10 @@ These recreate upstream Razor12911's *own announced* changes, not new design of 
 - 0.9.7 — reassign stream moved from `-a` to `-r`
 - 0.9.9 — `-pa` (patch all streams): lifts the condition that made the patch fallback unreachable in a
   normal scan. `DIFF_TOLERANCE` (`-df#`) still decides whether a patch is accepted.
+- 0.9.9 — detailed stream composition: under `Streams:`, one row per codec and level in order of first
+  appearance, e.g. `- zlib:l98 = 2 (49.51%)`; the percentage is those streams' own size over the input size.
+  Compared with 0.9.9 under Wine on 53 files (synthetic corpus and real samples) with `-mzlib`: same rows,
+  counts, percentages and order on all 53. The banner also prints `Version` and `Processing input:` as 0.9.9 does.
 - 0.9.9 — `-lz4` and `-zstd` repeatable: each occurrence adds a candidate library, tried in order until one
   loads. (Upstream ships several versions of each and loads them *simultaneously*; ours is fallback
   ordering only, since the changelog does not say which and there is no source past 0.7.9 to read.)
@@ -168,7 +172,7 @@ reading release notes:
 | 0.9.9 | `ytool` | Consequence |
 |---|---|---|
 | `-pf#` (prefetch) | parses as `-p#` | `-pf32mb` is accepted and **silently ignored** — `-p` matches by prefix, the trailing `f32mb` fails the "must start with a digit" guard and the cache stays 0. The number is lost with no warning. |
-| `-lm#` (0–3) | `-lm#`, same range | Parses the same, but only `-lm3` measurably lowers memory: peak RSS on a 20 MB input (`-c64mb -t4`) was 55.7 MB without it, 53.2 / 55.3 / 30.3 MB with `-lm1` / `-lm2` / `-lm3`. The help prints `-lm` with no level. |
+| `-lm#` (0–3) | `-lm#`, same range | Parses the same, but only `-lm3` measurably lowers memory: peak RSS on a 20 MB input (`-c64mb -t4`) was 55.7 MB without it, 53.2 / 55.3 / 30.3 MB with `-lm1` / `-lm2` / `-lm3`. `-lm0` is off, the default (it used to switch level 1 on). |
 | `-r#` separated by `;` | `-r#` separated by `;` | Parses the same; semantics differ. `-rzlib=zlib` gives 0 / 149 streams in 0.9.9 and 135 / 149 here. |
 | `-x#`, `-X#` | same | Byte-identical to 0.9.9: `-x` 149 / 149 files on a real 1.5 MB zip, `-X` the same 14 files (149 − 135 processed). Until 2026-11-25 `-X` extracted on every *failed level attempt*, so a stream that failed at one level and succeeded at another was extracted too (24 files there instead of 14); `tests/regression.sh` now checks it on `24_zlib_mixed.bin`. |
 | `brute` subcommand | absent | Not implemented; its semantics are unknown (see above). |
@@ -183,6 +187,8 @@ Found and fixed while building/testing this port, not from any xtool release not
 
 - Removed two dead CLI commands (`patch`, `archive`) that were listed in `--help` but never actually wired to
   any handler — running them silently did nothing.
+- `WriteLine` now flushes. FPC's `ErrOutput` is per thread, so with stderr redirected the banner sat in the
+  main thread's buffer and came out after the stats thread's last block.
 - Fixed `WriteLine` on Windows: it called `WriteConsole()` directly, which silently produces zero output when
   stdout/stderr isn't a real console (any redirect, pipe, or non-interactive SSH session) — the process would
   exit 0 having "worked" while emitting nothing. **Only `WriteLine` was fixed.** The live status block
