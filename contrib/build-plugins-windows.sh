@@ -258,7 +258,6 @@ build_libdeflate "$ROOT/libdeflate.dll" "$CC" -DLIBDEFLATE_DLL -static-libgcc
 # lzlib (-mlzip), pinned in pin-repo.sh
 build_lzlib "$ROOT/lzlib.dll" "$CC" -Wl,--export-all-symbols -static-libgcc
 
-# OSREP (-ddo), released binary, next to ytool
-fetch_osrep osrep-windows-x86_64.exe "$ROOT/osrep.exe"
+# OSREP is built into ytool since 0.9.9f (imports/OsrepLib.pas): no program to fetch.
 
 echo "Hecho. Plugins .dll en la raiz del repo (gitignored)."

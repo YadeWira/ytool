@@ -258,7 +258,6 @@ fi
 # lzlib (-mlzip), pinned in pin-repo.sh
 build_lzlib "$OUT/liblz.so" "$CC" $M -fPIC
 
-# OSREP (-ddo), released binary, next to ytool
-if [ "$ARCH" = x86 ]; then fetch_osrep osrep-linux-x86 "$OUT/osrep"; else fetch_osrep osrep-linux-x86_64 "$OUT/osrep"; fi
+# OSREP is built into ytool since 0.9.9f (imports/OsrepLib.pas): no program to fetch.
 
 echo "Hecho. Plugins .so en $OUT (la raiz del repo, gitignored, salvo ARCH=x86)."

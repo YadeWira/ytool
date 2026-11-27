@@ -1,3 +1,0 @@
-/* 'pkglibc' Package */
-OUTPUT_FORMAT(elf64-x86-64)
-GROUP ( bplpkglibc.so pkglibc_nonshared.a )
