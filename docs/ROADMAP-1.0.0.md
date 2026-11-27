@@ -217,8 +217,8 @@ PPA (PNG) y PMPA (MP3/MP2) entran cuando sean estables; sus números de codec es
 
 - **`-dd` reserva unos 1,7 GB:** ytool le pasa los datos a srep por stdin sin `-s<tamaño>`, y srep
   dimensiona sus tablas para 25 GB. Pasarle el tamaño cuando se conoce.
-- **Wiki:** la sección "Windows x86 cannot decode some 64-bit `.ytp` files (lz4 fast mode)" de Known
-  Issues quedó vieja: se arregló en 0.9.9b (commit aa32bd3).
+- ~~**Wiki:** la sección "Windows x86 cannot decode some 64-bit `.ytp` files (lz4 fast mode)" de Known
+  Issues quedó vieja: se arregló en 0.9.9b (commit aa32bd3).~~ Hecho en la wiki con la 0.9.9e.
 - **CI:** el de Windows compila sin las DLL de plugins (los codecs pasan por 0 streams). Sumar las DLL
   y un fuzz corto, como en srep-builds.
 - **Rendimiento:** no hay benchmarks publicados (Known Issues). Publicar números de un corpus fijo
