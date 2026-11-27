@@ -120,7 +120,7 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
-  YTOOL_VERSION = '0.9.9e';
+  YTOOL_VERSION = '0.9.9f';
 
 // 0.9.9d: a mistyped command ("analyce") printed the banner and exited 0
 // with nothing done. Known commands match by prefix, as before.
