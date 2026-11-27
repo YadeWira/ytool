@@ -52,6 +52,22 @@ begin
   Result := dst;
 end;
 
+// memcmp: lzo (0.9.9f, built in) compares with it
+function ShimMemCmp(a, b: Pointer; n: NativeUInt): Integer; cdecl;
+  public name '_memcmp';
+var
+  i: NativeUInt;
+begin
+  Result := 0;
+  i := 0;
+  while i < n do
+  begin
+    if PByte(a)[i] <> PByte(b)[i] then
+      exit(Integer(PByte(a)[i]) - Integer(PByte(b)[i]));
+    Inc(i);
+  end;
+end;
+
 function ShimMemCpy(dst, src: Pointer; n: NativeUInt): Pointer; cdecl;
   public name '_memcpy';
 begin

@@ -7,6 +7,8 @@ lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3|Streams: 1 / 1
 lz4f_fast_l3|75_lz4f_fast.bin|-mlz4f -l3|Streams: 1 / 1
 lz4f_l3|70_lz4f.bin|-mlz4f -l3|Streams: 1 / 1
 lzma_l3|63_lzma_alone.bin|-mlzma -l3|Streams: 1 / 1
+lzo1x_l3|50_lzo1x.bin|-mlzo1x -l3|Streams: 1 / 1
+lzo2a_l3|50_lzo1x.bin|-mlzo2a -l3|Streams: 1 / 1
 mixed_l3|24_zlib_mixed.bin|-mzlib -l3|Streams: 5 / 8
 pja_j2k_l3|64_jpeg2000.bin|-mpja -l3|Streams: 2 / 2
 pja_jpeg_l3|71_jpeg_min.bin|-mpja -l3|Streams: 1 / 1

@@ -140,6 +140,23 @@ build_libdeflate() {
 # (measured). $CSRC must be set.
 LZLIB_VER="1.16"
 LZLIB_SHA256="203228de911780309dad6813e51541d7ea89469784f01cb661edba080ff1b038"
+# fetch_lzo: lzo 2.10 (www.oberhumer.com, GPL-2.0+), the official tarball
+# checked against its SHA-256, unpacked in $CSRC/lzo-$LZO_VER. -mlzo1x/-mlzo1c/
+# -mlzo2a since 0.9.9f use it built in; before, Linux loaded the system's
+# liblzo2.so.2 and Windows an unchecked download.
+LZO_VER="2.10"
+LZO_SHA256="c0f892943208266f9b6543b3ae308fab6284c5c90e627931446fb49b4221a072"
+LZO_SRC="lzo1c_rr lzo1x_1 lzo1x_1k lzo1x_1l lzo1x_1o lzo1x_9x lzo1x_d2 lzo1c_9x lzo1c_d2 lzo2a_9x lzo2a_d2 lzo_init lzo_util lzo_ptr lzo_str lzo_crc"
+fetch_lzo() {
+  local tgz="$CSRC/lzo-$LZO_VER.tar.gz" dir="$CSRC/lzo-$LZO_VER"
+  if ! echo "$LZO_SHA256  $tgz" | sha256sum -c --status 2>/dev/null; then
+    curl -sL -o "$tgz" "https://www.oberhumer.com/opensource/lzo/download/lzo-$LZO_VER.tar.gz"
+    echo "$LZO_SHA256  $tgz" | sha256sum -c --status \
+      || { rm -f "$tgz"; echo "   (lzo: descarga fallida o SHA-256 distinto)"; return 1; }
+  fi
+  [ -d "$dir" ] || tar xzf "$tgz" -C "$CSRC" || return 1
+}
+
 # fetch_lzlib: the checked tarball unpacked in $CSRC/lzlib-$LZLIB_VER
 fetch_lzlib() {
   local tgz="$CSRC/lzlib-$LZLIB_VER.tar.gz" dir="$CSRC/lzlib-$LZLIB_VER"

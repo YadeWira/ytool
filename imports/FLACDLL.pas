@@ -134,6 +134,8 @@ begin
   Lib.LoadLib(ExpandPath(PluginsPath + 'libFLAC_dynamic.dll', True));
 {$IFDEF UNIX}
   if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libFLAC.so', True));   // 0.9.9f: shipped, pinned
+  if not Lib.Loaded then
     Lib.LoadLib('libFLAC.so.14');
   if not Lib.Loaded then
     Lib.LoadLib('libFLAC.so.12');

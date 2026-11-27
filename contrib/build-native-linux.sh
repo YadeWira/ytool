@@ -124,4 +124,11 @@ fetch_lzlib || exit 1
 echo "==> StaticLibs/lzlib.linux.$ARCH.o"
 gcc $M -c -O2 -fPIC -I "$CSRC/lzlib-$LZLIB_VER" -o "StaticLibs/lzlib.linux.$ARCH.o" "$CSRC/lzlib-$LZLIB_VER/lzlib.c"
 
+fetch_lzo || exit 1
+echo "==> StaticLibs/lzo_*.linux.$ARCH.o (lzo $LZO_VER: lzo1x, lzo1c, lzo2a)"
+for f in $LZO_SRC; do
+  gcc $M -c -O2 -fPIC -I "$CSRC/lzo-$LZO_VER/include" -I "$CSRC/lzo-$LZO_VER/src" \
+    -o "StaticLibs/lzo_$f.linux.$ARCH.o" "$CSRC/lzo-$LZO_VER/src/$f.c"
+done
+
 echo "OK: objetos Linux generados."

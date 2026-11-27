@@ -45,6 +45,8 @@ lz4f_l3|70_lz4f.bin|-mlz4f -l3
 lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3
 lz4f_fast_l3|75_lz4f_fast.bin|-mlz4f -l3
 zstd_l3|77_zstd_nocheck.bin|-mzstd -l3
+lzo1x_l3|50_lzo1x.bin|-mlzo1x -l3
+lzo2a_l3|50_lzo1x.bin|-mlzo2a -l3
 '
 made=0; skipped=0
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT

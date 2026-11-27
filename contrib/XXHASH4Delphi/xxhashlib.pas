@@ -354,6 +354,21 @@ begin
   Result := dest;
 end;
 
+// memcmp: lzo (0.9.9f, built in) compares with it
+function _crt_memcmp(a, b: Pointer; n: NativeUInt): Integer; cdecl; public name 'memcmp';
+var
+  i: NativeUInt;
+begin
+  Result := 0;
+  i := 0;
+  while i < n do
+  begin
+    if PByte(a)[i] <> PByte(b)[i] then
+      exit(Integer(PByte(a)[i]) - Integer(PByte(b)[i]));
+    Inc(i);
+  end;
+end;
+
 function _crt_memset(s: Pointer; c: Integer; n: NativeUInt): Pointer; cdecl; public name 'memset';
 begin
   if n > 0 then FillChar(s^, n, Byte(c));

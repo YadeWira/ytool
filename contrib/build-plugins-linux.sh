@@ -207,6 +207,45 @@ fi
 # libdeflate (-mlibdeflate), pinned in pin-repo.sh
 build_libdeflate "$OUT/libdeflate.so" "$CC" $M -fPIC
 
+# -- FLAC and WavPack (-mflac, -mwavpack) -------------------------------------
+# 0.9.9f: from the same commits as Windows' DLLs (build-plugins-windows.sh),
+# shipped next to ytool and loaded before the distro's libFLAC/libwavpack,
+# whose versions vary (an encoder's output can change between versions).
+# Shared, not built in: their encoders choose coefficients with libm floating
+# point, which a Pascal stand-in on Windows could round differently.
+FLAC_REF="b430c3a58b64b70642ab5c72c36084dd4083d165"
+WAVPACK_REF="0a3e393c57cb835e24f47366894a045b84f02611"
+echo "==> libFLAC.so ($ARCH)"
+pin_repo https://github.com/xiph/flac "$CSRC/flac" "$FLAC_REF"
+if [ -d "$CSRC/flac" ] && command -v cmake >/dev/null; then
+  B="$CSRC/flac/out-linux-$ARCH"; rm -rf "$B"; mkdir -p "$B"
+  ( cd "$B" && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="$M" \
+      -DBUILD_SHARED_LIBS=ON -DBUILD_CXXLIBS=OFF -DBUILD_PROGRAMS=OFF \
+      -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DWITH_OGG=OFF \
+      -DINSTALL_MANPAGES=OFF -DENABLE_MULTITHREADING=OFF .. >/dev/null 2>&1 && \
+    make -j4 FLAC >/dev/null 2>&1 )
+  SO=$(find "$B" -name "libFLAC.so*" -type f | head -1)
+  [ -n "$SO" ] && cp "$SO" "$OUT/libFLAC.so" && echo "   OK -> libFLAC.so" || echo "   (FLAC fallo)"
+else
+  echo "   (FLAC: falta cmake o el clone)"
+fi
+echo "==> libwavpack.so ($ARCH)"
+pin_repo https://github.com/dbry/WavPack "$CSRC/wavpack" "$WAVPACK_REF"
+if [ -d "$CSRC/wavpack" ] && command -v cmake >/dev/null; then
+  B="$CSRC/wavpack/out-linux-$ARCH"; rm -rf "$B"; mkdir -p "$B"
+  ( cd "$B" && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="$M" \
+      -DBUILD_SHARED_LIBS=ON -DWAVPACK_BUILD_PROGRAMS=OFF -DBUILD_TESTING=OFF \
+      -DWAVPACK_INSTALL_DOCS=OFF -DWAVPACK_ENABLE_THREADS=OFF \
+      $( [ "$ARCH" = x86 ] && echo -DWAVPACK_ENABLE_ASM=OFF ) .. >/dev/null 2>&1 && \
+    make -j4 >/dev/null 2>&1 )
+  # x86: cmake sees the x86-64 host and assembles pack_x64.S under -m32; the C
+  # path instead (an encoder speed matter: decode is lossless either way)
+  SO=$(find "$B" -name "libwavpack.so*" -type f | head -1)
+  [ -n "$SO" ] && cp "$SO" "$OUT/libwavpack.so" && echo "   OK -> libwavpack.so" || echo "   (WavPack fallo)"
+else
+  echo "   (WavPack: falta cmake o el clone)"
+fi
+
 # lzlib (-mlzip), pinned in pin-repo.sh
 build_lzlib "$OUT/liblz.so" "$CC" $M -fPIC
 

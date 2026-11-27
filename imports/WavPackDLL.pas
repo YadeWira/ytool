@@ -83,6 +83,8 @@ begin
   Lib.LoadLib(ExpandPath(PluginsPath + 'wavpackdll.dll', True));
 {$IFDEF UNIX}
   if not Lib.Loaded then
+    Lib.LoadLib(ExpandPath(PluginsPath + 'libwavpack.so', True));   // 0.9.9f: shipped, pinned
+  if not Lib.Loaded then
     Lib.LoadLib('libwavpack.so.1');
 {$ENDIF}
   if Lib.Loaded then

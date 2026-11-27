@@ -155,4 +155,11 @@ fetch_lzlib || exit 1
 echo "==> StaticLibs/lzlib.win32.x86.o"
 "$CC" -c -O2 -I "$CSRC/lzlib-$LZLIB_VER" -o "StaticLibs/lzlib.win32.x86.o" "$CSRC/lzlib-$LZLIB_VER/lzlib.c"
 
+fetch_lzo || exit 1
+echo "==> StaticLibs/lzo_*.win32.x86.o (lzo $LZO_VER)"
+for f in $LZO_SRC; do
+  "$CC" -c -O2 -I "$CSRC/lzo-$LZO_VER/include" -I "$CSRC/lzo-$LZO_VER/src" \
+    -o "StaticLibs/lzo_$f.win32.x86.o" "$CSRC/lzo-$LZO_VER/src/$f.c"
+done
+
 echo "OK: objetos Windows x86 generados."
