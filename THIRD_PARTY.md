@@ -20,19 +20,22 @@ found, and no grant of rights should be read into the silence.
 | mORMot (8 units) | `contrib/mORMot/` | Arnaud Bouchez / Synopse | MPL 1.1 / GPL 2.0+ / LGPL 2.1+ tri-licence (per file headers) |
 | LZ4Delphi, ZSTD4Delphi, XXHASH4Delphi, LIBC | `contrib/` | YWtheGod (github.com/YWtheGod) | **None declared** (no licence file in the upstream repositories) |
 | ParseExpression | `contrib/ParseExpression/` | Egbert van Nes | "Freeware with source" (its `readme.txt`) |
+| zlib | `contrib/StaticLibs/`, built by `contrib/build-native-*.sh` from github.com/madler/zlib (1.4, commit 99623ef); since 0.9.9f (no system libz, no zlib1.dll) | Jean-loup Gailly, Mark Adler | zlib licence |
+| libdeflate (compressor) | idem, github.com/ebiggers/libdeflate (v1.26); since 0.9.9f | Eric Biggers | MIT |
+| lzlib | idem, nongnu.org/lzip/lzlib.html (1.16, SHA-256 checked); since 0.9.9f | Antonio Diaz Diaz | BSD 2-Clause |
+| OSREP | `contrib/osrep/`: its embeddable unit 0.0.19 (`contrib/fetch-osrep-unit.sh`); `-ddo` runs it in process since 0.9.9f | YadeWira | MIT (`contrib/osrep/LICENSE`) |
 
 ## Plugins (separate libraries, loaded at run time, not linked)
 
 | Component | Source | Author | Terms |
 |---|---|---|---|
-| zlib | github.com/madler/zlib (1.4 in the Windows packages; Linux uses the system libz) | Jean-loup Gailly, Mark Adler | zlib licence |
 | preflate | `contrib/preflate/`, github.com/deus-libri/preflate | Dirk Steinke | Apache 2.0 |
 | fast-lzma2 1.2.0 | github.com/YadeWira/ultra-fast-lzma2 (its `fast-lzma2/` folder), maintained fork of github.com/conor42/fast-lzma2 | Conor McCarthy; fork by YadeWira | BSD 3-Clause (dual GPL-2.0; used under BSD) |
 | brunsli | github.com/google/brunsli | Google LLC | MIT |
 | PJA (`libpja`, released binary) | github.com/YadeWira/PJA | Yade E. Bravo (YadeWira) | MIT. Its `NOTICE`: the arithmetic-coded JPEG coder follows libjpeg (IJG); JPEG-LS follows CharLS 2.4.2 (BSD 3-Clause) |
-| libFLAC | github.com/xiph/flac | Josh Coalson, Xiph.Org Foundation | BSD 3-Clause (Xiph) for libFLAC |
-| WavPack | github.com/dbry/WavPack | David Bryant | BSD 3-Clause |
-| LZO | oberhumer.com, lzo-2.10 | Markus F.X.J. Oberhumer | **GPL 2.0**. The shipped `lzo2` library is GPL: whoever redistributes it must also offer its source (the unmodified 2.10 tarball). |
+| libFLAC | github.com/xiph/flac (pinned commit; shipped on Linux too since 0.9.9f) | Josh Coalson, Xiph.Org Foundation | BSD 3-Clause (Xiph) for libFLAC |
+| WavPack | github.com/dbry/WavPack (pinned commit; shipped on Linux too since 0.9.9f) | David Bryant | BSD 3-Clause |
+| LZO | oberhumer.com, lzo-2.10 (SHA-256 checked; shipped on Linux too since 0.9.9f) | Markus F.X.J. Oberhumer | **GPL 2.0**. The shipped `lzo2` library is GPL: whoever redistributes it must also offer its source (the unmodified 2.10 tarball). Kept a separate library on purpose: linked into the MIT `ytool` binary it would make the whole binary a GPL work. |
 
 ## Not included: SREP
 

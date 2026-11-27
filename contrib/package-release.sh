@@ -61,10 +61,10 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so libFLAC.so libwavpack.so osrep"
+LINUX_FILES="ytool libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so libFLAC.so libwavpack.so liblzo2.so"
 # Programas que viajan junto a ytool.exe en los zips (OSREP para -ddo, MIT)
-WIN_EXES="osrep"
-WIN_DLLS="pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 libzstd"
+WIN_EXES=""   # 0.9.9f: OSREP is built into ytool (imports/OsrepLib.pas)
+WIN_DLLS="lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 libzstd"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
 # de imports es una dependencia que el usuario no tiene.
@@ -91,7 +91,7 @@ bash contrib/build-plugins-linux.sh >/dev/null 2>&1 || die "build-plugins-linux.
 mkdir -p .fpcout
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs -Fucontrib/osrep \
     -oytool ytool.dpr >/dev/null 2>&1 || die "fpc fallo"
 ok "construido"
 
@@ -153,7 +153,7 @@ package_linux() { # arch dir
   smoke zstd    76_zstd_levels.bin
   smoke zlib    20_zlib_streams.bin
   smoke preflate 20_zlib_streams.bin
-  # -ddo con el osrep del paquete: ida y vuelta, y que osrep haya corrido (una
+  # -ddo con el OSREP interno (0.9.9f, sin el programa osrep): ida y vuelta, y que haya corrido (una
   # etapa mas en el resumen de tamanos que sin -ddo)
   if [ -f "$CORPUS/23_dup_streams.bin" ]; then
     cp "$CORPUS/23_dup_streams.bin" "$P/in.bin"
@@ -162,9 +162,9 @@ package_linux() { # arch dir
     st1=$( cd "$P" && ./ytool precomp -mzlib -ddo in.bin o.ytp 2>&1 | grep -o '>>' | wc -l )
     ( cd "$P" && ./ytool decode o.ytp back.bin >/dev/null 2>&1 )
     if cmp -s "$P/in.bin" "$P/back.bin" && [ "$st1" -gt "$st0" ]; then
-      echo "   ok: -ddo con el osrep del paquete ($st1 etapas)"
+      echo "   ok: -ddo con el OSREP interno ($st1 etapas)"
     else
-      echo "   FALLA -ddo con el osrep del paquete (etapas $st0 -> $st1)"; FAILED=1
+      echo "   FALLA -ddo con el OSREP interno (etapas $st0 -> $st1)"; FAILED=1
     fi
     rm -f "$P"/in.bin "$P"/a.ytp "$P"/o.ytp "$P"/back.bin
   fi

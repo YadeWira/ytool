@@ -72,7 +72,7 @@ if [ "${NO_BUILD:-0}" != "1" ]; then
   mkdir -p .fpcout
   FPC_LOG="$(fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs -Fucontrib/osrep \
     -oytool ytool.dpr 2>&1)" \
     || { echo "fpc compilation FAILED:"; echo "$FPC_LOG"; exit 3; }
 fi
@@ -419,23 +419,23 @@ if [ -x "$XTOOL" ] && [ -f "${LIBSREP:-}" ] && [ -f "$XDIR/srep64" ] && [ -f "$C
   else echo "-- *** libsrep: fallo *** --"; fail=$((fail+1)); fi
 fi
 
-# --- -ddo: OSREP como dedup externo -----------------------------------------
-# Corre si hay un osrep junto a ytool (no viene en el repo; releases de
-# YadeWira/omega-srep). Ida y vuelta con y sin -osp, y un .ytp hecho con -ddo
-# tiene que pedir osrep al decodificar si falta, no fallar con un error mudo.
-if [ -x "$XTOOL" ] && [ -x "$XDIR/osrep" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
+# --- -ddo: OSREP, dentro de ytool desde 0.9.9f --------------------------------
+# imports/OsrepLib.pas: el OSREP de contrib/osrep corre en el proceso. ytool
+# solo en una carpeta (sin el programa osrep) hace -ddo de ida y vuelta, con y
+# sin -osp, y no deja temporales.
+if [ -x "$XTOOL" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
   DO="$CORPUS/23_dup_streams.bin"; dok=1
+  FK="$WORK/osrepin"; rm -rf "$FK"; mkdir -p "$FK"; cp "$XABS" "$FK/"
+  YK="$FK/$(basename "$XABS")"
   for o in "-ddo" "-ddo -ospm3:l64"; do
-    "$XTOOL" precomp -mzlib $o "$DO" "$WORK/do.ytp" >/dev/null 2>&1 && \
-      "$XTOOL" decode "$WORK/do.ytp" "$WORK/do.out" >/dev/null 2>&1 && \
-      cmp -s "$DO" "$WORK/do.out" || { dok=0; echo "-- *** -ddo [$o]: fallo *** --"; }
+    ( cd "$FK" && "$YK" precomp -mzlib $o "$DO" do.ytp >/dev/null 2>&1 && \
+      "$YK" decode do.ytp do.out >/dev/null 2>&1 ) && \
+      cmp -s "$DO" "$FK/do.out" || { dok=0; echo "-- *** -ddo [$o]: fallo *** --"; }
+    rm -f "$FK/do.ytp" "$FK/do.out"
   done
-  FK="$WORK/noosrep"; rm -rf "$FK"; mkdir -p "$FK"; cp "$XTOOL" "$FK/ytool"; cp "$XDIR"/*.so "$FK/" 2>/dev/null
-  "$FK/ytool" decode "$WORK/do.ytp" "$FK/x.out" > "$FK/log" 2>&1 && dok=0
-  grep -q 'put "osrep" next to ytool' "$FK/log" || { dok=0; echo "-- *** -ddo sin osrep: sin el mensaje *** --"; }
-  if [ "$dok" = 1 ]; then echo "-- -ddo: ida y vuelta (con y sin -osp), y pide osrep si falta --"; pass=$((pass+1)); else fail=$((fail+1)); fi
-else
-  echo "-- -ddo: omitido (sin osrep junto a ytool) --"
+  left=$(ls "$FK" | grep -v "^$(basename "$XABS")$")
+  [ -z "$left" ] || { dok=0; echo "-- *** -ddo: quedaron $left *** --"; }
+  if [ "$dok" = 1 ]; then echo "-- -ddo: OSREP interno, ida y vuelta (con y sin -osp), sin el programa osrep --"; pass=$((pass+1)); else fail=$((fail+1)); fi
 fi
 
 # --- -p (prefetch) en el borde de 4 MB --------------------------------------
@@ -972,7 +972,7 @@ fi
 # tests/golden/<version>/*.ytp los hizo el binario PUBLICADO de esa version
 # (tests/golden/make.sh); cada build tiene que seguir decodificandolos byte por
 # byte (docs/ROADMAP-1.0.0.md, punto 4: la 1.0.0 cambia el formato y sigue
-# leyendo los 0.9.9x). Sin osrep al lado se saltan los -ddo; con
+# leyendo los 0.9.9x). OSREP va dentro desde 0.9.9f; con
 # ALLOW_MISSING_CODECS=1, un codec que falta salta su archivo en vez de fallar.
 if [ -x "$XTOOL" ] && [ -d "$ROOT/tests/golden" ]; then
   GD="$WORK/golden"; mkdir -p "$GD"; gok=0; gbad=0; gskip=0
@@ -982,9 +982,6 @@ if [ -x "$XTOOL" ] && [ -d "$ROOT/tests/golden" ]; then
     while IFS='|' read -r gname gfile gopts gst; do
       [ -n "$gname" ] || continue
       gy="$(dirname "$man")/$gname.ytp"; gi="$ROOT/tests/golden/inputs/$gfile"
-      case " $gopts " in *" -ddo "*)
-        [ -x "$XDIR/osrep" ] || [ -x "$XDIR/osrep.exe" ] || { gskip=$((gskip+1)); continue; } ;;
-      esac
       rm -f "$GD/o.out"
       if ( cd "$GD" && "$XABS" decode "$gy" o.out > log 2>&1 ) && cmp -s "$gi" "$GD/o.out"; then
         gok=$((gok+1))

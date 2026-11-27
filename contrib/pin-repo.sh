@@ -141,12 +141,12 @@ build_libdeflate() {
 LZLIB_VER="1.16"
 LZLIB_SHA256="203228de911780309dad6813e51541d7ea89469784f01cb661edba080ff1b038"
 # fetch_lzo: lzo 2.10 (www.oberhumer.com, GPL-2.0+), the official tarball
-# checked against its SHA-256, unpacked in $CSRC/lzo-$LZO_VER. -mlzo1x/-mlzo1c/
-# -mlzo2a since 0.9.9f use it built in; before, Linux loaded the system's
-# liblzo2.so.2 and Windows an unchecked download.
+# checked against its SHA-256, unpacked in $CSRC/lzo-$LZO_VER. Built as a
+# library shipped next to ytool on Linux too since 0.9.9f (it loaded the
+# system's liblzo2.so.2), and Windows' lzo2.dll was an unchecked download.
+# Not linked into ytool: LZO is GPL-2.0, ytool is MIT.
 LZO_VER="2.10"
 LZO_SHA256="c0f892943208266f9b6543b3ae308fab6284c5c90e627931446fb49b4221a072"
-LZO_SRC="lzo1c_rr lzo1x_1 lzo1x_1k lzo1x_1l lzo1x_1o lzo1x_9x lzo1x_d2 lzo1c_9x lzo1c_d2 lzo2a_9x lzo2a_d2 lzo_init lzo_util lzo_ptr lzo_str lzo_crc"
 fetch_lzo() {
   local tgz="$CSRC/lzo-$LZO_VER.tar.gz" dir="$CSRC/lzo-$LZO_VER"
   if ! echo "$LZO_SHA256  $tgz" | sha256sum -c --status 2>/dev/null; then

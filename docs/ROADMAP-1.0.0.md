@@ -116,12 +116,15 @@ restaurar. Compilar las bibliotecas **dentro** del binario fija sus versiones y 
 **Avance en 0.9.9f:** ya van dentro del binario, en las cuatro plataformas, con los mismos bytes que
 las bibliotecas que reemplazan: **zlib** 1.4 (deflate e inflate; ytool ya no depende de la libz del
 sistema ni de `zlib1.dll`), **lz4** 1.11.1 (con el parche de 32 bits del modo rápido), **libdeflate** 1.26
-y **lzlib** 1.16. Además, `decode` avisa al empezar si falta la biblioteca de un codec que el archivo
+y **lzlib** 1.16, y **OSREP** 0.0.19 (`-ddo` corre dentro del proceso, con la unidad que publicó su
+agente). LZO, FLAC y WavPack van fijados y en el paquete también en Linux (ya no las del sistema).
+**LZO no puede ir adentro**: es GPL-2.0 y ytool es MIT, y además van compilados adentro componentes sin
+licencia compatible con la GPL. Para la 1.0.0 hace falta decidir: LZO sigue aparte, o se cambia la
+licencia del binario. Además, `decode` avisa al empezar si falta la biblioteca de un codec que el archivo
 nombra, y el error dice cuál. Lecciones para el resto: en Windows, FPC no enlaza bien objetos de mingw
 unidos con `ld -r` (van uno por uno), x64 necesita `-mcmodel=small`, y los externos sin tipo necesitan
 `cdecl` para el guion bajo de i386-win32. Faltan: zstd (1.6.0 para `-mzstd`, que choca con el zstd
-1.5.2 interno), lzo, FLAC y WavPack (en Linux, todavía las del sistema), fast-lzma2 y las de C++
-(preflate, pja, brunsli).
+1.5.2 interno), FLAC y WavPack dentro del binario, fast-lzma2 y las de C++ (preflate, pja, brunsli).
 
 **Lo que no puede ir adentro:**
 - **srep** (`-dd1`..`-dd5`), por su licencia ("All rights reserved"). Un `.ytp` con `-dd1`..`-dd5`

@@ -9,7 +9,7 @@ uses
   Threading, Utils, CliUI, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
   PrecompOodle, PrecompMedia, PrecompReserved, PrecompLZMA, PrecompLZIP, PrecompINI, PrecompINIEx,
-  SrepLibDLL,
+  SrepLibDLL, OsrepLib,
   PrecompSearch, PrecompDLL, PrecompEXE, PrecompHelp,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -349,7 +349,9 @@ begin
             begin
               // -ddo: OSREP. Without it next to ytool, the same fallback as
               // srep's: say so and deduplicate in memory.
-              if FileExists(ExpandPath(PluginsPath + OSREPEXE, True)) then
+              // 0.9.9f: OSREP is built in (OsrepLib)
+              if OsrepLib.Available or
+                FileExists(ExpandPath(PluginsPath + OSREPEXE, True)) then
               begin
                 StoreDD := DD_OSREP;
                 OsrepCheckVersion;
@@ -2621,6 +2623,8 @@ end;
 procedure DDRequire;
 begin
   if (StoreDD <> DD_OSREP) and SrepLibDLL.DLLLoaded then
+    exit;
+  if (StoreDD = DD_OSREP) and OsrepLib.Available then
     exit;
   if not FileExists(ExpandPath(PluginsPath + DDExe, True)) then
     raise Exception.CreateFmt('this file was made with %s (-dd%s): put "%s" ' +

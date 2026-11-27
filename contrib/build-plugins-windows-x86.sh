@@ -127,10 +127,7 @@ fi
 
 # ── lzo2 (lzo1x/lzo1c/lzo2a codec) — official Oberhumer tarball ───────────────
 echo "==> lzo2 (lzo2-x86.dll)"
-if [ ! -d "$CSRC/lzo-2.10" ]; then
-  curl -sL https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz \
-    -o "$CSRC/lzo-2.10.tar.gz" && tar xzf "$CSRC/lzo-2.10.tar.gz" -C "$CSRC"
-fi
+fetch_lzo   # checked against its SHA-256 (pin-repo.sh)
 [ -d "$CSRC/lzo-2.10" ] && ( cd "$CSRC/lzo-2.10" && "$CC" -shared -O2 -Iinclude \
   -Wl,--export-all-symbols src/*.c -static-libgcc -o "$ROOT/lzo2-x86.dll" ) \
   && echo "   OK -> lzo2-x86.dll" || echo "   (lzo2 fallo)"

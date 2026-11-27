@@ -72,111 +72,6 @@ implementation
 var
   Lib: TLibImport;
 
-// 0.9.9f: lzo 2.10 built in (contrib/build-native-*.sh -> StaticLibs/). Linux
-// loaded the system's liblzo2.so.2; a library is used only with -lzo<path>.
-// Untyped externals (cdecl for i386-win32's underscore): addresses only.
-{$IFDEF LINUX}
-{$IFDEF CPUX86_64}
-{$L lzo_lzo1c_rr.linux.x64.o}
-{$L lzo_lzo1x_1.linux.x64.o}
-{$L lzo_lzo1x_1k.linux.x64.o}
-{$L lzo_lzo1x_1l.linux.x64.o}
-{$L lzo_lzo1x_1o.linux.x64.o}
-{$L lzo_lzo1x_9x.linux.x64.o}
-{$L lzo_lzo1x_d2.linux.x64.o}
-{$L lzo_lzo1c_9x.linux.x64.o}
-{$L lzo_lzo1c_d2.linux.x64.o}
-{$L lzo_lzo2a_9x.linux.x64.o}
-{$L lzo_lzo2a_d2.linux.x64.o}
-{$L lzo_lzo_init.linux.x64.o}
-{$L lzo_lzo_util.linux.x64.o}
-{$L lzo_lzo_ptr.linux.x64.o}
-{$L lzo_lzo_str.linux.x64.o}
-{$L lzo_lzo_crc.linux.x64.o}
-{$ENDIF}
-{$IFDEF CPUI386}
-{$L lzo_lzo1c_rr.linux.x86.o}
-{$L lzo_lzo1x_1.linux.x86.o}
-{$L lzo_lzo1x_1k.linux.x86.o}
-{$L lzo_lzo1x_1l.linux.x86.o}
-{$L lzo_lzo1x_1o.linux.x86.o}
-{$L lzo_lzo1x_9x.linux.x86.o}
-{$L lzo_lzo1x_d2.linux.x86.o}
-{$L lzo_lzo1c_9x.linux.x86.o}
-{$L lzo_lzo1c_d2.linux.x86.o}
-{$L lzo_lzo2a_9x.linux.x86.o}
-{$L lzo_lzo2a_d2.linux.x86.o}
-{$L lzo_lzo_init.linux.x86.o}
-{$L lzo_lzo_util.linux.x86.o}
-{$L lzo_lzo_ptr.linux.x86.o}
-{$L lzo_lzo_str.linux.x86.o}
-{$L lzo_lzo_crc.linux.x86.o}
-{$ENDIF}
-{$ENDIF}
-{$IFDEF WIN64}
-{$L lzo_lzo1c_rr.win64.x64.o}
-{$L lzo_lzo1x_1.win64.x64.o}
-{$L lzo_lzo1x_1k.win64.x64.o}
-{$L lzo_lzo1x_1l.win64.x64.o}
-{$L lzo_lzo1x_1o.win64.x64.o}
-{$L lzo_lzo1x_9x.win64.x64.o}
-{$L lzo_lzo1x_d2.win64.x64.o}
-{$L lzo_lzo1c_9x.win64.x64.o}
-{$L lzo_lzo1c_d2.win64.x64.o}
-{$L lzo_lzo2a_9x.win64.x64.o}
-{$L lzo_lzo2a_d2.win64.x64.o}
-{$L lzo_lzo_init.win64.x64.o}
-{$L lzo_lzo_util.win64.x64.o}
-{$L lzo_lzo_ptr.win64.x64.o}
-{$L lzo_lzo_str.win64.x64.o}
-{$L lzo_lzo_crc.win64.x64.o}
-{$ENDIF}
-{$IFDEF WIN32}
-{$L lzo_lzo1c_rr.win32.x86.o}
-{$L lzo_lzo1x_1.win32.x86.o}
-{$L lzo_lzo1x_1k.win32.x86.o}
-{$L lzo_lzo1x_1l.win32.x86.o}
-{$L lzo_lzo1x_1o.win32.x86.o}
-{$L lzo_lzo1x_9x.win32.x86.o}
-{$L lzo_lzo1x_d2.win32.x86.o}
-{$L lzo_lzo1c_9x.win32.x86.o}
-{$L lzo_lzo1c_d2.win32.x86.o}
-{$L lzo_lzo2a_9x.win32.x86.o}
-{$L lzo_lzo2a_d2.win32.x86.o}
-{$L lzo_lzo_init.win32.x86.o}
-{$L lzo_lzo_util.win32.x86.o}
-{$L lzo_lzo_ptr.win32.x86.o}
-{$L lzo_lzo_str.win32.x86.o}
-{$L lzo_lzo_crc.win32.x86.o}
-{$ENDIF}
-procedure b_lzo1c_999_compress; cdecl; external name 'lzo1c_999_compress';
-procedure b_lzo1c_decompress_safe; cdecl; external name 'lzo1c_decompress_safe';
-procedure b_lzo1x_1_11_compress; cdecl; external name 'lzo1x_1_11_compress';
-procedure b_lzo1x_1_12_compress; cdecl; external name 'lzo1x_1_12_compress';
-procedure b_lzo1x_1_15_compress; cdecl; external name 'lzo1x_1_15_compress';
-procedure b_lzo1x_1_compress; cdecl; external name 'lzo1x_1_compress';
-procedure b_lzo1x_999_compress; cdecl; external name 'lzo1x_999_compress';
-procedure b_lzo1x_999_compress_level; cdecl; external name 'lzo1x_999_compress_level';
-procedure b_lzo1x_decompress_safe; cdecl; external name 'lzo1x_decompress_safe';
-procedure b_lzo2a_999_compress; cdecl; external name 'lzo2a_999_compress';
-procedure b_lzo2a_decompress_safe; cdecl; external name 'lzo2a_decompress_safe';
-
-procedure InitBuiltin;
-begin
-  @lzo1c_999_compress := @b_lzo1c_999_compress;
-  @lzo1c_decompress_safe := @b_lzo1c_decompress_safe;
-  @lzo1x_1_11_compress := @b_lzo1x_1_11_compress;
-  @lzo1x_1_12_compress := @b_lzo1x_1_12_compress;
-  @lzo1x_1_15_compress := @b_lzo1x_1_15_compress;
-  @lzo1x_1_compress := @b_lzo1x_1_compress;
-  @lzo1x_999_compress := @b_lzo1x_999_compress;
-  @lzo1x_999_compress_level := @b_lzo1x_999_compress_level;
-  @lzo1x_decompress_safe := @b_lzo1x_decompress_safe;
-  @lzo2a_999_compress := @b_lzo2a_999_compress;
-  @lzo2a_decompress_safe := @b_lzo2a_decompress_safe;
-  DLLLoaded := True;
-end;
-
 procedure Init(Filename: String);
 begin
   Lib := TLibImport.Create;
@@ -226,10 +121,13 @@ begin
   end;
 end;
 
-if DLLFile <> '' then
-  Init(DLLFile)
-else
-  InitBuiltin;
+// 0.9.9f: the lzo shipped next to ytool, built from the pinned, SHA-256
+// checked 2.10 tarball (contrib/pin-repo.sh: fetch_lzo); Linux used the
+// system's liblzo2.so.2, which stays the last resort. Not linked into ytool:
+// LZO is GPL-2.0 and ytool is MIT (see THIRD_PARTY.md).
+if DLLFile = '' then
+  DLLFile := PluginsPath + {$IFDEF UNIX}'liblzo2.so'{$ELSE}'lzo2.dll'{$ENDIF};
+Init(DLLFile);
 
 finalization
 

@@ -207,6 +207,15 @@ fi
 # libdeflate (-mlibdeflate), pinned in pin-repo.sh
 build_libdeflate "$OUT/libdeflate.so" "$CC" $M -fPIC
 
+# -- liblzo2.so (-mlzo1x, -mlzo1c, -mlzo2a) ------------------------------------
+# 0.9.9f: from the checked 2.10 tarball (fetch_lzo), shipped; it was the
+# system's liblzo2.so.2. A library, not linked in: LZO is GPL-2.0.
+echo "==> liblzo2.so ($ARCH)"
+if fetch_lzo; then
+  ( cd "$CSRC/lzo-$LZO_VER" && "$CC" $M -shared -fPIC -O2 -Iinclude -Isrc src/*.c -o "$OUT/liblzo2.so" ) \
+    && echo "   OK -> liblzo2.so" || echo "   (lzo fallo)"
+fi
+
 # -- FLAC and WavPack (-mflac, -mwavpack) -------------------------------------
 # 0.9.9f: from the same commits as Windows' DLLs (build-plugins-windows.sh),
 # shipped next to ytool and loaded before the distro's libFLAC/libwavpack,

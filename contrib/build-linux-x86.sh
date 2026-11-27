@@ -42,7 +42,7 @@ GL="$(dirname "$(gcc -m32 -print-libgcc-file-name)")"
 "$PPC" -n -Mdelphi -Sg -O2 -Fu"$FPC386/units/i386-linux/*" -Fl/usr/lib32 $ZL -Fl"$GL" \
   -k"$OUT/csu.o" -FU"$OUT/fu" -Fucompat -Fucommon -Fuprecompressor -Fuio -Fuimports \
   -Fusources -Fudbgenerator -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
+  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs -Fucontrib/osrep \
   -o"$OUT/ytool" ytool.dpr >"$OUT/fpc.log" 2>&1 || { grep -E 'Error|Fatal|undefined' "$OUT/fpc.log" >&2; exit 1; }
 file "$OUT/ytool" | grep -q 'Intel 80386\|Intel i386' || { echo "build-x86/ytool is not i386" >&2; exit 1; }
 echo "OK: $OUT/ytool"
