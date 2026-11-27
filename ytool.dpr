@@ -29,6 +29,9 @@ program ytool;
 {$POINTERMATH ON}
 
 uses
+{$IFDEF USECMEM}
+  cmem, // -dUSECMEM: C's malloc, so valgrind sees heap errors (debugging only)
+{$ENDIF}
 {$IFDEF UNIX}
   cthreads, // pthread thread driver; must come first (TThread/TTask)
 {$ENDIF}

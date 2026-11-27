@@ -755,6 +755,9 @@ var
   VerifySt: TArray<PXXH3_state_t>;
   VerifyMem: TArray<Pointer>;
   VerifyOn: TArray<Boolean>;
+  // 0.9.9d: bytes the codec gave for the stream being restored; they have to
+  // be the stream's OldSize (see Restore)
+  RestoredBytes: TArray<Int64>;
   ThrIdx: TArray<Integer>;
   WorkStream: TArray<TMemoryStreamEx2>;
   WorkLastSize: TArray<NativeInt>;
@@ -1664,7 +1667,6 @@ var
   SI3: TFutureSI;
   DBTyp: TDatabase;
   DBBool: Boolean;
-  Errored: Boolean;
   LValid: Boolean;
   LCodec: Byte;
   LOption: Integer;
@@ -3346,6 +3348,7 @@ begin
   // directo a la salida y no quedan en ningun buffer.
   if VerifyOn[Instance] then
     XXH3_128bits_update(VerifySt[Instance]^, Buffer, Size);
+  Inc(RestoredBytes[Instance], Size);
   with ComVars2[CurDepth[Instance]] do
     DecOutput[Instance].WriteBuffer(Buffer^, Size);
   if (StoreDD > -2) and (CurDepth[Instance] = 0) then
@@ -3369,11 +3372,29 @@ begin
   // directo a la salida y no quedan en ningun buffer.
   if VerifyOn[Instance] then
     XXH3_128bits_update(VerifySt[Instance]^, Buffer, Size);
+  Inc(RestoredBytes[Instance], Size);
   with ComVars2[CurDepth[Instance]] do
     MemOutput1[Instance].WriteBuffer(Buffer^, Size);
 end;
 
 procedure DecThread(X, Y, Z: IntPtr); forward;
+
+// 0.9.9d: what the decoder reads from a container is checked before it is
+// used. A damaged header field (a size, a count, a codec number) was trusted
+// and became an access violation, a range error, a hang or, for a negative
+// stream count, a decode that wrote nothing and exited 0 (found by fuzzing
+// the decoder: about 40 of 1,000 damaged .ytp files).
+const
+  DEC_MAXSTREAMS = 1 shl 24;     // streams in one block
+  DEC_MAXBLOCK = Int64(1) shl 34;  // bytes of one block's data
+  DEC_MAXRESOURCES = 4096;
+  DEC_MAXRESSIZE = 1 shl 30;
+  DEC_MAXDUPS = 1 shl 26;
+
+procedure Damaged(const What: String);
+begin
+  raise Exception.Create('the container is damaged: ' + What);
+end;
 
 procedure DecCallThreads(Index, Depth: Integer);
 var
@@ -3494,15 +3515,26 @@ begin
       SI.NewSize := SH^.NewSize;
       SI.Resource := SH^.Resource;
       SI.Option := SH^.Option;
+      if Pos + SH^.NewSize > MemInput[Index1].Size then
+        Damaged(Format('stream #%d runs past its block', [X]));
       Ptr1 := PByte(MemInput[Index1].Memory) + Pos;
       if SH^.Kind and EXTENDED_STREAM = EXTENDED_STREAM then
       begin
+        if SI.NewSize < SI.NewSize.Size then
+          Damaged(Format('stream #%d: extended data', [X]));
         SI.ExtSize := PInteger(Ptr1 + SI.NewSize - SI.NewSize.Size)^;
+        if not InRange(SI.ExtSize, 0, SI.NewSize - SI.NewSize.Size) then
+          Damaged(Format('stream #%d: extended size %d', [X, SI.ExtSize]));
         SI.NewSize := SI.NewSize - SI.ExtSize - SI.ExtSize.Size;
         Ptr2 := PByte(MemInput[Index1].Memory) + Pos + SI.NewSize;
       end
       else
+      begin
+        // a stale ExtSize from the previous stream let a codec read a patch
+        // through a nil pointer (damaged Option asking for one)
+        SI.ExtSize := 0;
         Ptr2 := nil;
+      end;
       if SH^.Kind and NESTED_STREAM = NESTED_STREAM then
       begin
         MemStream2[Index2].Update(Ptr1, SI.NewSize);
@@ -3510,11 +3542,19 @@ begin
         MemStream2[Index2].Position := 0;
         MemOutput2[Index2].Position := 0;
         DecChunk(MemStream2[Index2], MemOutput2[Index2], Index2, Succ(Depth));
+        if MemOutput2[Index2].Position < 2 * SI.NewSize.Size then
+          Damaged(Format('nested stream #%d', [X]));
         SI.NewSize := PInteger(MemOutput2[Index2].Memory)^;
+        if not InRange(SI.NewSize, 0, MemOutput2[Index2].Position - 2 *
+          SI.NewSize.Size) then
+          Damaged(Format('nested stream #%d: size %d', [X, SI.NewSize]));
         Ptr1 := PByte(MemOutput2[Index2].Memory) + SI.NewSize.Size;
         SI.ExtSize := PInteger(PByte(MemOutput2[Index2].Memory) +
           SI.NewSize.Size + SI.NewSize)^;
-        Ptr2 := PByte(MemOutput2[Index1].Memory) + SI.NewSize.Size + SI.NewSize
+        if not InRange(SI.ExtSize, 0, MemOutput2[Index2].Position - 2 *
+          SI.NewSize.Size - SI.NewSize) then
+          Damaged(Format('nested stream #%d: extended size %d', [X, SI.ExtSize]));
+        Ptr2 := PByte(MemOutput2[Index2].Memory) + SI.NewSize.Size + SI.NewSize
           + SI.ExtSize.Size;
       end;
       if SH^.Kind and DUPLICATED_STREAM = DUPLICATED_STREAM then
@@ -3537,14 +3577,25 @@ begin
       // el digest del padre, asi que hashearlo aparte contaria dos veces.
       VerifyOn[Index2] := (Depth = 0) and
         not((SH^.Checksum.low64 = 0) and (SH^.Checksum.high64 = 0));
+      // XTP2 (0.9.9b on) writes every stream's checksum, and a 128-bit hash
+      // of 0 does not happen: a zero there is damage that turned the check off
+      if (Depth = 0) and LITHASH and not VerifyOn[Index2] then
+        Damaged(Format('stream #%d: no checksum', [X]));
       if VerifyOn[Index2] then
         XXH3_128bits_reset(VerifySt[Index2]^);
+      RestoredBytes[Index2] := 0;
       if (Codecs[SH^.Codec].Restore(Index2, Depth, Ptr1, Ptr2, SI, LOutput,
         @PrecompFunctions) = False) then
       begin
         VerifyOn[Index2] := False;
-        raise Exception.CreateFmt(SPrecompError3,
-          [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
+        // a codec slot with no names (a retired codec) has nothing at [Y]
+        // (an if, not IfThen: IfThen evaluates both)
+        if Length(Codecs[SH^.Codec].Names) > 0 then
+          raise Exception.CreateFmt(SPrecompError3,
+            [Codecs[SH^.Codec].Names[Y], X, Pos, Depth])
+        else
+          raise Exception.CreateFmt(SPrecompError3,
+            ['#' + SH^.Codec.ToString, X, Pos, Depth]);
       end;
       if VerifyOn[Index2] then
       begin
@@ -3559,6 +3610,13 @@ begin
           raise Exception.CreateFmt(SPrecompError4,
             [Codecs[SH^.Codec].Names[Y], X, Pos, Depth]);
       end;
+      // The stream's size is in its header, which the checksum above does not
+      // cover: with OldSize damaged, the bytes checked were right but -t>1
+      // wrote OldSize bytes of the block (exit 0, other bytes; found by
+      // fuzzing), and copied past the restored data.
+      if RestoredBytes[Index2] <> SH^.OldSize then
+        Damaged(Format('stream #%d: %d bytes restored, header says %d',
+          [X, RestoredBytes[Index2], SH^.OldSize]));
       AtomicIncrement(EncInfo.Processed);
       if MT then
       begin
@@ -3599,11 +3657,15 @@ begin
   for I := Low(ThreadSync) to High(ThreadSync) do
     ThreadSync[I] := TCriticalSection.Create;
   Input.ReadBuffer(Options^.Depth, Options^.Depth.Size);
+  if not InRange(Options^.Depth, 1, 10) then
+    Damaged('depth ' + Options^.Depth.ToString);
   Input.ReadBuffer(B, B.Size);
   SetLength(Bytes, B);
   Input.ReadBuffer(Bytes[0], B);
   Options^.Method := StringOf(Bytes);
   Input.ReadBuffer(I, I.Size);
+  if not InRange(I, 0, DEC_MAXRESOURCES) then
+    Damaged('resource count ' + I.ToString);
   for J := 0 to I - 1 do
   begin
     Input.ReadBuffer(B, B.Size);
@@ -3611,6 +3673,8 @@ begin
     Input.ReadBuffer(Bytes[0], B);
     LResData.Name := StringOf(Bytes);
     Input.ReadBuffer(LResData.Size, LResData.Size.Size);
+    if not InRange(LResData.Size, 0, DEC_MAXRESSIZE) then
+      Damaged('resource size ' + LResData.Size.ToString);
     GetMem(LResData.Data, LResData.Size);
     Input.ReadBuffer(LResData.Data^, LResData.Size);
     Insert(LResData, Resources, Length(Resources));
@@ -3626,6 +3690,7 @@ begin
     VerifySt[I] := Pointer((PtrUInt(VerifyMem[I]) + 63) and not PtrUInt(63));
   end;
   SetLength(VerifyOn, Options^.Threads);
+  SetLength(RestoredBytes, Options^.Threads);
   SetLength(CurDepth, Options^.Threads);
   SetLength(WorkStream, Options^.Threads);
   SetLength(WorkLastSize, Options^.Threads);
@@ -3699,6 +3764,9 @@ begin
 end;
 
 procedure DecFree;
+// 0.9.9d: also after a DecInit that stopped half way (a damaged header): only
+// what was created is freed. It indexed arrays not yet sized, and that access
+// violation replaced the real error.
 var
   I, J: Integer;
 begin
@@ -3713,31 +3781,43 @@ begin
     begin
       for I := Low(ThreadSync) to High(ThreadSync) do
       begin
-        MemStream2[I].Free;
-        MemOutput1[I].Free;
-        MemOutput2[I].Free;
+        if I < Length(MemStream2) then
+          FreeAndNil(MemStream2[I]);
+        if I < Length(MemOutput1) then
+          FreeAndNil(MemOutput1[I]);
+        if I < Length(MemOutput2) then
+          FreeAndNil(MemOutput2[I]);
         if (J = 0) and (I > 0) then
           continue;
-        MemStream1[I].Free;
-        MemInput[I].Free;
-        Dispose(StreamCount[I]);
-        StreamInfo[I]^.Free;
-        Dispose(StreamInfo[I]);
-        Dispose(StreamIdx[I]);
-        Dispose(BlockPos[I]);
+        if I < Length(MemStream1) then
+          FreeAndNil(MemStream1[I]);
+        if I < Length(MemInput) then
+          FreeAndNil(MemInput[I]);
+        if (I < Length(StreamCount)) and Assigned(StreamCount[I]) then
+          Dispose(StreamCount[I]);
+        if (I < Length(StreamInfo)) and Assigned(StreamInfo[I]) then
+        begin
+          StreamInfo[I]^.Free;
+          Dispose(StreamInfo[I]);
+        end;
+        if (I < Length(StreamIdx)) and Assigned(StreamIdx[I]) then
+          Dispose(StreamIdx[I]);
+        if (I < Length(BlockPos)) and Assigned(BlockPos[I]) then
+          Dispose(BlockPos[I]);
       end;
     end;
   for I := Low(ThreadSync) to High(ThreadSync) do
   begin
-    if Length(Tasks) > 1 then
-      Tasks[I].Free;
-    WorkStream[I].Free;
+    if (Length(Tasks) > 1) and (I < Length(Tasks)) then
+      FreeAndNil(Tasks[I]);
+    if I < Length(WorkStream) then
+      FreeAndNil(WorkStream[I]);
   end;
   FreeResources;
   _Free;
-  GlobalSync.Free;
+  FreeAndNil(GlobalSync);
   for I := Low(ThreadSync) to High(ThreadSync) do
-    ThreadSync[I].Free;
+    FreeAndNil(ThreadSync[I]);
 end;
 
 procedure DecChunk(Input, Output: TStream; Index, Depth: Integer);
@@ -3766,6 +3846,8 @@ var
       if Depth = 0 then
       begin
         DecInput[Index].ReadBuffer(C, C.Size);
+        if not InRange(C, 0, DEC_MAXRESOURCES) then
+          Damaged('resource count ' + C.ToString);
         for D := 0 to C - 1 do
         begin
           DecInput[Index].ReadBuffer(B, B.Size);
@@ -3773,6 +3855,8 @@ var
           DecInput[Index].ReadBuffer(Bytes[0], B);
           LResData.Name := StringOf(Bytes);
           DecInput[Index].ReadBuffer(LResData.Size, LResData.Size.Size);
+          if not InRange(LResData.Size, 0, DEC_MAXRESSIZE) then
+            Damaged('resource size ' + LResData.Size.ToString);
           GetMem(LResData.Data, LResData.Size);
           DecInput[Index].ReadBuffer(LResData.Data^, LResData.Size);
           Insert(LResData, Resources, Length(Resources));
@@ -3782,6 +3866,10 @@ var
   end;
 
 begin
+  // a damaged stream flagged as nested asks for a depth the header did not
+  // set up (ComVars2 has Options^.Depth entries): access violation
+  if Depth >= Length(ComVars2) then
+    Damaged('nesting deeper than the header says');
   if Depth = 0 then
   begin
     UI32 := 0;
@@ -3789,6 +3877,8 @@ begin
     if (StoreDD > -2) then
     begin
       Input.ReadBuffer(UI32, UI32.Size);
+      if UI32 > DEC_MAXDUPS then
+        Damaged('duplicate count ' + UI32.ToString);
       SetLength(DDList2, UI32);
       DDCount2 := UI32;
       // 0.8.0 (faster decode): the DDList2 table is UI32 contiguous
@@ -3837,18 +3927,39 @@ begin
     DecOutput[Index] := Output;
     LoadResources;
     DecInput[Index].ReadBuffer(StreamCount[Index]^, StreamCount[Index]^.Size);
+    // Integer.MinValue ends the container (what EncData writes); any other
+    // negative count is damage (it ended the decode early, exit 0 and nothing
+    // written)
+    if (StreamCount[Index]^ <> Integer.MinValue) and
+      not InRange(StreamCount[Index]^, 0, DEC_MAXSTREAMS) then
+      Damaged('stream count ' + StreamCount[Index]^.ToString);
     while StreamCount[Index]^ >= 0 do
     begin
       if IsErrored(Tasks) then
         for I := Low(Tasks) to High(Tasks) do
           Tasks[I].RaiseLastError;
       DecInput[Index].ReadBuffer(BlockSize, BlockSize.Size);
+      if not InRange(BlockSize, 0, DEC_MAXBLOCK) then
+        Damaged('block size ' + BlockSize.ToString);
       XXH64_reset(LitState[Index], 0);
       if StreamCount[Index]^ > 0 then
       begin
         MemStream1[Index].Position := 0;
         CopyStreamEx(DecInput[Index], MemStream1[Index],
           StreamCount[Index]^ * SizeOf(TStreamHeader));
+        // every stream header, before anything is sized or indexed from it
+        for J := 0 to StreamCount[Index]^ - 1 do
+        begin
+          StreamHeader := PStreamHeader(MemStream1[Index].Memory) + J;
+          if (StreamHeader^.OldSize < 0) or (StreamHeader^.NewSize < 0) or
+            (StreamHeader^.NewSize > BlockSize) then
+            Damaged(Format('stream #%d: sizes %d, %d', [J, StreamHeader^.OldSize,
+              StreamHeader^.NewSize]));
+          if (StreamHeader^.Kind and DUPLICATED_STREAM <> DUPLICATED_STREAM) and
+            ((StreamHeader^.Codec > High(Codecs)) or
+            not Assigned(Codecs[StreamHeader^.Codec].Restore)) then
+            Damaged(Format('stream #%d: codec %d', [J, StreamHeader^.Codec]));
+        end;
         CurrPos := 0;
         if ((Depth > 0) and (Length(Tasks) > 1)) or
           ((Length(Tasks) > 1) and (StreamCount[Index]^ > 1)) then
@@ -3942,7 +4053,15 @@ begin
       LitCheck(Index, Depth);
       LoadResources;
       DecInput[Index].ReadBuffer(StreamCount[Index]^, StreamCount[Index]^.Size);
+      if (StreamCount[Index]^ <> Integer.MinValue) and
+        not InRange(StreamCount[Index]^, 0, DEC_MAXSTREAMS) then
+        Damaged('stream count ' + StreamCount[Index]^.ToString);
     end;
+    // nothing may follow the end marker: data after it means the marker was
+    // made by damage, and what follows was never decoded
+    if Depth = 0 then
+      if DecInput[Index].Read(UI32, 1) > 0 then
+        Damaged('data after the end');
     if (Depth = 0) and (StoreDD > 0) then
     begin
       LStream2.Wait;
@@ -4331,13 +4450,13 @@ begin
         EncFree;
     finally
       Stopwatch.Stop;
+      ConTask.Wait;   // as in Decode: also on an error
     end;
   end;
   if SCANONLY then
     PrintScanReport
   else if VERBOSE then
     EncodeStats;
-  ConTask.Wait;
   ConTask.Free;
   // After the last redraw of the stats block: printed earlier, the block's
   // cursor-up redraw wrote over it.
@@ -4358,6 +4477,8 @@ var
   Compressed: Byte;
   LInput: TStream;
 begin
+  LInput := nil;
+  Compressed := 0;
   SetLength(Codecs, 0);
   Insert(PrecompINI.Codec, Codecs, Length(Codecs));
   Insert(PrecompINIEx.Codec, Codecs, Length(Codecs));
@@ -4389,6 +4510,10 @@ begin
   try
     DecInit(Input, Output, @Options);
     Input.ReadBuffer(Compressed, Compressed.Size);
+    // 0 stored, 1 fast-lzma2 (-l#), 2 an external program (-e): a damaged
+    // byte here freed the caller's input stream as if it were a wrapper
+    if Compressed > 2 then
+      Damaged('final-stage method ' + Compressed.ToString);
     if Compressed = 1 then
     begin
       LInput := TLZMADecompressStream.Create(Input);
@@ -4406,7 +4531,14 @@ begin
       LInput := Input;
     DecChunk(LInput, Output, 0, 0);
   finally
-    if Compressed > 0 then
+    // The stats thread first, before anything it reads is freed: freeing
+    // LInput can free the input file it shows the position of, and an error
+    // here left it reading a freed stream (an access violation in that
+    // thread, found by fuzzing).
+    Stopwatch.Stop;
+    ConTask.Wait;
+    UIInputStream := nil;
+    if (Compressed > 0) and Assigned(LInput) and (LInput <> Input) then
     begin
       if Compressed = 2 then
         with LInput as TProcessStream do
@@ -4416,16 +4548,11 @@ begin
         end;
       LInput.Free;
     end;
-    try
-      NStream.Free;
-      DecFree;
-    finally
-      Stopwatch.Stop;
-    end;
+    NStream.Free;
+    DecFree;
   end;
   if VERBOSE then
     DecodeStats;
-  ConTask.Wait;
   ConTask.Free;
 end;
 

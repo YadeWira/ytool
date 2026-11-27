@@ -215,9 +215,9 @@ type
 
   TDirInputStream = class(TStream)
   protected type
-    TState = (iNone, iLength, iFilename, iSize, iData);
+    TInState = (iNone, iLength, iFilename, iSize, iData);
   private
-    FState: TState;
+    FState: TInState;
     FPath: String;
     FBaseDir: String;
     FList: TArray<String>;
@@ -234,9 +234,9 @@ type
 
   TDirOutputStream = class(TStream)
   protected type
-    TState = (oNone, oLength, oFilename, oSize, oData);
+    TOutState = (oNone, oLength, oFilename, oSize, oData);
   private
-    FState: TState;
+    FState: TOutState;
     FPath: String;
     FLength: Word;
     FBytes: TBytes;
@@ -1817,7 +1817,7 @@ end;
 constructor TDirInputStream.Create(const APath: String);
 begin
   inherited Create;
-  FState := TState.iNone;
+  FState := TInState.iNone;
   FPath := TPath.GetFullPath(APath);
   if FileExists(FPath) then
     FBaseDir := ExtractFilePath(TPath.GetFullPath(FPath))
@@ -1848,7 +1848,7 @@ begin
   Result := 0;
   if Count <= 0 then
     exit;
-  if FState = TState.iNone then
+  if FState = TInState.iNone then
   begin
     if Succ(FIndex) >= FCount then
       exit;
@@ -1857,9 +1857,9 @@ begin
     FLength := Length(FBytes);
     FPosition := 0;
     FSize := FileSize(FList[FIndex]);
-    FState := TState.iLength;
+    FState := TInState.iLength;
   end;
-  if FState = TState.iLength then
+  if FState = TInState.iLength then
     if FPosition < FLength.Size then
     begin
       LCount := Min(FLength.Size - FPosition, Count);
@@ -1867,12 +1867,12 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FLength.Size then
       begin
-        FState := TState.iFilename;
+        FState := TInState.iFilename;
         FPosition := 0;
       end;
       exit(LCount);
     end;
-  if FState = TState.iFilename then
+  if FState = TInState.iFilename then
     if FPosition < FLength then
     begin
       LCount := Min(FLength - FPosition, Count);
@@ -1880,12 +1880,12 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FLength then
       begin
-        FState := TState.iSize;
+        FState := TInState.iSize;
         FPosition := 0;
       end;
       exit(LCount);
     end;
-  if FState = TState.iSize then
+  if FState = TInState.iSize then
     if FPosition < FSize.Size then
     begin
       LCount := Min(FSize.Size - FPosition, Count);
@@ -1894,17 +1894,17 @@ begin
       if FPosition = FSize.Size then
       begin
         if FSize = 0 then
-          FState := TState.iNone
+          FState := TInState.iNone
         else
         begin
-          FState := TState.iData;
+          FState := TInState.iData;
           FPosition := 0;
           FStream := TFileStream.Create(FList[FIndex], fmShareDenyNone);
         end;
       end;
       exit(LCount);
     end;
-  if FState = TState.iData then
+  if FState = TInState.iData then
     if FPosition < FSize then
     begin
       LCount := Min(FSize - FPosition, Count);
@@ -1912,7 +1912,7 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FSize then
       begin
-        FState := TState.iNone;
+        FState := TInState.iNone;
         FStream.Free;
         FStream := nil;
       end;
@@ -1923,7 +1923,7 @@ end;
 constructor TDirOutputStream.Create(const APath: String);
 begin
   inherited Create;
-  FState := TState.oNone;
+  FState := TOutState.oNone;
   FPath := IncludeTrailingPathDelimiter(TPath.GetFullPath(APath));
   FStream := nil;
 end;
@@ -1944,12 +1944,12 @@ begin
   Result := 0;
   if Count <= 0 then
     exit;
-  if FState = TState.oNone then
+  if FState = TOutState.oNone then
   begin
     FPosition := 0;
-    FState := TState.oLength;
+    FState := TOutState.oLength;
   end;
-  if FState = TState.oLength then
+  if FState = TOutState.oLength then
     if FPosition < FLength.Size then
     begin
       LCount := Min(FLength.Size - FPosition, Count);
@@ -1958,12 +1958,12 @@ begin
       if FPosition = FLength.Size then
       begin
         SetLength(FBytes, FLength);
-        FState := TState.oFilename;
+        FState := TOutState.oFilename;
         FPosition := 0;
       end;
       exit(LCount);
     end;
-  if FState = TState.oFilename then
+  if FState = TOutState.oFilename then
     if FPosition < FLength then
     begin
       LCount := Min(FLength - FPosition, Count);
@@ -1971,12 +1971,12 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FLength then
       begin
-        FState := TState.oSize;
+        FState := TOutState.oSize;
         FPosition := 0;
       end;
       exit(LCount);
     end;
-  if FState = TState.oSize then
+  if FState = TOutState.oSize then
     if FPosition < FSize.Size then
     begin
       LCount := Min(FSize.Size - FPosition, Count);
@@ -1990,19 +1990,19 @@ begin
         FStream := TFileStreamEx.Create(LStr, $100000);
         if FSize = 0 then
         begin
-          FState := TState.oNone;
+          FState := TOutState.oNone;
           FStream.Free;
           FStream := nil;
         end
         else
         begin
-          FState := TState.oData;
+          FState := TOutState.oData;
           FPosition := 0;
         end;
       end;
       exit(LCount);
     end;
-  if FState = TState.oData then
+  if FState = TOutState.oData then
     if FPosition < FSize then
     begin
       LCount := Min(FSize - FPosition, Count);
@@ -2010,7 +2010,7 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FSize then
       begin
-        FState := TState.oNone;
+        FState := TOutState.oNone;
         FStream.Free;
         FStream := nil;
       end;
@@ -5724,6 +5724,11 @@ initialization
 
 // Not freed: a process can still be started while other units finalize.
 SpawnLock := TCriticalSection.Create;
+// 0.9.9d: a pipe whose reader has gone (srep or osrep exiting on bad data
+// while ytool still writes to it, or "ytool decode x - | head") killed ytool
+// with SIGPIPE: no message, exit 141, the partial output left behind. Ignored,
+// the write fails and ytool stops with its error, cleaned up.
+FpSignal(SIGPIPE, SignalHandler(SIG_IGN));
 {$ENDIF}
 
 end.

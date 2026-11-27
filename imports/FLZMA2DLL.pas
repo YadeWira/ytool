@@ -341,6 +341,8 @@ function TLZMADecompressStream.Read(var Buffer; Count: Integer): Integer;
 var
   I: Integer;
   Oup: FL2_outBuffer;
+  LIn, LOut: size_t;
+  LRes: size_t;
 begin
   Result := 0;
   if not FInitialized then
@@ -377,8 +379,15 @@ begin
   Oup.pos := 0;
   while Oup.pos < Oup.size do
   begin
-    if not boolean(FL2_isError(FL2_decompressStream(FCtx, @Oup, @FInp))) then
+    LIn := FInp.pos;
+    LOut := Oup.pos;
+    LRes := FL2_decompressStream(FCtx, @Oup, @FInp);
+    if not boolean(FL2_isError(LRes)) then
     begin
+      // no byte moved either way (damaged data after the end of the frame):
+      // it looped here for ever
+      if (FInp.pos = LIn) and (Oup.pos = LOut) and (FInp.pos < FInp.size) then
+        break;
       if FInp.pos = FInp.size then
       begin
         FInp.src := @FBuffer[0];

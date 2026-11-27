@@ -169,7 +169,11 @@ begin
   end;
 end;
 
-function DecodePNG(InBuff, OutBuff: PByte; Size: NativeInt): Boolean;
+// 0.9.9d: every read and write is bounded. InBuff comes from the container,
+// so a damaged one gave chunk sizes that copied from and to anywhere (found
+// by fuzzing the decoder); a chunk that does not fit is now a failure.
+function DecodePNG(InBuff: PByte; InSize: NativeInt; OutBuff: PByte;
+  Size: NativeInt): Boolean;
 const
   PNG_SIG = $A1A0A0D474E5089;
   PNG_HDR = $52444849;
@@ -200,15 +204,24 @@ begin
     begin
       CurPos1 := 8;
       CurPos2 := 8;
+      if CurPos1 + SizeOf(TPNGStruct) > InSize then
+        exit;
       LStr := PPNGStruct(InBuff + CurPos1)^;
       LStr.Size := EndianSwap(LStr.Size);
       while LStr.Header <> PNG_END do
       begin
+        if (LStr.Size < 0) or (LStr.Size > Size) then
+          exit;
         if (LStr.Header = PNG_DAT) then
           J := SizeOf(TPNGStruct) + CRC.Size
         else
           J := SizeOf(TPNGStruct) + LStr.Size + CRC.Size;
         K := SizeOf(TPNGStruct) + LStr.Size + CRC.Size;
+        if (CurPos1 + J > InSize) or (CurPos2 + K > Size) then
+          exit;
+        if (I = 2) and (LStr.Header = PNG_DAT) and
+          ((ReadPos < 0) or (ReadPos + LStr.Size > InSize)) then
+          exit;
         if I = 2 then
         begin
           if (LStr.Header = PNG_DAT) then
@@ -225,12 +238,16 @@ begin
         end;
         Inc(CurPos1, J);
         Inc(CurPos2, K);
+        if CurPos1 + SizeOf(TPNGStruct) > InSize then
+          exit;
         LStr := PPNGStruct(InBuff + CurPos1)^;
         LStr.Size := EndianSwap(LStr.Size);
       end;
       if LStr.Header = PNG_END then
       begin
         J := SizeOf(TPNGStruct) + LStr.Size + CRC.Size;
+        if (LStr.Size < 0) or (CurPos1 + J > InSize) or (CurPos2 + J > Size) then
+          exit;
         if I = 2 then
           Move((InBuff + CurPos1)^, (OutBuff + CurPos2)^, J);
         Inc(CurPos1, J);
@@ -832,7 +849,7 @@ begin
     PNG_CODEC:
       begin
         Buffer := Funcs^.Allocator(Instance, StreamInfo^.OldSize);
-        if DecodePNG(NewInput, Buffer, StreamInfo^.OldSize) then
+        if DecodePNG(NewInput, StreamInfo^.NewSize, Buffer, StreamInfo^.OldSize) then
           Result := CompareMem(OldInput, Buffer, StreamInfo^.OldSize);
         Funcs^.LogProcess(ZlibCodecs[GetBits(StreamInfo^.Option, 0, 3)],
           PChar(Params), StreamInfo^.OldSize, StreamInfo^.NewSize,
@@ -925,7 +942,7 @@ begin
     PNG_CODEC:
       begin
         Buffer := Funcs^.Allocator(Instance, StreamInfo.OldSize);
-        if DecodePNG(Input, Buffer, StreamInfo.OldSize) then
+        if DecodePNG(Input, StreamInfo.NewSize, Buffer, StreamInfo.OldSize) then
         begin
           Output(Instance, Buffer, StreamInfo.OldSize);
           Result := True;

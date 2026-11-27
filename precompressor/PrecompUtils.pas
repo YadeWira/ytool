@@ -1241,6 +1241,8 @@ function PrecompDecodePatch(PatchBuff: Pointer; PatchSize: Integer;
   OldBuff: Pointer; OldSize: Integer; NewBuff: Pointer;
   NewSize: Integer): Integer;
 begin
+  if (PatchBuff = nil) or (PatchSize <= 0) or (OldSize < 0) then
+    exit(0);
   Result := DecodePatch(PatchBuff, PatchSize, OldBuff, OldSize,
     NewBuff, NewSize);
 end;
@@ -1283,6 +1285,8 @@ var
 
 begin
   Result := 0;
+  if (PatchBuff = nil) or (PatchSize <= 0) or (OldSize <= 0) then
+    exit;
   BufferSize := Min(ZSTDLib.ZSTD_DStreamOutSize, Length(Buffer));
   Ctx := _PrecompVar[Instance].ZSTDCtx2;
   Oup.dst := @Buffer[0];
