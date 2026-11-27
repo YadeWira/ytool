@@ -9,6 +9,7 @@ uses
   Threading, Utils, CliUI, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
   PrecompOodle, PrecompMedia, PrecompReserved, PrecompLZMA, PrecompLZIP, PrecompINI, PrecompINIEx,
+  SrepLibDLL,
   PrecompSearch, PrecompDLL, PrecompEXE, PrecompHelp,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -303,7 +304,7 @@ begin
         Options.Method := S;
     S := ArgParse.AsString('-c', 0, '16mb');
     // Misma guarda que -p: AsString matchea por prefijo, asi que -cfg... cae
-    // aca y su resto se evalua como tamaño. Sin esto -cfgzstd dejaba S='fgzstd'
+    // aca y su resto se evalua como tamaÃ±o. Sin esto -cfgzstd dejaba S='fgzstd'
     // y el evaluador tiraba EParserException.
     if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
       S := '16mb';
@@ -373,7 +374,9 @@ begin
               // La degradacion a dedup en memoria era silenciosa: pedias -dd1
               // y obtenias -dd sin una linea de aviso. Si una etapa no puede
               // correr, que se vea.
-              if FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
+              // libsrep next to ytool counts as srep (and is used first)
+              if SrepLibDLL.DLLLoaded or
+                FileExists(ExpandPath(PluginsPath + SREPEXE, True)) then
               begin
                 StoreDD := DDMethod;
                 if StoreDD > 0 then
@@ -549,10 +552,10 @@ begin
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
-    // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
+    // aca y su resto se toma como tamaÃ±o de cache. Con -pa eso dejaba S='a',
     // que la cadena de ReplaceText no toca y termina evaluandose como un
-    // tamaño invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
-    // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
+    // tamaÃ±o invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
+    // que sigue a -p no arranca con digito no es un tamaÃ±o sino otro flag.
     if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
       S := '0mb';
     S := ReplaceText(S, 'KB', '* 1024^1');
@@ -678,10 +681,10 @@ begin
 {$IFDEF CPU64}
     S := ArgParse.AsString('-p', 0, '0mb');
     // AsString hace prefix-match, asi que cualquier flag que empiece con -p cae
-    // aca y su resto se toma como tamaño de cache. Con -pa eso dejaba S='a',
+    // aca y su resto se toma como tamaÃ±o de cache. Con -pa eso dejaba S='a',
     // que la cadena de ReplaceText no toca y termina evaluandose como un
-    // tamaño invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
-    // que sigue a -p no arranca con digito no es un tamaño sino otro flag.
+    // tamaÃ±o invalido: precomp salia con exit 1 y un .ytp de 22 bytes. Si lo
+    // que sigue a -p no arranca con digito no es un tamaÃ±o sino otro flag.
     if (Length(S) = 0) or (S[1] < '0') or (S[1] > '9') then
       S := '0mb';
     S := ReplaceText(S, 'KB', '* 1024^1');
@@ -1372,7 +1375,7 @@ begin
       DB.Option := StreamInfo.Option;
       Move(StreamInfo.Checksum, DB.Checksum, SizeOf(DB.Checksum));
       DB.Status := StreamInfo.Status;
-      // 0.8.3: same as DDInfo1 — geometric growth; the live count is DBCount[A]
+      // 0.8.3: same as DDInfo1 â geometric growth; the live count is DBCount[A]
       // (the consumer at ~2410 writes DBInfo[W,K] for K:=0..DBCount[W]-1, does not use Length).
       if DBCount[A] >= Length(DBInfo[A]) then
         SetLength(DBInfo[A], Max(4, Length(DBInfo[A]) * 2));
@@ -2580,7 +2583,9 @@ begin
       Result := Result + ' "--temp=' + ExcludeTrailingPathDelimiter(SrepDir) + '"';
     if SrepSeed <> '' then
       Result := Result + ' --seed=0x' + Copy(SrepSeed, 1, 16);
-    Result := Result + ' -t' + Threads.ToString + ' ' + Input + ' -';
+    // osrep 0.0.18 runs -m6 on up to 8 threads; more barely changes the time
+    // and costs memory (measured by osrep on 1 GB of ytool's output)
+    Result := Result + ' -t' + Min(Threads, 8).ToString + ' ' + Input + ' -';
   end
   else
   begin
@@ -2613,6 +2618,8 @@ end;
 // says so when it is missing (it used to be a bare read error).
 procedure DDRequire;
 begin
+  if (StoreDD <> DD_OSREP) and SrepLibDLL.DLLLoaded then
+    exit;
   if not FileExists(ExpandPath(PluginsPath + DDExe, True)) then
     raise Exception.CreateFmt('this file was made with %s (-dd%s): put "%s" ' +
       'next to ytool to decode it', [DDName, IfThen(StoreDD = DD_OSREP, 'o',
@@ -3193,31 +3200,38 @@ begin
         TBufferedStream(LOutput).Flush;
         if StoreDD > 0 then
         begin
+          // Closed before the deduplicator opens it: on Windows a file ytool
+          // still holds cannot be opened by osrep ("being used by another
+          // process", exit 3); srep's fopen happened to share it.
+          FreeAndNil(LOutput);
           // S is relative to the user's directory; srep starts in SrepDir.
           SrepProc := TProcessStream.Create(ExpandPath(PluginsPath + DDExe,
             True), DDEncodeArgs(Index, Max(1, Length(Tasks) div
             AtomicIncrement(OsrepActive)), '"' + ExpandFileName(S) + '"'),
             SrepDir, nil, Output, ErrStream, SrepSeedEnv);
           try
-            if not SrepProc.Execute then
-              raise Exception.Create(DDName + ' could not be started: ' +
-                ExpandPath(PluginsPath + DDExe, True));
-            while SrepProc.Running do
-            begin
+            try
+              if not SrepProc.Execute then
+                raise Exception.Create(DDName + ' could not be started: ' +
+                  ExpandPath(PluginsPath + DDExe, True));
+              while SrepProc.Running do
+              begin
+                EncInfo.SrepSize := SrepProc.OutSize;
+                Sleep(100);
+              end;
+              SrepFinish(SrepProc, ErrStream, 'compressing');
               EncInfo.SrepSize := SrepProc.OutSize;
-              Sleep(100);
+            finally
+              AtomicDecrement(OsrepActive);
+              SrepProc.Free;
             end;
-            SrepFinish(SrepProc, ErrStream, 'compressing');
-            EncInfo.SrepSize := SrepProc.OutSize;
-          finally
-            AtomicDecrement(OsrepActive);
-            SrepProc.Free;
-            // also when srep failed: the scratch copy is not left behind
-            if ExceptObject <> nil then
-            begin
-              LOutput.Free;
-              DeleteFile(S);
-            end;
+          except
+            // also when the deduplicator failed: the scratch copy is not
+            // left behind. An except block, not "ExceptObject <> nil" in the
+            // finally: on i386-win32 that is nil there, and every failure
+            // left the copy (measured on Windows 10, x86 only).
+            DeleteFile(S);
+            raise;
           end;
         end
         else
@@ -3902,7 +3916,7 @@ begin
               if ((DDIndex2 < DDCount2) and (DDIndex1 = DDList2[DDIndex2].Index))
               then
               begin
-                // 0.8.3: same as 2643 — no per-stream readjustment of CalcDupSysMem.
+                // 0.8.3: same as 2643 â no per-stream readjustment of CalcDupSysMem.
                 DataMgr.Add(DDIndex1, StreamHeader^.OldSize,
                   DDList2[DDIndex2].Count);
                 DataMgr.Write(DDIndex1,

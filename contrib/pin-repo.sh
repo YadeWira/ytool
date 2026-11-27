@@ -96,14 +96,14 @@ lz4_lib32() {
 # external deduplicator for -ddo, as released, checked against the SHA-256 of
 # that release's SHA256SUMS. Its format v7 (-m6, the default) is frozen, so a
 # .ytp made with one release decodes with the later ones.
-OSREP_VER="0.0.17"
+OSREP_VER="0.0.18"
 fetch_osrep() {
   local asset="$1" dest="$2" sum
   case "$asset" in
-    osrep-linux-x86_64)       sum=d3c72db52b6eb032f73f3dd74cc0027a372afaa50697b3ca5925c0f02b5978b7 ;;
-    osrep-linux-x86)          sum=fded491be4ca6f300dbd900b4b2305b72cfc71d7296012b682a451aa58ec1c82 ;;
-    osrep-windows-x86_64.exe) sum=21c29b092c8ecd149930da2478733e9ff2fee0943b131ce77cb8e29d7cffdb2f ;;
-    osrep-windows-x86.exe)    sum=b7311dc3fa0ceb7a71fcb2d20b6ff1496ee6ec9c113acf0af97a8a9845216074 ;;
+    osrep-linux-x86_64)       sum=d1a36a9ddf5d4eeb12ecca01e17ef2a73b4eb64cdb61ae154cbee7506a552094 ;;
+    osrep-linux-x86)          sum=d19c7831dde49d680c7ea04ac03b583f231236fbd06ee49bfe98c597357c27fb ;;
+    osrep-windows-x86_64.exe) sum=b80f0905f80c124d582f4a9624ffb3784346409140ed52348c97ed6d438c1660 ;;
+    osrep-windows-x86.exe)    sum=8dcec665d8c774831538e9d43090bc0ed57aceecc91937f2b0563beedd595817 ;;
     *) echo "   fetch_osrep: no pinned sum for $asset" >&2; return 1 ;;
   esac
   echo "==> OSREP $OSREP_VER ($(basename "$dest"))"

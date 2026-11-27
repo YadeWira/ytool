@@ -69,12 +69,14 @@ packJPG, packPNG and packMP3 were retired in 0.9.9a in favour of this family.
 
 ¹ SREP's sources are "All rights reserved", so ytool does not ship it. Put `srep64`/`srep.exe` next to
 ytool to use `-dd1`…`-dd5` ([personal builds](https://github.com/YadeWira/srep-builds), 3.94 or later:
-3.93a can write archives that do not decompress, and ytool warns about it); without it ytool says so and
-uses `-dd`. If srep fails, precomp and decode fail with srep's own message.
+3.93a can write archives that do not decompress, and ytool warns about it), or its library,
+`libsrep.so`/`srep.dll` (3.97 or later), which runs srep inside ytool and is used first when both are
+there; the archives are the same either way. Without either, ytool says so and uses `-dd`. If srep fails,
+precomp and decode fail with srep's own message.
 
 ² **`-ddo`**: [OSREP](https://github.com/YadeWira/omega-srep) (MIT) as the external deduplicator, its
 parameters in `-osp<params>` (joined with `:`, each passed with a `-`: `-ospm3:l64`). The packages
-include OSREP 0.0.17 (`osrep` / `osrep.exe` next to ytool). Its format v7 (`-m6`, the default) is
+include OSREP 0.0.18 (`osrep` / `osrep.exe` next to ytool). Its format v7 (`-m6`, the default) is
 frozen, so `.ytp` files made with it keep decoding. Measured on 870 MB: the size of srep's `-dd5`,
 with a slower encode.
 

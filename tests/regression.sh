@@ -359,6 +359,29 @@ if [ -x "$XTOOL" ] && [ -f "$CORPUS/10_random_2m.bin" ]; then
   else echo "-- *** -mlz4 sobre 2 MB aleatorios tardo $((S1 - S0)) s *** --"; fail=$((fail+1)); fi
 fi
 
+# --- libsrep: srep como libreria, con prioridad sobre el programa -------------
+# LIBSREP=<libsrep.so de srep-builds 3.97+>. Con la libreria junto a ytool y un
+# srep64 falso que siempre falla, -dd3/-dd5 tienen que funcionar (se usa la
+# libreria) y dar el mismo .ytp que el programa con la misma semilla.
+if [ -x "$XTOOL" ] && [ -f "${LIBSREP:-}" ] && [ -f "$XDIR/srep64" ] && [ -f "$CORPUS/23_dup_streams.bin" ]; then
+  LB="$WORK/libsrep"; rm -rf "$LB"; mkdir -p "$LB/lib" "$LB/prog"; lok=1
+  for d in lib prog; do cp "$XABS" "$LB/$d/ytool"; cp "$XDIR"/*.so "$LB/$d/" 2>/dev/null; rm -f "$LB/$d/libsrep.so"; done
+  cp "$LIBSREP" "$LB/lib/libsrep.so"
+  printf '#!/bin/sh\necho "  ERROR! the program ran instead of the library" >&2\nexit 4\n' > "$LB/lib/srep64"; chmod +x "$LB/lib/srep64"
+  cp "$XDIR/srep64" "$LB/prog/srep64"
+  K=0011223344556677889900112233445566778899001122334455667788990011
+  for m in -dd3 -dd5; do
+    for d in lib prog; do
+      "$LB/$d/ytool" precomp -mzlib $m -seed$K "$CORPUS/23_dup_streams.bin" "$LB/$d$m.ytp" > "$LB/$d.log" 2>&1 \
+        && "$LB/$d/ytool" decode "$LB/$d$m.ytp" "$LB/$d.out" >/dev/null 2>&1 \
+        && cmp -s "$CORPUS/23_dup_streams.bin" "$LB/$d.out" || { lok=0; echo "   libsrep $d $m: $(tail -1 "$LB/$d.log")"; }
+    done
+    cmp -s "$LB/lib$m.ytp" "$LB/prog$m.ytp" || { lok=0; echo "   libsrep $m: the library's .ytp differs from the program's"; }
+  done
+  if [ "$lok" = 1 ]; then echo "-- libsrep: usada antes que el programa, mismos bytes (-dd3, -dd5) --"; pass=$((pass+1))
+  else echo "-- *** libsrep: fallo *** --"; fail=$((fail+1)); fi
+fi
+
 # --- -ddo: OSREP como dedup externo -----------------------------------------
 # Corre si hay un osrep junto a ytool (no viene en el repo; releases de
 # YadeWira/omega-srep). Ida y vuelta con y sin -osp, y un .ytp hecho con -ddo

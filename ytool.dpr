@@ -70,6 +70,7 @@ uses
   ZSTDDLL in 'imports\ZSTDDLL.pas',
   LibDeflateDLL in 'imports\LibDeflateDLL.pas',
   LZlibDLL in 'imports\LZlibDLL.pas',
+  SrepLibDLL in 'imports\SrepLibDLL.pas',
   lz4 in 'sources\lz4.pas',
   PrecompMain in 'precompressor\PrecompMain.pas',
   PrecompHelp in 'precompressor\PrecompHelp.pas',
@@ -116,7 +117,7 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
-  YTOOL_VERSION = '0.9.9b';
+  YTOOL_VERSION = '0.9.9c';
 
 procedure ProgramInfo;
 begin

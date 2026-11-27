@@ -282,10 +282,25 @@ type
     procedure Flush;
   end;
 
+  // A program run inside this process instead of being started: the same
+  // command line, and the three handles it would have as stdin, stdout and
+  // stderr (it closes them before returning, as a child process does when
+  // it exits). Returns the program's exit code. srep's library (libsrep)
+  // registers one; see RegisterInProcess.
+  TInProcessRunner = function(const CommandLine, WorkDir: String;
+    const Environment: TStringArray; InH, OutH, ErrH: THandle): Integer;
+
   TProcessStream = class(TStream)
   private
     FInput, FOutput, FError: TStream;
     FTask, FTask2: TTask;
+    // in-process mode (a runner registered for FExecutable's name)
+    FRunner: TInProcessRunner;
+    FLibIn, FLibOut, FLibErr: THandle;
+    FChildIn, FChildOut, FChildErr: THandle;
+    FLibTask: TTask;
+    FLibExit: Integer;
+    FLibRunning: Boolean;
 {$IFDEF MSWINDOWS}
     FProcessInfo: TProcessInformation;
     FStdinr, FStdinw: THandle;
@@ -299,6 +314,13 @@ type
     FEnvironment: TStringArray;
     FInSize, FOutSize: Int64;
     FExitCode: Integer;
+    function LibExecute: Boolean;
+    procedure LibRunTask;
+    procedure LibReadTask;
+    procedure LibWriteTask;
+    procedure LibErrorTask;
+    function LibDone: Boolean;
+    procedure LibFree;
     procedure ExecReadTask;
     procedure ExecWriteTask;
     procedure ExecErrorTask;
@@ -630,7 +652,14 @@ function GetCmdStr(CommandLine: String; Index: Integer;
   KeepQuotes: Boolean = False): string;
 function GetCmdCount(CommandLine: String): Integer;
 
+// From now on, a TProcessStream for a program with one of these file names
+// runs Runner in this process instead of starting the program.
+procedure RegisterInProcess(const ExeNames: array of String;
+  Runner: TInProcessRunner);
+
 implementation
+
+function FindInProcess(const Executable: String): TInProcessRunner; forward;
 
 {$IFDEF UNIX}
 var
@@ -2199,11 +2228,13 @@ begin
   FOutSize := 0;
   FTask := TTask.Create;
   FTask2 := TTask.Create;
+  FRunner := FindInProcess(AExecutable);
 end;
 
 {$IFDEF MSWINDOWS}
 destructor TProcessStream.Destroy;
 begin
+  LibFree;
   CloseHandleEx(FStdinr);
   CloseHandleEx(FStdinw);
   CloseHandleEx(FStdoutr);
@@ -2221,6 +2252,14 @@ var
   BytesRead: DWORD;
 begin
   Result := 0;
+  if Assigned(FRunner) then
+  begin
+    if Assigned(FOutput) then
+      raise EReadError.CreateRes(@SReadError);
+    Result := Max(0, FileRead(FLibOut, Buffer, Count));
+    Inc(FOutSize, Result);
+    exit;
+  end;
   if Assigned(FOutput) then
     raise EReadError.CreateRes(@SReadError);
   if ReadFile(FStdoutr, Buffer, Count, BytesRead, nil) then
@@ -2234,6 +2273,17 @@ var
   Res: Boolean;
 begin
   Result := 0;
+  if Assigned(FRunner) then
+  begin
+    if Assigned(FInput) then
+      raise EWriteError.CreateRes(@SWriteError);
+    if Count = 0 then
+      CloseHandleEx(FLibIn)
+    else
+      Result := Max(0, FileWrite(FLibIn, Buffer, Count));
+    Inc(FInSize, Result);
+    exit;
+  end;
   if Assigned(FInput) then
     raise EWriteError.CreateRes(@SWriteError);
   if Count = 0 then
@@ -2298,8 +2348,41 @@ var
   StartupInfo: TStartupInfo;
   dwExitCode: DWORD;
   LWorkDir: PChar;
+  EnvBlock: AnsiString;
+  EnvPtr: Pointer;
+  I, J: Integer;
+  S: String;
+  Overridden: Boolean;
 begin
   Result := False;
+  if Assigned(FRunner) then
+    exit(LibExecute);
+  // The environment the caller adds (SREP_SEED_HEX for srep, from -seed) was
+  // never passed here: CreateProcess got nil, the parent's environment, so on
+  // Windows -seed did not reach srep and its archives were not reproducible.
+  // A block of the parent's variables, with these added or replaced.
+  EnvPtr := nil;
+  if Length(FEnvironment) > 0 then
+  begin
+    EnvBlock := '';
+    for I := 1 to GetEnvironmentVariableCount do
+    begin
+      S := GetEnvironmentString(I);
+      if S = '' then
+        continue;
+      Overridden := False;
+      for J := Low(FEnvironment) to High(FEnvironment) do
+        if (Pos('=', S) > 1) and SameText(Copy(S, 1, Pos('=', S)),
+          Copy(FEnvironment[J], 1, Pos('=', FEnvironment[J]))) then
+          Overridden := True;
+      if not Overridden then
+        EnvBlock := EnvBlock + AnsiString(S) + #0;
+    end;
+    for J := Low(FEnvironment) to High(FEnvironment) do
+      EnvBlock := EnvBlock + AnsiString(FEnvironment[J]) + #0;
+    EnvBlock := EnvBlock + #0;
+    EnvPtr := PAnsiChar(EnvBlock);
+  end;
   CreatePipe(FStdinr, FStdinw, @PipeSecurityAttributes, 0);
   CreatePipe(FStdoutr, FStdoutw, @PipeSecurityAttributes, 0);
   CreatePipe(FStderrr, FStderrw, @PipeSecurityAttributes, 0);
@@ -2319,7 +2402,7 @@ begin
   else
     LWorkDir := Pointer(GetCurrentDir);
   if CreateProcess(nil, PChar('"' + FExecutable + '" ' + FCommandLine), nil,
-    nil, True, 0, nil, LWorkDir, StartupInfo, FProcessInfo) then
+    nil, True, 0, EnvPtr, LWorkDir, StartupInfo, FProcessInfo) then
   begin
     CloseHandleEx(FProcessInfo.hThread);
     CloseHandleEx(FStdinr);
@@ -2367,7 +2450,10 @@ end;
 
 procedure TProcessStream.Wait;
 begin
-  WaitForSingleObject(FProcessInfo.hProcess, INFINITE);
+  if Assigned(FRunner) then
+    FLibTask.Wait
+  else
+    WaitForSingleObject(FProcessInfo.hProcess, INFINITE);
 end;
 
 function TProcessStream.Done: Boolean;
@@ -2375,6 +2461,8 @@ var
   dwExitCode: DWORD;
 begin
   Result := False;
+  if Assigned(FRunner) then
+    exit(LibDone);
   CloseHandleEx(FStdinw);
   CloseHandleEx(FStdoutr);
   CloseHandleEx(FStderrr);
@@ -2391,11 +2479,15 @@ end;
 
 function TProcessStream.Running: Boolean;
 begin
-  Result := WaitForSingleObject(FProcessInfo.hProcess, 0) = WAIT_TIMEOUT;
+  if Assigned(FRunner) then
+    Result := FLibRunning
+  else
+    Result := WaitForSingleObject(FProcessInfo.hProcess, 0) = WAIT_TIMEOUT;
 end;
 {$ELSE}
 destructor TProcessStream.Destroy;
 begin
+  LibFree;
   FProcess.Free;
   FTask.Free;
   FTask2.Free;
@@ -2406,6 +2498,12 @@ function TProcessStream.Read(var Buffer; Count: LongInt): LongInt;
 begin
   if Assigned(FOutput) then
     raise EReadError.CreateRes(@SReadError);
+  if Assigned(FRunner) then
+  begin
+    Result := Max(0, FileRead(FLibOut, Buffer, Count));
+    Inc(FOutSize, Result);
+    exit;
+  end;
   Result := FProcess.Output.Read(Buffer, Count);
   Inc(FOutSize, Result);
 end;
@@ -2415,6 +2513,15 @@ begin
   Result := 0;
   if Assigned(FInput) then
     raise EWriteError.CreateRes(@SWriteError);
+  if Assigned(FRunner) then
+  begin
+    if Count = 0 then
+      CloseHandleEx(FLibIn)
+    else
+      Result := Max(0, FileWrite(FLibIn, Buffer, Count));
+    Inc(FInSize, Result);
+    exit;
+  end;
   if Count = 0 then
     FProcess.CloseInput
   else
@@ -2475,6 +2582,8 @@ var
   I: Integer;
 begin
   Result := False;
+  if Assigned(FRunner) then
+    exit(LibExecute);
   FProcess := TProcess.Create(nil);
   FProcess.Executable := '/bin/sh';
   FProcess.Parameters.Add('-c');
@@ -2517,11 +2626,16 @@ end;
 
 procedure TProcessStream.Wait;
 begin
-  FProcess.WaitOnExit;
+  if Assigned(FRunner) then
+    FLibTask.Wait
+  else
+    FProcess.WaitOnExit;
 end;
 
 function TProcessStream.Done: Boolean;
 begin
+  if Assigned(FRunner) then
+    exit(LibDone);
   FProcess.CloseInput;
   FTask.Wait;
   FTask2.Wait;
@@ -2535,9 +2649,187 @@ end;
 
 function TProcessStream.Running: Boolean;
 begin
-  Result := FProcess.Running;
+  if Assigned(FRunner) then
+    Result := FLibRunning
+  else
+    Result := FProcess.Running;
 end;
 {$ENDIF}
+
+// ---- in-process mode ------------------------------------------------------
+
+var
+  InProcessNames: TArray<String>;
+  InProcessRunners: TArray<TInProcessRunner>;
+
+procedure RegisterInProcess(const ExeNames: array of String;
+  Runner: TInProcessRunner);
+var
+  I: Integer;
+begin
+  for I := Low(ExeNames) to High(ExeNames) do
+  begin
+    Insert(ExeNames[I], InProcessNames, Length(InProcessNames));
+    Insert(Runner, InProcessRunners, Length(InProcessRunners));
+  end;
+end;
+
+function FindInProcess(const Executable: String): TInProcessRunner;
+var
+  I: Integer;
+begin
+  Result := nil;
+  for I := Low(InProcessNames) to High(InProcessNames) do
+    if SameText(ExtractFileName(Executable), InProcessNames[I]) then
+      exit(InProcessRunners[I]);
+end;
+
+// A pipe whose ends no child process inherits.
+function LibPipe(out R, W: THandle): Boolean;
+{$IFDEF UNIX}
+var
+  Fds: TFilDes;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  Result := CreatePipe(R, W, nil, 0);
+{$ELSE}
+  Result := FpPipe(Fds) = 0;
+  if Result then
+  begin
+    R := Fds[0];
+    W := Fds[1];
+    FpFcntl(R, F_SETFD, 1); // FD_CLOEXEC
+    FpFcntl(W, F_SETFD, 1);
+  end;
+{$ENDIF}
+end;
+
+procedure TProcessStream.LibRunTask;
+begin
+  try
+    FLibExit := FRunner(FCommandLine, FWorkDir, FEnvironment, FChildIn,
+      FChildOut, FChildErr);
+  finally
+    // the runner closed them
+    FChildIn := 0;
+    FChildOut := 0;
+    FChildErr := 0;
+    FLibRunning := False;
+  end;
+end;
+
+procedure TProcessStream.LibReadTask;
+var
+  Buffer: array [0 .. 65535] of Byte;
+  N: Integer;
+begin
+  repeat
+    N := FileRead(FLibOut, Buffer[0], Length(Buffer));
+    if N > 0 then
+    begin
+      Inc(FOutSize, N);
+      FOutput.WriteBuffer(Buffer[0], N);
+    end;
+  until N <= 0;
+  CloseHandleEx(FLibOut);
+end;
+
+procedure TProcessStream.LibWriteTask;
+var
+  Buffer: array [0 .. 65535] of Byte;
+  N: Integer;
+begin
+  N := FInput.Read(Buffer[0], Length(Buffer));
+  while (N > 0) and (FileWrite(FLibIn, Buffer[0], N) = N) do
+  begin
+    Inc(FInSize, N);
+    N := FInput.Read(Buffer[0], Length(Buffer));
+  end;
+  CloseHandleEx(FLibIn);
+end;
+
+procedure TProcessStream.LibErrorTask;
+var
+  Buffer: array [0 .. 65535] of Byte;
+  N: Integer;
+begin
+  repeat
+    N := FileRead(FLibErr, Buffer[0], Length(Buffer));
+    if (N > 0) and Assigned(FError) then
+      FError.WriteBuffer(Buffer[0], N);
+  until N <= 0;
+  CloseHandleEx(FLibErr);
+end;
+
+function TProcessStream.LibExecute: Boolean;
+begin
+  Result := False;
+  if not(LibPipe(FChildIn, FLibIn) and LibPipe(FLibOut, FChildOut) and
+    LibPipe(FLibErr, FChildErr)) then
+    RaiseLastOSError;
+  FLibRunning := True;
+  FLibExit := -1;
+  FLibTask := TTask.Create;
+  FLibTask.Perform(LibRunTask);
+  FLibTask.Start;
+  FTask2.Perform(LibErrorTask);
+  FTask2.Start;
+  if Assigned(FOutput) and not Assigned(FInput) then
+  begin
+    FTask.Perform(LibReadTask);
+    FTask.Start;
+    Result := True;
+  end
+  else if Assigned(FInput) and not Assigned(FOutput) then
+  begin
+    FTask.Perform(LibWriteTask);
+    FTask.Start;
+    Result := True;
+  end
+  else if Assigned(FInput) and Assigned(FOutput) then
+  begin
+    FTask.Perform(LibReadTask);
+    FTask.Start;
+    LibWriteTask;
+    FTask.Wait;
+    FLibTask.Wait;
+    if FTask.Status <> TThreadStatus.tsErrored then
+      FTask.RaiseLastError;
+    Result := FLibExit = 0;
+  end
+  else
+    Result := True;
+end;
+
+function TProcessStream.LibDone: Boolean;
+begin
+  CloseHandleEx(FLibIn);
+  FTask.Wait;
+  FTask2.Wait;
+  FLibTask.Wait;
+  FExitCode := FLibExit;
+  if FTask.Status <> TThreadStatus.tsErrored then
+    FTask.RaiseLastError;
+  Result := FLibExit = 0;
+end;
+
+procedure TProcessStream.LibFree;
+begin
+  if not Assigned(FRunner) then
+    exit;
+  if Assigned(FLibTask) then
+  begin
+    CloseHandleEx(FLibIn);
+    FLibTask.Wait;
+    FTask.Wait;
+    FTask2.Wait;
+    FreeAndNil(FLibTask);
+  end;
+  CloseHandleEx(FLibIn);
+  CloseHandleEx(FLibOut);
+  CloseHandleEx(FLibErr);
+end;
 
 constructor TStoreStream.Create(ASize: NativeInt);
 begin

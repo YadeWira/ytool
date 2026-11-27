@@ -14,7 +14,7 @@ wavpackdll.dll       WavPack (-mwavpack)
 fast-lzma2.dll       compresion final (-l#)
 libdeflate.dll       libdeflate 1.26: deflate que zlib no reproduce (-mlibdeflate)
 lzlib.dll            lzlib 1.16: miembros lzip, .lz (-mlzip)
-osrep.exe            OSREP 0.0.17 (MIT): dedup externa (-ddo)
+osrep.exe            OSREP 0.0.18 (MIT): dedup externa (-ddo)
 zlib1.dll            zlib 1.4, necesaria para arrancar
 
 Sin una DLL, su codec no hace nada: guarda los streams tal cual, sin error.
@@ -23,8 +23,8 @@ Las DLL solo importan DLL del sistema (KERNEL32, msvcrt, y user32/oleaut32 en pj
 x86 y x64 escriben los mismos bytes: un .ytp hecho en una se decodifica en la otra.
 
 srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
-pones srep.exe junto a ytool.exe (builds: https://github.com/YadeWira/srep-builds);
-sin el, ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP, que viene incluido.
+pones srep.exe junto a ytool.exe (builds: https://github.com/YadeWira/srep-builds),
+o su libreria srep.dll (3.97+), que se usa antes que el programa; sin ninguno, ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP, que viene incluido.
 Oodle tampoco: es propietario; si tienes oo2core/oo2ext, ponla junto a ytool.exe.
 
 Uso (todas las opciones: ytool.exe help precomp):
