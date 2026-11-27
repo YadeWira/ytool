@@ -113,6 +113,16 @@ restaurar. Compilar las bibliotecas **dentro** del binario fija sus versiones y 
 - Revisar que todas las licencias permitan distribuirlas dentro de un mismo binario.
 - Los plugins externos siguen sirviendo para codecs nuevos o de terceros.
 
+**Avance en 0.9.9f:** ya van dentro del binario, en las cuatro plataformas, con los mismos bytes que
+las bibliotecas que reemplazan: **zlib** 1.4 (deflate e inflate; ytool ya no depende de la libz del
+sistema ni de `zlib1.dll`), **lz4** 1.11.1 (con el parche de 32 bits del modo rápido), **libdeflate** 1.26
+y **lzlib** 1.16. Además, `decode` avisa al empezar si falta la biblioteca de un codec que el archivo
+nombra, y el error dice cuál. Lecciones para el resto: en Windows, FPC no enlaza bien objetos de mingw
+unidos con `ld -r` (van uno por uno), x64 necesita `-mcmodel=small`, y los externos sin tipo necesitan
+`cdecl` para el guion bajo de i386-win32. Faltan: zstd (1.6.0 para `-mzstd`, que choca con el zstd
+1.5.2 interno), lzo, FLAC y WavPack (en Linux, todavía las del sistema), fast-lzma2 y las de C++
+(preflate, pja, brunsli).
+
 **Lo que no puede ir adentro:**
 - **srep** (`-dd1`..`-dd5`), por su licencia ("All rights reserved"). Un `.ytp` con `-dd1`..`-dd5`
   seguirá necesitando srep al lado. `-dd`, que es interno, no.

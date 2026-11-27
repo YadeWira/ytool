@@ -43,6 +43,7 @@ flac_l3|60_wav_pcm.bin|-mflac -l3
 wavpack_l3|60_wav_pcm.bin|-mwavpack -l3
 lz4f_l3|70_lz4f.bin|-mlz4f -l3
 lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3
+lz4f_fast_l3|75_lz4f_fast.bin|-mlz4f -l3
 zstd_l3|77_zstd_nocheck.bin|-mzstd -l3
 '
 made=0; skipped=0

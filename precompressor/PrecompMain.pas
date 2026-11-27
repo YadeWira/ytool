@@ -3590,7 +3590,12 @@ begin
         VerifyOn[Index2] := False;
         // a codec slot with no names (a retired codec) has nothing at [Y]
         // (an if, not IfThen: IfThen evaluates both)
-        if Length(Codecs[SH^.Codec].Names) > 0 then
+        if (Length(Codecs[SH^.Codec].Names) > 0) and
+          (CodecMissingLib(Codecs[SH^.Codec].Names[Y]) <> '') then
+          raise Exception.CreateFmt('stream #%d needs ''%s'', whose library ' +
+            '%s is not next to ytool', [X, Codecs[SH^.Codec].Names[Y],
+            CodecMissingLib(Codecs[SH^.Codec].Names[Y])])
+        else if Length(Codecs[SH^.Codec].Names) > 0 then
           raise Exception.CreateFmt(SPrecompError3,
             [Codecs[SH^.Codec].Names[Y], X, Pos, Depth])
         else
@@ -3645,6 +3650,7 @@ end;
 procedure DecInit(Input, Output: TStream; Options: PDecodeOptions);
 var
   I, J, K: Integer;
+  S: String;
   I64: Int64;
   B: Byte;
   Bytes: TBytes;
@@ -3717,6 +3723,20 @@ begin
     WorkLastSize[I] := 0;
   end;
   CodecInit(Options^.Threads, Options^.Method, False);
+  // 0.9.9f: name the missing library before the decode starts, instead of
+  // "Error in the method 'pja'" half way. The method list names everything
+  // the encode was asked for, used or not: a warning here, the error comes
+  // only if a stream needs it (in Restore).
+  I := 0;
+  while PrecompGetCodec(PChar(Options^.Method), I, False) <> '' do
+  begin
+    S := CodecMissingLib(PrecompGetCodec(PChar(Options^.Method), I, False));
+    if S <> '' then
+      WriteLine(Format('warning: this file names ''%s'', whose library %s is ' +
+        'not next to ytool: a stream that used it cannot be restored',
+        [PrecompGetCodec(PChar(Options^.Method), I, False), S]));
+    Inc(I);
+  end;
   SetLength(ComVars2, Options^.Depth);
   for J := Low(ComVars2) to High(ComVars2) do
     with ComVars2[J] do

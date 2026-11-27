@@ -40,6 +40,7 @@ implementation
 {$L divdi3.x86.o}
 {$L umoddi3.x86.o}
 {$L moddi3.x86.o}
+{$L ctzdi2.x86.o}   // lz4 with a 64-bit reg_t (0.9.9f)
 {$L ashldi3.x86.o}
 {$L ashrdi3.x86.o}
 {$L lshrdi3.x86.o}

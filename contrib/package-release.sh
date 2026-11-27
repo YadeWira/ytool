@@ -61,10 +61,10 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so libdeflate.so liblz.so osrep"
+LINUX_FILES="ytool libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so osrep"
 # Programas que viajan junto a ytool.exe en los zips (OSREP para -ddo, MIT)
 WIN_EXES="osrep"
-WIN_DLLS="lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 liblz4 libzstd libdeflate lzlib"
+WIN_DLLS="lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 libzstd"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
 # de imports es una dependencia que el usuario no tiene.
@@ -91,7 +91,7 @@ bash contrib/build-plugins-linux.sh >/dev/null 2>&1 || die "build-plugins-linux.
 mkdir -p .fpcout
 fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/ZLibStatic \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
     -oytool ytool.dpr >/dev/null 2>&1 || die "fpc fallo"
 ok "construido"
 

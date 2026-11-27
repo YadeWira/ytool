@@ -42,6 +42,57 @@ implementation
 var
   Lib: TLibImport;
 
+// 0.9.9f: lzlib 1.16 built in (contrib/build-native-*.sh -> StaticLibs/), from
+// the same pinned sources as the library that was shipped next to ytool.
+// Untyped externals: only their addresses are taken.
+{$IFDEF LINUX}
+{$IFDEF CPUX86_64}
+{$L lzlib.linux.x64.o}
+{$ENDIF}
+{$IFDEF CPUI386}
+{$L lzlib.linux.x86.o}
+{$ENDIF}
+{$ENDIF}
+{$IFDEF WIN64}
+{$L lzlib.win64.x64.o}
+{$ENDIF}
+{$IFDEF WIN32}
+{$L lzlib.win32.x86.o}
+{$ENDIF}
+procedure b_LZ_compress_open; cdecl; external name 'LZ_compress_open';
+procedure b_LZ_compress_close; cdecl; external name 'LZ_compress_close';
+procedure b_LZ_compress_finish; cdecl; external name 'LZ_compress_finish';
+procedure b_LZ_compress_read; cdecl; external name 'LZ_compress_read';
+procedure b_LZ_compress_write; cdecl; external name 'LZ_compress_write';
+procedure b_LZ_compress_finished; cdecl; external name 'LZ_compress_finished';
+procedure b_LZ_decompress_open; cdecl; external name 'LZ_decompress_open';
+procedure b_LZ_decompress_close; cdecl; external name 'LZ_decompress_close';
+procedure b_LZ_decompress_finish; cdecl; external name 'LZ_decompress_finish';
+procedure b_LZ_decompress_read; cdecl; external name 'LZ_decompress_read';
+procedure b_LZ_decompress_write; cdecl; external name 'LZ_decompress_write';
+procedure b_LZ_decompress_member_finished; cdecl; external name 'LZ_decompress_member_finished';
+procedure b_LZ_decompress_total_in_size; cdecl; external name 'LZ_decompress_total_in_size';
+procedure b_LZ_decompress_total_out_size; cdecl; external name 'LZ_decompress_total_out_size';
+
+procedure InitBuiltin;
+begin
+  @LZ_compress_open := @b_LZ_compress_open;
+  @LZ_compress_close := @b_LZ_compress_close;
+  @LZ_compress_finish := @b_LZ_compress_finish;
+  @LZ_compress_read := @b_LZ_compress_read;
+  @LZ_compress_write := @b_LZ_compress_write;
+  @LZ_compress_finished := @b_LZ_compress_finished;
+  @LZ_decompress_open := @b_LZ_decompress_open;
+  @LZ_decompress_close := @b_LZ_decompress_close;
+  @LZ_decompress_finish := @b_LZ_decompress_finish;
+  @LZ_decompress_read := @b_LZ_decompress_read;
+  @LZ_decompress_write := @b_LZ_decompress_write;
+  @LZ_decompress_member_finished := @b_LZ_decompress_member_finished;
+  @LZ_decompress_total_in_size := @b_LZ_decompress_total_in_size;
+  @LZ_decompress_total_out_size := @b_LZ_decompress_total_out_size;
+  DLLLoaded := True;
+end;
+
 procedure Init(const Filename: String);
 begin
   Lib := TLibImport.Create;
@@ -76,11 +127,7 @@ end;
 
 initialization
 
-{$IFDEF UNIX}
-Init(PluginsPath + 'liblz.so');
-{$ELSE}
-Init(PluginsPath + 'lzlib.dll');
-{$ENDIF}
+InitBuiltin;
 
 finalization
 

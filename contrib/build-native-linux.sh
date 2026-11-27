@@ -78,7 +78,13 @@ cat > "$CSRC/lz4delphi_lin.c" <<'EOF'
 #include "lz4hc.c"
 #include "lz4frame.c"
 EOF
-gcc $M -c -O2 -fPIC -I "$CSRC/lz4/lib" \
+# x86: the patched copy, fast mode as on 64-bit (lz4_lib32 in pin-repo.sh).
+# Since 0.9.9f -mlz4* use this object (not a liblz4), so it needs the same
+# patch the 32-bit liblz4 had: without it x64 fast-mode .ytp files do not
+# decode on x86.
+LZ4INC="$CSRC/lz4/lib"
+if [ "$ARCH" = x86 ]; then lz4_lib32 "$CSRC/lz4" "$CSRC/lz4-lib32" || exit 1; LZ4INC="$CSRC/lz4-lib32"; fi
+gcc $M -c -O2 -fPIC -I "$LZ4INC" \
   -o LZ4Delphi/lz4delphi.linux.$ARCH.o "$CSRC/lz4delphi_lin.c"
 
 echo "==> lzmadelphi.linux.$ARCH.o"
@@ -94,14 +100,28 @@ gcc $M -c -O2 -fPIC -I "$LZMA_SDK_C" \
 # to the system libz (it made libz.so.1 a NEEDED of ytool).
 ZLIB_REF="99623ef7097352da7993ba614161fd6a311e046e"
 pin_repo https://github.com/madler/zlib "$CSRC/zlib" "$ZLIB_REF"
-echo "==> ZLibStatic/zlibstatic.linux.$ARCH.o (deflate + inflate, Z_PREFIX)"
-mkdir -p ZLibStatic
+echo "==> StaticLibs/zlibstatic.linux.$ARCH.o (deflate + inflate, Z_PREFIX)"
+mkdir -p StaticLibs
 ZO=""
 for f in deflate trees adler32 crc32 zutil inflate inftrees inffast; do
   gcc $M -c -O2 -fPIC -DZ_PREFIX -I "$CSRC/zlib" -o "$CSRC/zs_$f.$ARCH.o" "$CSRC/zlib/$f.c"
   ZO="$ZO $CSRC/zs_$f.$ARCH.o"
 done
 # shellcheck disable=SC2086
-gcc $M -r -nostdlib -o ZLibStatic/zlibstatic.linux.$ARCH.o $ZO
+gcc $M -r -nostdlib -o StaticLibs/zlibstatic.linux.$ARCH.o $ZO
+
+# libdeflate and lzlib built in (0.9.9f), from the same pins as their shared
+# libraries (pin-repo.sh: build_libdeflate, build_lzlib). One object per source,
+# as on Windows. libdeflate: the compressor only (ytool's -mlibdeflate uses
+# nothing else).
+. "$(dirname "$CSRC")/pin-repo.sh"
+pin_repo https://github.com/ebiggers/libdeflate "$CSRC/libdeflate" "$LIBDEFLATE_REF"
+echo "==> StaticLibs/libdeflate_*.linux.$ARCH.o"
+for f in utils deflate_compress; do
+  gcc $M -c -O2 -fPIC -I "$CSRC/libdeflate" -o "StaticLibs/libdeflate_$(basename $f).linux.$ARCH.o" "$CSRC/libdeflate/lib/$f.c"
+done
+fetch_lzlib || exit 1
+echo "==> StaticLibs/lzlib.linux.$ARCH.o"
+gcc $M -c -O2 -fPIC -I "$CSRC/lzlib-$LZLIB_VER" -o "StaticLibs/lzlib.linux.$ARCH.o" "$CSRC/lzlib-$LZLIB_VER/lzlib.c"
 
 echo "OK: objetos Linux generados."

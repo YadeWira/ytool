@@ -72,7 +72,7 @@ if [ "${NO_BUILD:-0}" != "1" ]; then
   mkdir -p .fpcout
   FPC_LOG="$(fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio \
     -Fuimports -Fusources -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/ZLibStatic \
+    -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
     -oytool ytool.dpr 2>&1)" \
     || { echo "fpc compilation FAILED:"; echo "$FPC_LOG"; exit 3; }
 fi
@@ -347,6 +347,15 @@ if [ -x "$XTOOL" ]; then
   { [ $r = 1 ] && grep -q "unknown codec" "$CL/o3"; } || { cok=0; why="$why analyze-mzzz($r)"; }
   "$XTOOL" decode -zzz "$CL/b.ytp" "$CL/c.out" > "$CL/o4" 2>&1; r=$?
   { [ $r = 0 ] && grep -q "not an option of decode" "$CL/o4" && cmp -s "$CORPUS/20_zlib_streams.bin" "$CL/c.out"; } || { cok=0; why="$why opcion-desconocida($r)"; }
+  # 0.9.9f: sin la biblioteca de un codec que el .ytp usa, decode lo dice
+  # antes de empezar y el error nombra la biblioteca (era "Error in the
+  # method 'pja'"). ytool solo en una carpeta, sin libpja.
+  gp="$ROOT/tests/golden/0.9.9e/pja_jpeg_l3.ytp"
+  if [ -f "$gp" ] && [ "$(uname -s)" = Linux ]; then
+    NL="$CL/nolib"; mkdir -p "$NL"; cp "$XABS" "$NL/"; cp "$XDIR/libfast-lzma2.so" "$NL/" 2>/dev/null
+    "$NL/$(basename "$XABS")" decode "$gp" "$CL/p.out" > "$CL/o5" 2>&1; r=$?
+    { [ $r = 1 ] && grep -q "whose library" "$CL/o5" && grep -q "needs 'pja'" "$CL/o5"; } || { cok=0; why="$why biblioteca-faltante($r)"; }
+  fi
   if [ "$cok" = 1 ]; then echo "-- linea de comandos (entrada inexistente, opciones al final, -mzzz, opcion desconocida): ok --"; pass=$((pass+1))
   else echo "-- *** linea de comandos:$why *** --"; fail=$((fail+1)); fi
 fi

@@ -86,16 +86,26 @@ cp LZ4Delphi/lz4delphi.sse2.x64.obj LZ4Delphi/lz4delphi.avx2.x64.obj
 # zlib1.dll at start-up.
 ZLIB_REF="99623ef7097352da7993ba614161fd6a311e046e"
 pin_repo https://github.com/madler/zlib "$CSRC/zlib" "$ZLIB_REF"
-echo "==> ZLibStatic/zlib_*.win64.x64.o (deflate + inflate, Z_PREFIX)"
-mkdir -p ZLibStatic
+echo "==> StaticLibs/zlib_*.win64.x64.o (deflate + inflate, Z_PREFIX)"
+mkdir -p StaticLibs
 # One object per source, linked one by one ({$L} in imports/ZLibDLL.pas): FPC's
 # internal linker misreads an "ld -r" merge of COFF objects (zlibVersion
 # pointed at another string, every call failed), and on x64 the default
 # -mcmodel=medium reaches other objects' data through .rdata$.refptr.*
 # sections it does not handle either.
 for f in deflate trees adler32 crc32 zutil inflate inftrees inffast; do
-  "$CC" -c -O2 -mcmodel=small -DZ_PREFIX -I "$CSRC/zlib" -o ZLibStatic/zlib_$f.win64.x64.o "$CSRC/zlib/$f.c"
+  "$CC" -c -O2 -mcmodel=small -DZ_PREFIX -I "$CSRC/zlib" -o StaticLibs/zlib_$f.win64.x64.o "$CSRC/zlib/$f.c"
 done
-rm -f ZLibStatic/zlibstatic.win64.x64.o
+rm -f StaticLibs/zlibstatic.win64.x64.o
+
+# libdeflate and lzlib built in (0.9.9f): see build-native-linux.sh.
+pin_repo https://github.com/ebiggers/libdeflate "$CSRC/libdeflate" "$LIBDEFLATE_REF"
+echo "==> StaticLibs/libdeflate_*.win64.x64.o"
+for f in utils deflate_compress; do
+  "$CC" -c -O2 -mcmodel=small -I "$CSRC/libdeflate" -o "StaticLibs/libdeflate_$(basename $f).win64.x64.o" "$CSRC/libdeflate/lib/$f.c"
+done
+fetch_lzlib || exit 1
+echo "==> StaticLibs/lzlib.win64.x64.o"
+"$CC" -c -O2 -mcmodel=small -I "$CSRC/lzlib-$LZLIB_VER" -o "StaticLibs/lzlib.win64.x64.o" "$CSRC/lzlib-$LZLIB_VER/lzlib.c"
 
 echo "OK: objetos Windows generados."

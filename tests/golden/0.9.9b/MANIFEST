@@ -4,6 +4,7 @@ dedup_osrep_l3|23_dup_streams.bin|-mzlib -ddo -l3|Streams: 90 / 90
 empty|01_empty.bin|-mzlib|Streams: 0 / 0
 flac_l3|60_wav_pcm.bin|-mflac -l3|Streams: 1 / 1
 lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3|Streams: 1 / 1
+lz4f_fast_l3|75_lz4f_fast.bin|-mlz4f -l3|Streams: 1 / 1
 lz4f_l3|70_lz4f.bin|-mlz4f -l3|Streams: 1 / 1
 lzma_l3|63_lzma_alone.bin|-mlzma -l3|Streams: 1 / 1
 mixed_l3|24_zlib_mixed.bin|-mzlib -l3|Streams: 5 / 8

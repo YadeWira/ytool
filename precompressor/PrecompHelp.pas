@@ -15,11 +15,15 @@ type
   TCodecInfo = record
     Name, Group: string;
     Available: Boolean;
+    Lib: string; // the library it needs next to ytool ('' = built in)
   end;
 
 procedure PrecompPrintHelp;
 procedure DecodePrintHelp;
 function CodecTable: TArray<TCodecInfo>;
+// '' when the codec works here (or is not one of the table's); else the
+// library it is missing. 0.9.9f: decode says so before it starts.
+function CodecMissingLib(const Name: string): string;
 // One help line: an option, padded, and what it does.
 procedure HelpOption(const Opt, Text: string; const Default: string = '');
 procedure HelpSection(const Title: string);
@@ -171,39 +175,73 @@ end;
 
 function CodecTable: TArray<TCodecInfo>;
 
-  procedure Add(const Name, Group: string; Available: Boolean);
+  procedure Add(const Name, Group: string; Available: Boolean;
+    const Lib: string = '');
   var
     C: TCodecInfo;
   begin
     C.Name := Name;
     C.Group := Group;
     C.Available := Available;
+    C.Lib := Lib;
     Insert(C, Result, Length(Result));
   end;
 
 begin
   Result := nil;
   Add('zlib', 'deflate', ZLibDLL.DLLLoaded);
-  Add('libdeflate', 'deflate', LibDeflateDLL.DLLLoaded and ZLibDLL.DLLLoaded);
-  Add('preflate', 'deflate', PreflateDLL.DLLLoaded);
+  Add('libdeflate', 'deflate', LibDeflateDLL.DLLLoaded and ZLibDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'libdeflate.dll'{$ELSE}'libdeflate.so'{$ENDIF});
+  Add('preflate', 'deflate', PreflateDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'preflate_dll.dll'{$ELSE}'libpreflate.so'{$ENDIF});
   Add('png', 'deflate', ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded);
-  Add('pja', 'jpeg', PJADLL.DLLLoaded);
-  Add('brunsli', 'jpeg', BrunsliDLL.DLLLoaded);
-  Add('lz4f', 'lz4f', LZ4DLL.DLLLoaded);
-  Add('lz4', 'lz4', LZ4DLL.DLLLoaded);
-  Add('lz4hc', 'lz4', LZ4DLL.DLLLoaded);
-  Add('zstd', 'zstd', ZSTDDLL.DLLLoaded);
-  Add('lzo1x', 'lzo', LZODLL.DLLLoaded);
-  Add('lzo1c', 'lzo', LZODLL.DLLLoaded);
-  Add('lzo2a', 'lzo', LZODLL.DLLLoaded);
+  Add('pja', 'jpeg', PJADLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'pja.dll'{$ELSE}'libpja.so'{$ENDIF});
+  Add('brunsli', 'jpeg', BrunsliDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'brunsli.dll'{$ELSE}'libbrunsli.so'{$ENDIF});
+  Add('lz4f', 'lz4f', LZ4DLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'liblz4.dll'{$ELSE}'liblz4.so'{$ENDIF});
+  Add('lz4', 'lz4', LZ4DLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'liblz4.dll'{$ELSE}'liblz4.so'{$ENDIF});
+  Add('lz4hc', 'lz4', LZ4DLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'liblz4.dll'{$ELSE}'liblz4.so'{$ENDIF});
+  Add('zstd', 'zstd', ZSTDDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'libzstd.dll'{$ELSE}'libzstd.so'{$ENDIF});
+  Add('lzo1x', 'lzo', LZODLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'lzo2.dll'{$ELSE}'liblzo2.so.2'{$ENDIF});
+  Add('lzo1c', 'lzo', LZODLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'lzo2.dll'{$ELSE}'liblzo2.so.2'{$ENDIF});
+  Add('lzo2a', 'lzo', LZODLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'lzo2.dll'{$ELSE}'liblzo2.so.2'{$ENDIF});
   Add('lzma', 'lzma', True);
-  Add('lzip', 'lzip', LZlibDLL.DLLLoaded);
-  Add('flac', 'wav', FLACDLL.DLLLoaded);
-  Add('wavpack', 'wav', WavPackDLL.DLLLoaded);
-  Add('kraken', 'oodle', OodleDLL.DLLLoaded);
-  Add('mermaid', 'oodle', OodleDLL.DLLLoaded);
-  Add('selkie', 'oodle', OodleDLL.DLLLoaded);
-  Add('leviathan', 'oodle', OodleDLL.DLLLoaded);
+  Add('lzip', 'lzip', LZlibDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'lzlib.dll'{$ELSE}'liblz.so'{$ENDIF});
+  Add('flac', 'wav', FLACDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'libFLAC_dynamic.dll'{$ELSE}'libFLAC'{$ENDIF});
+  Add('wavpack', 'wav', WavPackDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'wavpackdll.dll'{$ELSE}'libwavpack.so.1'{$ENDIF});
+  Add('kraken', 'oodle', OodleDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'Oodle (oo2core)'{$ELSE}'Oodle (oo2core)'{$ENDIF});
+  Add('mermaid', 'oodle', OodleDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'Oodle (oo2core)'{$ELSE}'Oodle (oo2core)'{$ENDIF});
+  Add('selkie', 'oodle', OodleDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'Oodle (oo2core)'{$ELSE}'Oodle (oo2core)'{$ENDIF});
+  Add('leviathan', 'oodle', OodleDLL.DLLLoaded,
+    {$IFDEF MSWINDOWS}'Oodle (oo2core)'{$ELSE}'Oodle (oo2core)'{$ENDIF});
+end;
+
+function CodecMissingLib(const Name: string): string;
+var
+  C: TCodecInfo;
+begin
+  Result := '';
+  for C in CodecTable do
+    if SameText(C.Name, Name) then
+    begin
+      if not C.Available then
+        Result := C.Lib;
+      exit;
+    end;
 end;
 
 procedure DecodePrintHelp;

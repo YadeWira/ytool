@@ -108,7 +108,7 @@ function inflateReset(var strm: z_stream): integer;
 
 implementation
 
-// 0.9.9f: zlib built in (contrib/build-native-linux.sh -> ZLibStatic/), the
+// 0.9.9f: zlib built in (contrib/build-native-linux.sh -> StaticLibs/), the
 // default; a library is used only when asked for with -zlib<path>. Linux used
 // the system's libz.so.1, whose deflate another distro build (zlib-ng in
 // compatibility mode) could change. docs/ROADMAP-1.0.0.md point 3.

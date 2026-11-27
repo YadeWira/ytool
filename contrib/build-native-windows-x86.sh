@@ -98,7 +98,10 @@ echo "==> zstd4delphi.{sse2,avx2}.x86.o"
 cp ZSTD4Delphi/zstd4delphi.sse2.x86.o ZSTD4Delphi/zstd4delphi.avx2.x86.o
 echo "==> lz4delphi.{sse2,avx2}.x86.obj"
 printf '#include "lz4.c"\n#include "lz4hc.c"\n#include "lz4frame.c"\n' > "$CSRC/lz4delphi_x86.c"
-"$CC" -c -O2 -I "$CSRC/lz4/lib" \
+# the patched copy, fast mode as on 64-bit (lz4_lib32 in pin-repo.sh): since
+# 0.9.9f -mlz4* use this object, not liblz4.dll
+lz4_lib32 "$CSRC/lz4" "$CSRC/lz4-lib32" || exit 1
+"$CC" -c -O2 -I "$CSRC/lz4-lib32" \
   -o LZ4Delphi/lz4delphi.sse2.x86.obj "$CSRC/lz4delphi_x86.c"
 cp LZ4Delphi/lz4delphi.sse2.x86.obj LZ4Delphi/lz4delphi.avx2.x86.obj
 
@@ -108,7 +111,7 @@ LIBGCC="$("$CC" -print-libgcc-file-name)"
 SHIMTMP="$(mktemp -d)"
 trap 'rm -rf "$SHIMTMP"' EXIT
 ( cd "$SHIMTMP" && ar x "$LIBGCC" _chkstk.o _chkstk_ms.o _udivdi3.o _divdi3.o \
-    _umoddi3.o _moddi3.o _ashldi3.o _ashrdi3.o _lshrdi3.o )
+    _umoddi3.o _moddi3.o _ashldi3.o _ashrdi3.o _lshrdi3.o _ctzdi2.o )
 cp "$SHIMTMP/_chkstk.o"   WinLibcShim/chkstk.x86.o
 # ___chkstk_ms: what the zstd/lz4 objects built above call for large stack
 # frames (the inherited ones called __alloca, which _chkstk.o provides).
@@ -120,6 +123,9 @@ cp "$SHIMTMP/_moddi3.o"   WinLibcShim/moddi3.x86.o
 cp "$SHIMTMP/_ashldi3.o"  WinLibcShim/ashldi3.x86.o
 cp "$SHIMTMP/_ashrdi3.o"  WinLibcShim/ashrdi3.x86.o
 cp "$SHIMTMP/_lshrdi3.o"  WinLibcShim/lshrdi3.x86.o
+# ___ctzdi2: the 32-bit lz4 with a 64-bit reg_t (lz4_lib32) counts trailing
+# zeros of 64-bit words; since 0.9.9f that lz4 is linked into ytool
+cp "$SHIMTMP/_ctzdi2.o"   WinLibcShim/ctzdi2.x86.o
 
 
 # zlib built in (0.9.9f, as on Linux: contrib/build-native-linux.sh). Same
@@ -127,16 +133,26 @@ cp "$SHIMTMP/_lshrdi3.o"  WinLibcShim/lshrdi3.x86.o
 # zlib1.dll at start-up.
 ZLIB_REF="99623ef7097352da7993ba614161fd6a311e046e"
 pin_repo https://github.com/madler/zlib "$CSRC/zlib" "$ZLIB_REF"
-echo "==> ZLibStatic/zlib_*.win32.x86.o (deflate + inflate, Z_PREFIX)"
-mkdir -p ZLibStatic
+echo "==> StaticLibs/zlib_*.win32.x86.o (deflate + inflate, Z_PREFIX)"
+mkdir -p StaticLibs
 # One object per source, linked one by one ({$L} in imports/ZLibDLL.pas): FPC's
 # internal linker misreads an "ld -r" merge of COFF objects (zlibVersion
 # pointed at another string, every call failed), and on x64 the default
 # -mcmodel=medium reaches other objects' data through .rdata$.refptr.*
 # sections it does not handle either.
 for f in deflate trees adler32 crc32 zutil inflate inftrees inffast; do
-  "$CC" -c -O2 -DZ_PREFIX -I "$CSRC/zlib" -o ZLibStatic/zlib_$f.win32.x86.o "$CSRC/zlib/$f.c"
+  "$CC" -c -O2 -DZ_PREFIX -I "$CSRC/zlib" -o StaticLibs/zlib_$f.win32.x86.o "$CSRC/zlib/$f.c"
 done
-rm -f ZLibStatic/zlibstatic.win32.x86.o
+rm -f StaticLibs/zlibstatic.win32.x86.o
+
+# libdeflate and lzlib built in (0.9.9f): see build-native-linux.sh.
+pin_repo https://github.com/ebiggers/libdeflate "$CSRC/libdeflate" "$LIBDEFLATE_REF"
+echo "==> StaticLibs/libdeflate_*.win32.x86.o"
+for f in utils deflate_compress; do
+  "$CC" -c -O2 -I "$CSRC/libdeflate" -o "StaticLibs/libdeflate_$(basename $f).win32.x86.o" "$CSRC/libdeflate/lib/$f.c"
+done
+fetch_lzlib || exit 1
+echo "==> StaticLibs/lzlib.win32.x86.o"
+"$CC" -c -O2 -I "$CSRC/lzlib-$LZLIB_VER" -o "StaticLibs/lzlib.win32.x86.o" "$CSRC/lzlib-$LZLIB_VER/lzlib.c"
 
 echo "OK: objetos Windows x86 generados."

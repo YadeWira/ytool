@@ -180,6 +180,62 @@ end;
 var
   Lib: TLibImport;
 
+// 0.9.9f: lz4 built in. The same lz4 (1.11.1, contrib/build-native-*.sh)
+// is already linked into ytool for its own use (lz4lib); -mlz4/-mlz4hc/-mlz4f
+// used a liblz4 next to ytool, or the distro's. Now that one unless -lz4<path>
+// asks for a library. Untyped externals: only their addresses are taken.
+procedure b_LZ4_decompress_safe; cdecl; external name 'LZ4_decompress_safe';
+procedure b_LZ4_decompress_fast; cdecl; external name 'LZ4_decompress_fast';
+procedure b_LZ4_compress_default; cdecl; external name 'LZ4_compress_default';
+procedure b_LZ4_compress_fast; cdecl; external name 'LZ4_compress_fast';
+procedure b_LZ4_compress_HC; cdecl; external name 'LZ4_compress_HC';
+procedure b_LZ4_compressHC2; cdecl; external name 'LZ4_compressHC2';
+procedure b_LZ4F_compressFrame; cdecl; external name 'LZ4F_compressFrame';
+procedure b_LZ4F_compressFrameBound; cdecl; external name 'LZ4F_compressFrameBound';
+procedure b_LZ4F_createDecompressionContext; cdecl; external name 'LZ4F_createDecompressionContext';
+procedure b_LZ4F_freeDecompressionContext; cdecl; external name 'LZ4F_freeDecompressionContext';
+procedure b_LZ4F_decompress; cdecl; external name 'LZ4F_decompress';
+procedure b_LZ4F_getFrameInfo; cdecl; external name 'LZ4F_getFrameInfo';
+procedure b_LZ4_createStreamDecode; cdecl; external name 'LZ4_createStreamDecode';
+procedure b_LZ4_freeStreamDecode; cdecl; external name 'LZ4_freeStreamDecode';
+procedure b_LZ4_decompress_safe_continue; cdecl; external name 'LZ4_decompress_safe_continue';
+procedure b_LZ4_createStream; cdecl; external name 'LZ4_createStream';
+procedure b_LZ4_freeStream; cdecl; external name 'LZ4_freeStream';
+procedure b_LZ4_resetStream; cdecl; external name 'LZ4_resetStream';
+procedure b_LZ4_compress_fast_continue; cdecl; external name 'LZ4_compress_fast_continue';
+procedure b_LZ4_createStreamHC; cdecl; external name 'LZ4_createStreamHC';
+procedure b_LZ4_freeStreamHC; cdecl; external name 'LZ4_freeStreamHC';
+procedure b_LZ4_resetStreamHC; cdecl; external name 'LZ4_resetStreamHC';
+procedure b_LZ4_compress_HC_continue; cdecl; external name 'LZ4_compress_HC_continue';
+
+procedure InitBuiltin;
+begin
+  @LZ4_decompress_safe := @b_LZ4_decompress_safe;
+  @LZ4_decompress_fast := @b_LZ4_decompress_fast;
+  @LZ4_compress_default := @b_LZ4_compress_default;
+  @LZ4_compress_fast := @b_LZ4_compress_fast;
+  @LZ4_compress_HC := @b_LZ4_compress_HC;
+  @LZ4_compressHC2 := @b_LZ4_compressHC2;
+  @LZ4F_compressFrame := @b_LZ4F_compressFrame;
+  @LZ4F_compressFrameBound := @b_LZ4F_compressFrameBound;
+  @LZ4F_createDecompressionContext := @b_LZ4F_createDecompressionContext;
+  @LZ4F_freeDecompressionContext := @b_LZ4F_freeDecompressionContext;
+  @LZ4F_decompress := @b_LZ4F_decompress;
+  @LZ4F_getFrameInfo := @b_LZ4F_getFrameInfo;
+  @LZ4_createStreamDecode := @b_LZ4_createStreamDecode;
+  @LZ4_freeStreamDecode := @b_LZ4_freeStreamDecode;
+  @LZ4_decompress_safe_continue := @b_LZ4_decompress_safe_continue;
+  @LZ4_createStream := @b_LZ4_createStream;
+  @LZ4_freeStream := @b_LZ4_freeStream;
+  @LZ4_resetStream := @b_LZ4_resetStream;
+  @LZ4_compress_fast_continue := @b_LZ4_compress_fast_continue;
+  @LZ4_createStreamHC := @b_LZ4_createStreamHC;
+  @LZ4_freeStreamHC := @b_LZ4_freeStreamHC;
+  @LZ4_resetStreamHC := @b_LZ4_resetStreamHC;
+  @LZ4_compress_HC_continue := @b_LZ4_compress_HC_continue;
+  DLLLoaded := True;
+end;
+
 procedure Init(Filename: String; Raw: Boolean = False);
 begin
   Lib := TLibImport.Create;
@@ -268,11 +324,6 @@ for I := 1 to ParamCount do
   if ParamStr(I).StartsWith(DLLParam) then
     Insert(ParamStr(I).Substring(DLLParam.Length), Candidates,
       Length(Candidates));
-{$IFDEF UNIX}
-Insert(PluginsPath + 'liblz4.so', Candidates, Length(Candidates));
-{$ELSE}
-Insert(PluginsPath + 'liblz4.dll', Candidates, Length(Candidates));
-{$ENDIF}
 for I := Low(Candidates) to High(Candidates) do
 begin
   Init(Candidates[I]);
@@ -280,13 +331,10 @@ begin
     break;
   FreeAndNil(Lib);
 end;
-{$IFDEF UNIX}
+// none asked for, or none loaded: the built-in lz4 (no more liblz4 next to
+// ytool, no more the distro's)
 if not DLLLoaded then
-begin
-  FreeAndNil(Lib);
-  Init('liblz4.so.1', True);
-end;
-{$ENDIF}
+  InitBuiltin;
 
 finalization
 

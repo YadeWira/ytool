@@ -5,6 +5,7 @@ empty|01_empty.bin|-mzlib|Streams: 0 / 0
 flac_l3|60_wav_pcm.bin|-mflac -l3|Streams: 1 / 1
 libdeflate_l3|25_libdeflate.bin|-mlibdeflate -l3|Streams: 4 / 4
 lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3|Streams: 1 / 1
+lz4f_fast_l3|75_lz4f_fast.bin|-mlz4f -l3|Streams: 1 / 1
 lz4f_l3|70_lz4f.bin|-mlz4f -l3|Streams: 1 / 1
 lzip_l3|26_lzip.bin|-mlzip -l3|Streams: 4 / 4
 lzma_l3|63_lzma_alone.bin|-mlzma -l3|Streams: 1 / 1

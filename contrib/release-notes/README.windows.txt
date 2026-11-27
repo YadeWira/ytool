@@ -3,18 +3,16 @@ Recreacion open-source de xtool (Razor12911). https://github.com/YadeWira/ytool
 ==================================================================================
 
 ytool.exe            el programa (precomp, decode, extract, erase, execute, find, replace, generate)
-                     zlib 1.4 va dentro (-mzlib, -mpng): no hace falta zlib1.dll
+                     van dentro: zlib 1.4 (-mzlib, -mpng), lz4 1.11.1 (-mlz4*),
+                     libdeflate 1.26 (-mlibdeflate) y lzlib 1.16 (-mlzip)
 pja.dll              PJA 0.9.14: JPEG, JPEG-LS y JPEG 2000 (-mpja)
 brunsli.dll          brunsli: JPEG, alternativa a PJA (-mbrunsli)
 preflate_dll.dll     preflate: deflate de cualquier compresor (-mpreflate)
-liblz4.dll           lz4 1.11.1 (-mlz4, -mlz4hc, -mlz4f)
 libzstd.dll          zstd 1.6.0 (-mzstd)
 lzo2.dll             LZO (-mlzo1x, -mlzo1c, -mlzo2a)
 libFLAC_dynamic.dll  FLAC (-mflac)
 wavpackdll.dll       WavPack (-mwavpack)
 fast-lzma2.dll       compresion final (-l#)
-libdeflate.dll       libdeflate 1.26: deflate que zlib no reproduce (-mlibdeflate)
-lzlib.dll            lzlib 1.16: miembros lzip, .lz (-mlzip)
 osrep.exe            OSREP 0.0.18 (MIT): dedup externa (-ddo)
 
 Sin una DLL, su codec no hace nada: guarda los streams tal cual, sin error.

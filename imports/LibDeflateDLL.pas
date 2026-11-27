@@ -36,6 +36,41 @@ implementation
 var
   Lib: TLibImport;
 
+// 0.9.9f: libdeflate 1.26 built in (contrib/build-native-*.sh -> StaticLibs/), from
+// the same pinned sources as the library that was shipped next to ytool.
+// Untyped externals: only their addresses are taken.
+{$IFDEF LINUX}
+{$IFDEF CPUX86_64}
+{$L libdeflate_utils.linux.x64.o}
+{$L libdeflate_deflate_compress.linux.x64.o}
+{$ENDIF}
+{$IFDEF CPUI386}
+{$L libdeflate_utils.linux.x86.o}
+{$L libdeflate_deflate_compress.linux.x86.o}
+{$ENDIF}
+{$ENDIF}
+{$IFDEF WIN64}
+{$L libdeflate_utils.win64.x64.o}
+{$L libdeflate_deflate_compress.win64.x64.o}
+{$ENDIF}
+{$IFDEF WIN32}
+{$L libdeflate_utils.win32.x86.o}
+{$L libdeflate_deflate_compress.win32.x86.o}
+{$ENDIF}
+procedure b_libdeflate_alloc_compressor; cdecl; external name 'libdeflate_alloc_compressor';
+procedure b_libdeflate_deflate_compress; cdecl; external name 'libdeflate_deflate_compress';
+procedure b_libdeflate_deflate_compress_bound; cdecl; external name 'libdeflate_deflate_compress_bound';
+procedure b_libdeflate_free_compressor; cdecl; external name 'libdeflate_free_compressor';
+
+procedure InitBuiltin;
+begin
+  @libdeflate_alloc_compressor := @b_libdeflate_alloc_compressor;
+  @libdeflate_deflate_compress := @b_libdeflate_deflate_compress;
+  @libdeflate_deflate_compress_bound := @b_libdeflate_deflate_compress_bound;
+  @libdeflate_free_compressor := @b_libdeflate_free_compressor;
+  DLLLoaded := True;
+end;
+
 procedure Init(const Filename: String);
 begin
   Lib := TLibImport.Create;
@@ -56,11 +91,7 @@ end;
 
 initialization
 
-{$IFDEF UNIX}
-Init(PluginsPath + 'libdeflate.so');
-{$ELSE}
-Init(PluginsPath + 'libdeflate.dll');
-{$ENDIF}
+InitBuiltin;
 
 finalization
 

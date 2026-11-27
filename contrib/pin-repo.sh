@@ -140,16 +140,21 @@ build_libdeflate() {
 # (measured). $CSRC must be set.
 LZLIB_VER="1.16"
 LZLIB_SHA256="203228de911780309dad6813e51541d7ea89469784f01cb661edba080ff1b038"
-build_lzlib() {
-  local out="$1" cc="$2"; shift 2
+# fetch_lzlib: the checked tarball unpacked in $CSRC/lzlib-$LZLIB_VER
+fetch_lzlib() {
   local tgz="$CSRC/lzlib-$LZLIB_VER.tar.gz" dir="$CSRC/lzlib-$LZLIB_VER"
-  echo "==> lzlib ($(basename "$out"))"
   if ! echo "$LZLIB_SHA256  $tgz" | sha256sum -c --status 2>/dev/null; then
     curl -sL -o "$tgz" "https://download.savannah.gnu.org/releases/lzip/lzlib/lzlib-$LZLIB_VER.tar.gz"
     echo "$LZLIB_SHA256  $tgz" | sha256sum -c --status \
       || { rm -f "$tgz"; echo "   (lzlib: descarga fallida o SHA-256 distinto)"; return 1; }
   fi
   [ -d "$dir" ] || tar xzf "$tgz" -C "$CSRC" || return 1
+}
+build_lzlib() {
+  local out="$1" cc="$2"; shift 2
+  local dir="$CSRC/lzlib-$LZLIB_VER"
+  echo "==> lzlib ($(basename "$out"))"
+  fetch_lzlib || return 1
   ( cd "$dir" && "$cc" "$@" -shared -O2 lzlib.c -o "$out" ) \
     && echo "   OK -> $(basename "$out")" || { echo "   (lzlib fallo)"; return 1; }
 }

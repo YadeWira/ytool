@@ -9,7 +9,7 @@
 #    and units-*.tar.gz, each extracted into one prefix). FPC386=<that prefix>
 #    /lib/fpc/3.2.2, the folder with ppc386 and units/.
 #  - gcc-multilib and g++-multilib (gcc -m32). Since 0.9.9f zlib is built in
-#    (contrib/ZLibStatic): no 32-bit libz is needed (ZLIB32 is still read, as
+#    (contrib/StaticLibs): no 32-bit libz is needed (ZLIB32 is still read, as
 #    an extra library path, if set).
 #
 # FPC 3.2.2's i386 startup code (si_c21) still refers to __libc_csu_init and
@@ -42,7 +42,7 @@ GL="$(dirname "$(gcc -m32 -print-libgcc-file-name)")"
 "$PPC" -n -Mdelphi -Sg -O2 -Fu"$FPC386/units/i386-linux/*" -Fl/usr/lib32 $ZL -Fl"$GL" \
   -k"$OUT/csu.o" -FU"$OUT/fu" -Fucompat -Fucommon -Fuprecompressor -Fuio -Fuimports \
   -Fusources -Fudbgenerator -Fucontrib/mORMot -Fucontrib/LZ4Delphi -Fucontrib/ZSTD4Delphi \
-  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/ZLibStatic \
+  -Fucontrib/XXHASH4Delphi -Fucontrib/ParseExpression -Fucontrib/LZMADelphi -Fucontrib/StaticLibs \
   -o"$OUT/ytool" ytool.dpr >"$OUT/fpc.log" 2>&1 || { grep -E 'Error|Fatal|undefined' "$OUT/fpc.log" >&2; exit 1; }
 file "$OUT/ytool" | grep -q 'Intel 80386\|Intel i386' || { echo "build-x86/ytool is not i386" >&2; exit 1; }
 echo "OK: $OUT/ytool"
