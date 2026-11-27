@@ -419,6 +419,37 @@ if [ -x "$XTOOL" ] && [ -f "${LIBSREP:-}" ] && [ -f "$XDIR/srep64" ] && [ -f "$C
   else echo "-- *** libsrep: fallo *** --"; fail=$((fail+1)); fi
 fi
 
+# --- carpetas: lo que decode puede arreglar sin cambiar el formato (0.9.9f) ---
+# Datos de carpeta (Word largo, nombre, Int64 tamano, datos) metidos en un .ytp
+# como archivo y decodificados a una carpeta: un nombre con '\' (carpeta hecha
+# en Windows) es una subcarpeta; '..' y rutas absolutas se rechazan sin
+# escribir fuera; una carpeta de entrada vacia lo dice.
+if [ -x "$XTOOL" ] && [ "$(uname -s)" = Linux ]; then
+  FD="$WORK/folders"; rm -rf "$FD"; mkdir -p "$FD"; fok=1
+  python3 - "$FD" <<'PY'
+import struct, sys, os
+d = sys.argv[1]
+def mk(name, items):
+    b = b''
+    for n, data in items:
+        b += struct.pack('<H', len(n)) + n + struct.pack('<q', len(data)) + data
+    open(os.path.join(d, name), 'wb').write(b)
+mk('win.dat', [(b'sub\\b.txt', b'hola'), (b'c.txt', b'chau')])
+mk('evil.dat', [(b'ok.txt', b'x'), (b'../evil.txt', b'pwned')])
+mk('abs.dat', [(b'/tmp/ytool-abs-test.txt', b'pwned')])
+PY
+  for f in win evil abs; do
+    "$XTOOL" precomp "$FD/$f.dat" "$FD/$f.ytp" >/dev/null 2>&1; mkdir -p "$FD/out_$f"
+    "$XTOOL" decode "$FD/$f.ytp" "$FD/out_$f" > "$FD/$f.log" 2>&1
+  done
+  { [ -f "$FD/out_win/sub/b.txt" ] && [ -f "$FD/out_win/c.txt" ]; } || { fok=0; echo "-- *** carpetas: el nombre con '\\' no es una subcarpeta *** --"; }
+  { grep -q "unsafe file name" "$FD/evil.log" && [ ! -e "$FD/evil.txt" ]; } || { fok=0; echo "-- *** carpetas: '..' no se rechazo *** --"; }
+  { grep -q "unsafe file name" "$FD/abs.log" && [ ! -e /tmp/ytool-abs-test.txt ]; } || { fok=0; echo "-- *** carpetas: ruta absoluta no se rechazo *** --"; }
+  mkdir -p "$FD/vacia"; vo="$("$XTOOL" precomp "$FD/vacia" "$FD/v.ytp" 2>&1)"   # exit 1: no pipeline (pipefail)
+  echo "$vo" | grep -q "no files in" || { fok=0; echo "-- *** carpetas: carpeta vacia sin mensaje *** --"; }
+  if [ "$fok" = 1 ]; then echo "-- carpetas: separador de Windows, '..' y rutas absolutas rechazadas, carpeta vacia: ok --"; pass=$((pass+1)); else fail=$((fail+1)); fi
+fi
+
 # --- -ddo: OSREP, dentro de ytool desde 0.9.9f --------------------------------
 # imports/OsrepLib.pas: el OSREP de contrib/osrep corre en el proceso. ytool
 # solo en una carpeta (sin el programa osrep) hace -ddo de ida y vuelta, con y

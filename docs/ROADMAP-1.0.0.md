@@ -119,12 +119,19 @@ sistema ni de `zlib1.dll`), **lz4** 1.11.1 (con el parche de 32 bits del modo r�
 y **lzlib** 1.16, y **OSREP** 0.0.19 (`-ddo` corre dentro del proceso, con la unidad que publicó su
 agente). LZO, FLAC y WavPack van fijados y en el paquete también en Linux (ya no las del sistema).
 **LZO no puede ir adentro**: es GPL-2.0 y ytool es MIT, y además van compilados adentro componentes sin
-licencia compatible con la GPL. Para la 1.0.0 hace falta decidir: LZO sigue aparte, o se cambia la
-licencia del binario. Además, `decode` avisa al empezar si falta la biblioteca de un codec que el archivo
+licencia compatible con la GPL. **Wira está haciendo plzo (2026-11-27) para reemplazar a LZO**
+(agente `plzo` en aim): si reproduce bit a bit la salida de LZO 2.10 y su licencia es compatible con
+MIT, va dentro del binario y LZO sale. Además, `decode` avisa al empezar si falta la biblioteca de un codec que el archivo
 nombra, y el error dice cuál. Lecciones para el resto: en Windows, FPC no enlaza bien objetos de mingw
 unidos con `ld -r` (van uno por uno), x64 necesita `-mcmodel=small`, y los externos sin tipo necesitan
 `cdecl` para el guion bajo de i386-win32. Faltan: zstd (1.6.0 para `-mzstd`, que choca con el zstd
 1.5.2 interno), FLAC y WavPack dentro del binario, fast-lzma2 y las de C++ (preflate, pja, brunsli).
+**zstd y fast-lzma2 usan hilos propios** (zstd con `ZSTD_MULTITHREAD`, necesario para reproducir frames
+que el CLI escribe con un worker): en Linux van sobre pthreads sin problema, pero en Windows sus hilos
+nacerían fuera de FPC y pedirían memoria al heap de FPC por los shims de malloc; hace falta crear esos
+hilos a través de FPC (`BeginThread`) con un `_beginthreadex` propio antes de enlazarlos. zstd se puede
+amalgamar sin `dictBuilder` (`build/single_file_libs/combine.sh`): queda un solo objeto que solo pide
+libc y pthreads; sus símbolos se renombran con `objcopy --redefine-syms` para no chocar con el 1.5.2.
 
 **Lo que no puede ir adentro:**
 - **srep** (`-dd1`..`-dd5`), por su licencia ("All rights reserved"). Un `.ytp` con `-dd1`..`-dd5`
@@ -238,8 +245,9 @@ PPA (PNG) y PMPA (MP3/MP2) entran cuando sean estables; sus números de codec es
 
 ### 10. Detalles pendientes ya identificados
 
-- **`-dd` reserva unos 1,7 GB:** ytool le pasa los datos a srep por stdin sin `-s<tamaño>`, y srep
-  dimensiona sus tablas para 25 GB. Pasarle el tamaño cuando se conoce.
+- ~~**`-dd` reserva unos 1,7 GB**~~ Revisado en 0.9.9f: solo en una prueba en seco (sin archivo de salida)
+  srep lee de stdin sin tamaño (25 GB supuestos); con salida, srep lee un archivo temporal y conoce su
+  tamaño. Lo que ytool produce no tiene tamaño conocido de antemano, así que se deja como está.
 - ~~**Wiki:** la sección "Windows x86 cannot decode some 64-bit `.ytp` files (lz4 fast mode)" de Known
   Issues quedó vieja: se arregló en 0.9.9b (commit aa32bd3).~~ Hecho en la wiki con la 0.9.9e.
 - **CI:** el de Windows compila sin las DLL de plugins (los codecs pasan por 0 streams). Sumar las DLL

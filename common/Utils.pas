@@ -1828,7 +1828,9 @@ begin
   FList := GetFileList([FPath], True);
   FCount := Length(FList);
   if FCount = 0 then
-    raise EFOpenError.Create('No file name specified');
+    // 0.9.9f: it said "No file name specified"
+    raise EFOpenError.CreateFmt('no files in %s (an empty folder has ' +
+      'nothing to compress)', [APath]);
   FIndex := -1;
   FStream := nil;
 end;
@@ -1936,6 +1938,27 @@ begin
   inherited Destroy;
 end;
 
+// 0.9.9f: a name from folder data, made safe to write under the output
+// folder. The separator was the encoding system's ('\' on Windows): both are
+// accepted, so a folder packed on Windows rebuilds on Linux. A name that is
+// absolute or climbs out with ".." (damaged or hostile data) is refused
+// instead of writing outside the folder.
+function SafeRelativeName(const Name: String): String;
+var
+  Parts: TStringDynArray;
+  P: String;
+begin
+  Result := StringReplace(StringReplace(Name, '\', '/', [rfReplaceAll]),
+    '/', PathDelim, [rfReplaceAll]);
+  if (Result = '') or (Result[1] = PathDelim) or
+    ((Length(Result) > 1) and (Result[2] = ':')) then
+    raise EWriteError.CreateFmt('folder data: unsafe file name "%s"', [Name]);
+  Parts := DecodeStr(Result, PathDelim);
+  for P in Parts do
+    if (P = '..') or (P = '') then
+      raise EWriteError.CreateFmt('folder data: unsafe file name "%s"', [Name]);
+end;
+
 function TDirOutputStream.Write(const Buffer; Count: LongInt): LongInt;
 var
   LCount: Integer;
@@ -1957,6 +1980,10 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FLength.Size then
       begin
+        // 0.9.9f: a damaged length asked SetLength for anything
+        if (FLength <= 0) or (FLength > 32768) then
+          raise EWriteError.CreateFmt('folder data: a file name of %d bytes ' +
+            '(damaged?)', [FLength]);
         SetLength(FBytes, FLength);
         FState := TOutState.oFilename;
         FPosition := 0;
@@ -1984,7 +2011,11 @@ begin
       Inc(FPosition, LCount);
       if FPosition = FSize.Size then
       begin
-        LStr := FPath + StringOf(FBytes);
+        LStr := SafeRelativeName(StringOf(FBytes));
+        if FSize < 0 then
+          raise EWriteError.CreateFmt('folder data: %s has a size of %d ' +
+            '(damaged?)', [LStr, FSize]);
+        LStr := FPath + LStr;
         if not DirectoryExists(ExtractFilePath(LStr)) then
           ForceDirectories(ExtractFilePath(LStr));
         FStream := TFileStreamEx.Create(LStr, $100000);

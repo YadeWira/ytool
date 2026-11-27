@@ -136,7 +136,7 @@ begin
   HelpSection('Deduplication');
   HelpOption('-dd', 'store repeated streams once (in memory)');
   HelpOption('-dd1 .. -dd5', 'the same with srep, method 1-5 (srep64 next to ytool)');
-  HelpOption('-ddo', 'the same with OSREP (osrep next to ytool), MIT');
+  HelpOption('-ddo', 'the same with OSREP, built into ytool (MIT)');
   HelpOption('-dm#', 'deduplication memory limit', '75p');
   HelpOption('-sp<params>', 'srep parameters, joined with :');
   HelpOption('-osp<params>', 'osrep parameters, joined with : (-ospm3:l64)');
