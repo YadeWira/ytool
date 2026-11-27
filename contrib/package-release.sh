@@ -61,7 +61,9 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so"
+LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so osrep"
+# Programas que viajan junto a ytool.exe en los zips (OSREP para -ddo, MIT)
+WIN_EXES="osrep"
 WIN_DLLS="zlib1 lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 liblz4 libzstd"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
@@ -151,6 +153,21 @@ package_linux() { # arch dir
   smoke zstd    76_zstd_levels.bin
   smoke zlib    20_zlib_streams.bin
   smoke preflate 20_zlib_streams.bin
+  # -ddo con el osrep del paquete: ida y vuelta, y que osrep haya corrido (una
+  # etapa mas en el resumen de tamanos que sin -ddo)
+  if [ -f "$CORPUS/23_dup_streams.bin" ]; then
+    cp "$CORPUS/23_dup_streams.bin" "$P/in.bin"
+    local st0 st1
+    st0=$( cd "$P" && ./ytool precomp -mzlib in.bin a.ytp 2>&1 | grep -o '>>' | wc -l )
+    st1=$( cd "$P" && ./ytool precomp -mzlib -ddo in.bin o.ytp 2>&1 | grep -o '>>' | wc -l )
+    ( cd "$P" && ./ytool decode o.ytp back.bin >/dev/null 2>&1 )
+    if cmp -s "$P/in.bin" "$P/back.bin" && [ "$st1" -gt "$st0" ]; then
+      echo "   ok: -ddo con el osrep del paquete ($st1 etapas)"
+    else
+      echo "   FALLA -ddo con el osrep del paquete (etapas $st0 -> $st1)"; FAILED=1
+    fi
+    rm -f "$P"/in.bin "$P"/a.ytp "$P"/o.ytp "$P"/back.bin
+  fi
   [ "$FAILED" = 0 ] || die "el smoke del paquete linux $arch fallo"
 }
 
@@ -241,9 +258,13 @@ for spec in "x64:" "x86:-x86"; do
     else die "falta la DLL ${d} para $arch (buscada como ${d}${sfx}.dll)"
     fi
   done
+  for e in $WIN_EXES; do
+    [ -f "$ROOT/${e}${sfx}.exe" ] || die "falta ${e}${sfx}.exe para $arch"
+    cp "$ROOT/${e}${sfx}.exe" "$D/${e}.exe"
+  done
   cp "$RM_WIN" "$D/README.txt"
   AFAIL=0
-  for f in "$D"/*.dll "$D"/ytool.exe; do check_imports "$f" || AFAIL=1; done
+  for f in "$D"/*.dll "$D"/*.exe; do check_imports "$f" || AFAIL=1; done
   if [ "$AFAIL" != 0 ]; then
     # No se arma el zip: un paquete con una dependencia que el usuario no tiene
     # es justo el que no queremos que exista y se suba por inercia.

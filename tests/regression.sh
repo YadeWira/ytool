@@ -319,6 +319,42 @@ if [ -x "$XTOOL" ] && [ -f "$CORPUS/11_text_8m.bin" ] && [ -f "$CORPUS/23_dup_st
   else echo "-- *** dos precomp/decode -dd a la vez en una carpeta: fallo *** --"; fail=$((fail+1)); fi
 fi
 
+# --- analyze ----------------------------------------------------------------
+# Hasta 0.9.9b analyze comparaba el tamano del .ytp, que CRECE cuando un codec
+# funciona (guarda los streams desempacados): sobre 200 streams deflate decia
+# "No codec improved this file". Ahora compara el tamano despues de -l#. Un
+# archivo de texto deflateado tiene que recomendar zlib o preflate, verificado;
+# uno aleatorio, ningun codec.
+if [ -x "$XTOOL" ] && [ "${ALLOW_MISSING_CODECS:-0}" != "1" ]; then
+  python3 - "$WORK" <<'PYEOF'
+import random, sys, zlib
+random.seed(4); d = sys.argv[1]
+words = [''.join(random.choice('abcdefghijklmnop') for _ in range(random.randint(3, 9))) for _ in range(3000)]
+out = bytearray()
+for i in range(30):
+    c = zlib.compress(' '.join(random.choice(words) for _ in range(4000)).encode(), 6)
+    out += b'BLOB' + len(c).to_bytes(4, 'little') + c
+open(d + '/an_text.bin', 'wb').write(out)
+open(d + '/an_rand.bin', 'wb').write(random.randbytes(300000))
+PYEOF
+  "$XTOOL" analyze -mzlib+preflate+zstd+lz4 -l1 "$WORK/an_text.bin" > "$WORK/an1.log" 2>&1; a1=$?
+  "$XTOOL" analyze -mzlib+preflate+zstd+lz4 -l1 "$WORK/an_rand.bin" > "$WORK/an2.log" 2>&1; a2=$?
+  if [ $a1 = 0 ] && grep -qE 'Recommended: ytool precomp -m(zlib|preflate)' "$WORK/an1.log" \
+     && grep -q 'decodes back byte for byte' "$WORK/an1.log" && [ $a2 = 0 ] \
+     && grep -q 'No codec makes this file smaller' "$WORK/an2.log"; then
+    echo "-- analyze: recomienda zlib/preflate sobre texto deflateado (verificado), nada sobre aleatorio --"; pass=$((pass+1))
+  else
+    echo "-- *** analyze: recomendacion equivocada *** --"; sed 's/^/   /' "$WORK/an1.log" "$WORK/an2.log" | tail -20; fail=$((fail+1))
+  fi
+fi
+# -mlz4 sin tamano: el escaner de bloques crudos decodificaba basura sin
+# limites (18 s sobre 20 KB con -t>1, mas de 10 minutos sobre 2 MB)
+if [ -x "$XTOOL" ] && [ -f "$CORPUS/10_random_2m.bin" ]; then
+  S0=$(date +%s); "$XTOOL" precomp -mlz4 -t4 "$CORPUS/10_random_2m.bin" "$WORK/lz4r.ytp" >/dev/null 2>&1; S1=$(date +%s)
+  if [ $((S1 - S0)) -le 10 ]; then echo "-- -mlz4 sobre 2 MB aleatorios: $((S1 - S0)) s --"; pass=$((pass+1))
+  else echo "-- *** -mlz4 sobre 2 MB aleatorios tardo $((S1 - S0)) s *** --"; fail=$((fail+1)); fi
+fi
+
 # --- -ddo: OSREP como dedup externo -----------------------------------------
 # Corre si hay un osrep junto a ytool (no viene en el repo; releases de
 # YadeWira/omega-srep). Ida y vuelta con y sin -osp, y un .ytp hecho con -ddo

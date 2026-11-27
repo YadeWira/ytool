@@ -204,4 +204,7 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+# OSREP (-ddo), released binary, next to ytool
+if [ "$ARCH" = x86 ]; then fetch_osrep osrep-linux-x86 "$OUT/osrep"; else fetch_osrep osrep-linux-x86_64 "$OUT/osrep"; fi
+
 echo "Hecho. Plugins .so en $OUT (la raiz del repo, gitignored, salvo ARCH=x86)."

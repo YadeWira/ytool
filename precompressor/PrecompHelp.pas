@@ -8,8 +8,18 @@ unit PrecompHelp;
 
 interface
 
+type
+  // A codec analyze can try: its -m name, the streams it competes for (one
+  // codec per group ends up in a recommendation), and whether its library
+  // loaded.
+  TCodecInfo = record
+    Name, Group: string;
+    Available: Boolean;
+  end;
+
 procedure PrecompPrintHelp;
 procedure DecodePrintHelp;
+function CodecTable: TArray<TCodecInfo>;
 // One help line: an option, padded, and what it does.
 procedure HelpOption(const Opt, Text: string; const Default: string = '');
 procedure HelpSection(const Title: string);
@@ -157,6 +167,41 @@ begin
   WriteLine('Sizes take kb, mb, gb; shares take p (50p = 50%). Colours: set NO_COLOR to');
   WriteLine('turn them off. More: https://github.com/YadeWira/ytool/wiki/CLI-Reference');
   WriteLine('');
+end;
+
+function CodecTable: TArray<TCodecInfo>;
+
+  procedure Add(const Name, Group: string; Available: Boolean);
+  var
+    C: TCodecInfo;
+  begin
+    C.Name := Name;
+    C.Group := Group;
+    C.Available := Available;
+    Insert(C, Result, Length(Result));
+  end;
+
+begin
+  Result := nil;
+  Add('zlib', 'deflate', ZLibDLL.DLLLoaded);
+  Add('preflate', 'deflate', PreflateDLL.DLLLoaded);
+  Add('png', 'deflate', ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded);
+  Add('pja', 'jpeg', PJADLL.DLLLoaded);
+  Add('brunsli', 'jpeg', BrunsliDLL.DLLLoaded);
+  Add('lz4f', 'lz4f', LZ4DLL.DLLLoaded);
+  Add('lz4', 'lz4', LZ4DLL.DLLLoaded);
+  Add('lz4hc', 'lz4', LZ4DLL.DLLLoaded);
+  Add('zstd', 'zstd', ZSTDDLL.DLLLoaded);
+  Add('lzo1x', 'lzo', LZODLL.DLLLoaded);
+  Add('lzo1c', 'lzo', LZODLL.DLLLoaded);
+  Add('lzo2a', 'lzo', LZODLL.DLLLoaded);
+  Add('lzma', 'lzma', True);
+  Add('flac', 'wav', FLACDLL.DLLLoaded);
+  Add('wavpack', 'wav', WavPackDLL.DLLLoaded);
+  Add('kraken', 'oodle', OodleDLL.DLLLoaded);
+  Add('mermaid', 'oodle', OodleDLL.DLLLoaded);
+  Add('selkie', 'oodle', OodleDLL.DLLLoaded);
+  Add('leviathan', 'oodle', OodleDLL.DLLLoaded);
 end;
 
 procedure DecodePrintHelp;

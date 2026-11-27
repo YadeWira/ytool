@@ -254,4 +254,8 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+
+# OSREP (-ddo), released binary, next to ytool
+fetch_osrep osrep-windows-x86_64.exe "$ROOT/osrep.exe"
+
 echo "Hecho. Plugins .dll en la raiz del repo (gitignored)."

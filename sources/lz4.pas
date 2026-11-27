@@ -310,8 +310,18 @@ begin
       exit(-1);
   end;
 
+  { endOnOutputSize ("fast" mode) trusted its input: no input bound, no
+    offset check. ytool calls it only from LZ4Scan1, on arbitrary data, to see
+    whether a raw block starts at each candidate position; with garbage it
+    read past the input and copied from anywhere until the output neared
+    outputSize (16 MB by default), per candidate: -mlz4 took 18 s on a 20 KB
+    file, and over 10 minutes on 2 MB. Bounded here: a real block lies inside
+    the input and its matches point into its own output, so nothing it
+    decodes changes; garbage fails at once. }
   while True do
   begin
+    if (endOnInput = 0) and (ip >= iend) then
+      goto _output_error;
     token := ip^;
     inc(ip);
     length := token shr ML_BITS;
@@ -319,6 +329,8 @@ begin
     begin
       while True do
       begin
+        if (endOnInput = 0) and (ip >= iend) then
+          goto _output_error;
         s := ip^;
         inc(ip);
         inc(length, s);
@@ -336,6 +348,8 @@ begin
         goto _output_error;
     end;
     cpy := op + length;
+    if (endOnInput = 0) and (ip + length > iend) then
+      goto _output_error;
     if partialDecoding <> 0 then
       booleantest := cpy > oexit
     else
@@ -367,8 +381,12 @@ begin
     LZ4_wildCopy(op, ip, cpy);
     inc(ip, length);
     op := cpy;
+    if (endOnInput = 0) and (ip + 2 > iend) then
+      goto _output_error;
     match := cpy - LZ4_read16(ip); // LZ4_readLE16 = LZ4_read16 for unaligned
     inc(ip, 2);
+    if (endOnInput = 0) and (match < pByte(dest)) then
+      goto _output_error;
 
     if checkOffset and (match < lowLimit) then
       goto _output_error;
@@ -379,6 +397,8 @@ begin
       while True do
       begin
         if ((endOnInput <> 0) and (ip > iend - LASTLITERALS)) then
+          goto _output_error;
+        if (endOnInput = 0) and (ip >= iend) then
           goto _output_error;
         s := ip^;
         inc(ip);

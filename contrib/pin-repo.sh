@@ -91,3 +91,27 @@ lz4_lib32() {
   sed -i 's|^#if defined(__x86_64__)$|#if 1  /* ytool: 64-bit reg_t on 32-bit too (lz4_lib32 in contrib/pin-repo.sh) */|' "$out/lz4.c"
   grep -q 'ytool: 64-bit reg_t' "$out/lz4.c" || { echo "   lz4_lib32: the reg_t line moved; check lz4.c" >&2; return 1; }
 }
+
+# fetch_osrep <asset> <dest>: OSREP (github.com/YadeWira/omega-srep, MIT), the
+# external deduplicator for -ddo, as released, checked against the SHA-256 of
+# that release's SHA256SUMS. Its format v7 (-m6, the default) is frozen, so a
+# .ytp made with one release decodes with the later ones.
+OSREP_VER="0.0.17"
+fetch_osrep() {
+  local asset="$1" dest="$2" sum
+  case "$asset" in
+    osrep-linux-x86_64)       sum=d3c72db52b6eb032f73f3dd74cc0027a372afaa50697b3ca5925c0f02b5978b7 ;;
+    osrep-linux-x86)          sum=fded491be4ca6f300dbd900b4b2305b72cfc71d7296012b682a451aa58ec1c82 ;;
+    osrep-windows-x86_64.exe) sum=21c29b092c8ecd149930da2478733e9ff2fee0943b131ce77cb8e29d7cffdb2f ;;
+    osrep-windows-x86.exe)    sum=b7311dc3fa0ceb7a71fcb2d20b6ff1496ee6ec9c113acf0af97a8a9845216074 ;;
+    *) echo "   fetch_osrep: no pinned sum for $asset" >&2; return 1 ;;
+  esac
+  echo "==> OSREP $OSREP_VER ($(basename "$dest"))"
+  local tmp="$dest.download"
+  if curl -sfL -o "$tmp" "https://github.com/YadeWira/omega-srep/releases/download/v${OSREP_VER}/$asset" \
+     && echo "$sum  $tmp" | sha256sum -c --status; then
+    mv "$tmp" "$dest" && chmod +x "$dest" && echo "   OK -> $(basename "$dest")"
+  else
+    rm -f "$tmp"; echo "   (OSREP: descarga fallida o SHA-256 distinto)"; return 1
+  fi
+}

@@ -276,6 +276,10 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+
+# OSREP (-ddo), released binary, next to ytool
+fetch_osrep osrep-windows-x86.exe "$ROOT/osrep-x86.exe"
+
 echo "Hecho. Plugins -x86.dll en la raiz del repo (gitignored)."
 echo "Al empaquetar: renombrar cada uno quitando el sufijo -x86 junto al ytool.exe"
 echo "de 32-bit (pja-x86.dll -> pja.dll, zlib1-x86.dll -> zlib1.dll, etc.),"
