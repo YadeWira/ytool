@@ -31,7 +31,7 @@ Remove-Item .\ytool-x86, .\ytool-x86.exe -ErrorAction SilentlyContinue
 
 & $fpc -Mdelphi -Sg -O2 -dABSOLUTEPASCAL -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio `
   -Fuimports -Fusources -Fucontrib\mORMot -Fucontrib\LZ4Delphi -Fucontrib\ZSTD4Delphi `
-  -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi -Fucontrib\WinLibcShim `
+  -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi -Fucontrib\ZLibStatic -Fucontrib\WinLibcShim `
   -oytool-x86.exe ytool.dpr
 if ($LASTEXITCODE -ne 0) { Write-Error "fpc fallo con codigo $LASTEXITCODE"; exit $LASTEXITCODE }
 

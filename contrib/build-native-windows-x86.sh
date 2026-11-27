@@ -121,4 +121,22 @@ cp "$SHIMTMP/_ashldi3.o"  WinLibcShim/ashldi3.x86.o
 cp "$SHIMTMP/_ashrdi3.o"  WinLibcShim/ashrdi3.x86.o
 cp "$SHIMTMP/_lshrdi3.o"  WinLibcShim/lshrdi3.x86.o
 
+
+# zlib built in (0.9.9f, as on Linux: contrib/build-native-linux.sh). Same
+# commit as zlib1.dll; Z_PREFIX. Replaces the FPC ZLib unit, which bound
+# zlib1.dll at start-up.
+ZLIB_REF="99623ef7097352da7993ba614161fd6a311e046e"
+pin_repo https://github.com/madler/zlib "$CSRC/zlib" "$ZLIB_REF"
+echo "==> ZLibStatic/zlib_*.win32.x86.o (deflate + inflate, Z_PREFIX)"
+mkdir -p ZLibStatic
+# One object per source, linked one by one ({$L} in imports/ZLibDLL.pas): FPC's
+# internal linker misreads an "ld -r" merge of COFF objects (zlibVersion
+# pointed at another string, every call failed), and on x64 the default
+# -mcmodel=medium reaches other objects' data through .rdata$.refptr.*
+# sections it does not handle either.
+for f in deflate trees adler32 crc32 zutil inflate inftrees inffast; do
+  "$CC" -c -O2 -DZ_PREFIX -I "$CSRC/zlib" -o ZLibStatic/zlib_$f.win32.x86.o "$CSRC/zlib/$f.c"
+done
+rm -f ZLibStatic/zlibstatic.win32.x86.o
+
 echo "OK: objetos Windows x86 generados."

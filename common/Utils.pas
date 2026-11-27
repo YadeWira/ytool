@@ -14,7 +14,7 @@ uses
 {$ENDIF}
   SysUtils, Classes, SyncObjs, Math, Types,
   StrUtils, IniFiles, IOUtils,
-  RTLConsts, TypInfo, ZLib, Character, SysConst,
+  RTLConsts, TypInfo, Character, SysConst,
   Generics.Defaults, Generics.Collections;
 
 procedure ShowMessage(Msg: string; Caption: string = '');
@@ -4021,9 +4021,41 @@ begin
     AddByte((PByte(AData) + I)^);
 end;
 
+var
+  CRC32Table: array [0 .. 255] of longword;
+  CRC32Ready: Boolean = False;
+
+// zlib's crc32() (reflected 0xEDB88320, inverted in and out), in Pascal: the
+// FPC ZLib unit bound the system libz (a NEEDED of ytool) just for this
 function CRC32(CRC: longword; buf: PByte; len: cardinal): longword;
+var
+  I, J: Integer;
+  C: longword;
 begin
-  Result := ZLib.CRC32(CRC, pBytef(buf), len);
+  if not CRC32Ready then
+  begin
+    for I := 0 to 255 do
+    begin
+      C := I;
+      for J := 0 to 7 do
+        if C and 1 <> 0 then
+          C := (C shr 1) xor $EDB88320
+        else
+          C := C shr 1;
+      CRC32Table[I] := C;
+    end;
+    CRC32Ready := True;
+  end;
+  if buf = nil then
+    exit(0);
+  Result := CRC xor $FFFFFFFF;
+  while len > 0 do
+  begin
+    Result := CRC32Table[(Result xor buf^) and $FF] xor (Result shr 8);
+    Inc(buf);
+    Dec(len);
+  end;
+  Result := Result xor $FFFFFFFF;
 end;
 
 function Hash32(CRC: longword; buf: PByte; len: cardinal): longword;

@@ -18,10 +18,10 @@ stream, y cada version de lz4/zstd comprime distinto en algunos niveles. ytool l
 carga antes que las del sistema; si las borras, usa las de la distro y un .ytp puede
 no restaurarse en otra maquina.
 
-Del sistema: libz (hace falta para arrancar), y por dlopen liblzo2, libFLAC y
-libwavpack. En el paquete x86 tienen que ser las de 32 bits (en Debian/Ubuntu sobre
-un sistema de 64 bits: lib32z1; sin las otras de 32 bits, esos codecs quedan
-desactivados, ytool help precomp los marca con *).
+zlib 1.4 va dentro de ytool (-mzlib, -mpng): no usa la libz del sistema.
+Del sistema, por dlopen: liblzo2, libFLAC y libwavpack. En el paquete x86 tienen que
+ser las de 32 bits; sin ellas esos codecs quedan desactivados (ytool help precomp los
+marca con *).
 
 srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
 pones srep64 junto a ytool (builds: https://github.com/YadeWira/srep-builds), o su

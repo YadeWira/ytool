@@ -7,7 +7,7 @@ nada de esto está comprometido todavía. Las prioridades marcadas como suyas vi
 el `.ytp` (zpaq-std, la variante de biblioteca por stream) entra antes de 1.0.0 o espera a un formato
 nuevo; las features que no tocan el formato pueden seguir en 1.x.
 
-Entran también, por pedido de Wira: **trabajar con carpetas** (punto 2), **descomprimir solo con el
+Entran también, por pedido de Wira: **trabajar con carpetas y con varios archivos** (punto 2), **descomprimir solo con el
 binario** (punto 3), un **formato nuevo que sigue leyendo los `.ytp` de 0.9.9x** (punto 4) y
 **mejorar el formato de los plugins** (punto 5).
 
@@ -44,7 +44,7 @@ sobre el flujo ya precomprimido, como hoy `-l#` (fast-lzma2) o `-e` (programa ex
 - **Por decidir:** nombre de la opción (`-z#`, `-mz`…), si se distribuye la biblioteca en los
   paquetes, y si reemplaza a fast-lzma2 por defecto o queda como alternativa.
 
-### 2. Trabajar con carpetas (pedido de Wira, 2026-11-27)
+### 2. Trabajar con carpetas y con varios archivos (pedido de Wira, 2026-11-27)
 
 Hoy ytool se usa con archivos. Por debajo ya existe algo heredado de xtool: `precomp` acepta una carpeta
 (`TDirInputStream`) y `decode` a una carpeta existente la reconstruye (`TDirOutputStream`). Probado en
@@ -69,8 +69,18 @@ Como el formato de carpeta viaja dentro del `.ytp`, **hay que rediseñarlo antes
 - que `decode` cree la carpeta de salida si no existe y que se niegue a escribir fuera de ella
   (rutas con `..` o absolutas en un `.ytp` dañado o malicioso).
 
-A decidir: si `precomp` acepta varias entradas (`ytool precomp a.bin carpeta/ salida.ytp`), y si hace
-falta listar o extraer un solo archivo de un `.ytp` de carpeta.
+**Multi-archivo (pedido de Wira, 2026-11-27):** `precomp` acepta varias entradas, archivos y carpetas
+mezclados (`ytool precomp a.bin b.iso carpeta/ salida.ytp`, y comodines `*.pak`), en un solo `.ytp`.
+Hoy solo acepta una entrada. Va con el mismo formato de entradas que las carpetas: cada archivo con su
+nombre relativo, tamaño, fecha y atributos. Consecuencias:
+- `decode` a una carpeta reconstruye todos; hace falta decidir qué nombre relativo lleva cada entrada
+  cuando vienen de rutas distintas (la base común, o solo el nombre si están sueltas).
+- **Listar y extraer uno solo** (`ytool list salida.ytp`, `ytool decode salida.ytp destino nombre`): con
+  varios archivos se vuelve necesario. Extraer uno sin decodificar todo exige saber dónde empieza cada
+  uno dentro del flujo; si los datos van comprimidos al final (`-l#`, zpaq-std), puede requerir
+  descomprimir desde el principio. Hay que decidir si eso basta o si el formato guarda un índice.
+- El deduplicador (`-dd`, OSREP) gana más con varios archivos juntos: los repetidos entre archivos se
+  guardan una vez.
 
 ### 3. Descomprimir solo con el binario, sin plugins ni bibliotecas (pedido de Wira, 2026-11-27)
 

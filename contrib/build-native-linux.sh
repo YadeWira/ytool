@@ -85,4 +85,23 @@ echo "==> lzmadelphi.linux.$ARCH.o"
 gcc $M -c -O2 -fPIC -I "$LZMA_SDK_C" \
   -o LZMADelphi/lzmadelphi.linux.$ARCH.o LZMADelphi/lzmadelphi.c
 
+# zlib built in (0.9.9f; docs/ROADMAP-1.0.0.md point 3): the deflate side of
+# -mzlib/-mpng, which used the SYSTEM libz.so.1 on Linux (another zlib, e.g.
+# zlib-ng in compatibility mode, could write other bytes). Same commit as
+# Windows' zlib1.dll (build-plugins-windows.sh): v1.4, deflate output equal to
+# 1.3.1 in 3888 of 3888 cases measured. Z_PREFIX (z_deflate...) so it never
+# clashes with a zlib a plugin loads. Inflate too: FPC's ZLib unit is a binding
+# to the system libz (it made libz.so.1 a NEEDED of ytool).
+ZLIB_REF="99623ef7097352da7993ba614161fd6a311e046e"
+pin_repo https://github.com/madler/zlib "$CSRC/zlib" "$ZLIB_REF"
+echo "==> ZLibStatic/zlibstatic.linux.$ARCH.o (deflate + inflate, Z_PREFIX)"
+mkdir -p ZLibStatic
+ZO=""
+for f in deflate trees adler32 crc32 zutil inflate inftrees inffast; do
+  gcc $M -c -O2 -fPIC -DZ_PREFIX -I "$CSRC/zlib" -o "$CSRC/zs_$f.$ARCH.o" "$CSRC/zlib/$f.c"
+  ZO="$ZO $CSRC/zs_$f.$ARCH.o"
+done
+# shellcheck disable=SC2086
+gcc $M -r -nostdlib -o ZLibStatic/zlibstatic.linux.$ARCH.o $ZO
+
 echo "OK: objetos Linux generados."

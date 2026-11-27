@@ -66,7 +66,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path .fpcout | Out-Null
           & $fpc -Mdelphi -Sg -O2 -FU.fpcout -Fucompat -Fucommon -Fuprecompressor -Fuio `
             -Fuimports -Fusources -Fucontrib\mORMot -Fucontrib\LZ4Delphi -Fucontrib\ZSTD4Delphi `
-            -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi `
+            -Fucontrib\XXHASH4Delphi -Fucontrib\ParseExpression -Fucontrib\LZMADelphi -Fucontrib\ZLibStatic `
             -oytool.exe ytool.dpr
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # FPC on Windows sometimes drops the .exe extension from -o.
