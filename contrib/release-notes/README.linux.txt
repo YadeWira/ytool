@@ -9,6 +9,9 @@ libpreflate.so preflate: deflate de cualquier compresor (-mpreflate)
 liblz4.so    lz4 1.11.1 (-mlz4, -mlz4hc, -mlz4f)
 libzstd.so   zstd 1.6.0 (-mzstd)
 libfast-lzma2.so  compresion final (-l#)
+libdeflate.so libdeflate 1.26: deflate que zlib no reproduce (-mlibdeflate)
+liblz.so     lzlib 1.16: miembros lzip, .lz (-mlzip)
+osrep        OSREP 0.0.17 (MIT): dedup externa (-ddo)
 
 liblz4.so y libzstd.so van incluidas a proposito: el .ytp guarda el nivel, no el
 stream, y cada version de lz4/zstd comprime distinto en algunos niveles. ytool las
@@ -22,9 +25,7 @@ desactivados, ytool help precomp los marca con *).
 
 srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
 pones srep64 junto a ytool (builds: https://github.com/YadeWira/srep-builds); sin el,
-ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP (MIT, vista previa):
-pon el binario de https://github.com/YadeWira/omega-srep/releases junto a ytool,
-renombrado osrep.
+ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP, que viene incluido.
 
 Uso (todas las opciones: ./ytool help precomp):
   ./ytool precomp -mzlib+zstd+pja entrada salida.ytp

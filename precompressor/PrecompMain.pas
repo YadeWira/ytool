@@ -8,7 +8,7 @@ uses
   InitCode,
   Threading, Utils, CliUI, SynCommons, ParseClass, ParseExpr, FLZMA2DLL, XXHASHLIB,
   PrecompUtils, PrecompCrypto, PrecompZLib, PrecompLZ4, PrecompLZO, PrecompZSTD,
-  PrecompOodle, PrecompMedia, PrecompReserved, PrecompLZMA, PrecompINI, PrecompINIEx,
+  PrecompOodle, PrecompMedia, PrecompReserved, PrecompLZMA, PrecompLZIP, PrecompINI, PrecompINIEx,
   PrecompSearch, PrecompDLL, PrecompEXE, PrecompHelp,
 {$IFDEF MSWINDOWS}
   Windows, ShlObj,
@@ -4232,6 +4232,8 @@ begin
   Insert(PrecompReserved.Codec, Codecs, Length(Codecs));
   Insert(PrecompLZMA.Codec, Codecs, Length(Codecs));
   Insert(PrecompUtils.Codec, Codecs, Length(Codecs));
+  // 0.9.9c; at the end, so no codec number already in a .ytp moves
+  Insert(PrecompLZIP.Codec, Codecs, Length(Codecs));
   if Output is TBufferedStream then
     NULLOUT := TBufferedStream(Output).Instance is TNullStream;
   // NULLOUT should already be True here for -scan: the caller (ytool.dpr)
@@ -4359,6 +4361,8 @@ begin
   Insert(PrecompReserved.Codec, Codecs, Length(Codecs));
   Insert(PrecompLZMA.Codec, Codecs, Length(Codecs));
   Insert(PrecompUtils.Codec, Codecs, Length(Codecs));
+  // 0.9.9c; at the end, so no codec number already in a .ytp moves
+  Insert(PrecompLZIP.Codec, Codecs, Length(Codecs));
   FillChar(EncInfo, SizeOf(EncInfo), 0);
   ConTask := TTask.Create;
   ConTask.Priority := tpIdle;

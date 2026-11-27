@@ -3,7 +3,7 @@ unit PrecompZLib;
 interface
 
 uses
-  ZLibDLL, PreflateDLL,
+  ZLibDLL, PreflateDLL, LibDeflateDLL,
   Utils,
   PrecompUtils,
   SysUtils, StrUtils, Classes, Math;
@@ -17,12 +17,20 @@ const
   // Slot 1 was 'reflate' (needs RAW2HIF_DLL/HIF2RAW_DLL, closed and not
   // available anywhere). Removed in 0.9.9a; the slot stays so the codec
   // numbers stored in the container do not move.
-  ZlibCodecs: array of PChar = ['zlib', '', 'preflate', 'png'];
-  CODEC_COUNT = 4;
+  ZlibCodecs: array of PChar = ['zlib', '', 'preflate', 'png', 'libdeflate'];
+  CODEC_COUNT = 5;
   ZLIB_CODEC = 0;
   // 1: reserved, was REFLATE_CODEC (see ZlibCodecs)
   PREFLATE_CODEC = 2;
   PNG_CODEC = 3;
+  // 0.9.9c: deflate streams written by libdeflate (levels 0-12), which zlib
+  // does not reproduce. Tried after zlib and before preflate.
+  LIBDEFLATE_CODEC = 4;
+  LD_MAXLEVEL = 12;
+  // The order a stream goes to the enabled codecs in Scan1: an exact rebuild
+  // (zlib, then libdeflate) before preflate's diff.
+  CODEC_ORDER: array [0 .. CODEC_COUNT - 1] of Integer = (ZLIB_CODEC,
+    LIBDEFLATE_CODEC, 1, PREFLATE_CODEC, PNG_CODEC);
 
 const
   Z_WINBITS = 7;
@@ -45,6 +53,15 @@ var
   CodecAvailable, CodecEnabled: TArray<Boolean>;
   Scan2Pos: TArray<Integer>;
   Scan2SI: TArray<PStrInfo2>;
+  // [instance][level]: libdeflate compressors, allocated when first used
+  LDComp: array of array [0 .. LD_MAXLEVEL] of Pointer;
+
+function LDCompressor(Instance, Level: Integer): Pointer;
+begin
+  if LDComp[Instance, Level] = nil then
+    LDComp[Instance, Level] := libdeflate_alloc_compressor(Level);
+  Result := LDComp[Instance, Level];
+end;
 
 function EncodePNG(Instance: Integer; Input: PByte; Pos, Size: NativeInt;
   Output: _PrecompOutput; Add: _PrecompAdd; Funcs: PPrecompFuncs): Integer;
@@ -260,6 +277,10 @@ begin
   CodecAvailable[ZLIB_CODEC] := ZLibDLL.DLLLoaded;
   CodecAvailable[PREFLATE_CODEC] := PreflateDLL.DLLLoaded;
   CodecAvailable[PNG_CODEC] := ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded;
+  CodecAvailable[LIBDEFLATE_CODEC] := LibDeflateDLL.DLLLoaded;
+  SetLength(LDComp, Count);
+  for X := Low(LDComp) to High(LDComp) do
+    FillChar(LDComp[X], SizeOf(LDComp[X]), 0);
   X := 0;
   while Funcs^.GetCodec(Command, X, False) <> '' do
   begin
@@ -279,7 +300,17 @@ begin
     then
       CodecEnabled[PREFLATE_CODEC] := True
     else if (CompareText(S, ZlibCodecs[PNG_CODEC]) = 0) then
-      CodecEnabled[PNG_CODEC] := True;
+      CodecEnabled[PNG_CODEC] := True
+    else if (CompareText(S, ZlibCodecs[LIBDEFLATE_CODEC]) = 0) and
+      LibDeflateDLL.DLLLoaded then
+    begin
+      CodecEnabled[LIBDEFLATE_CODEC] := True;
+      if Funcs^.GetParam(Command, X, 'l') <> '' then
+        for I := Low(SOList) to High(SOList) do
+          SOList[I][LIBDEFLATE_CODEC].Update
+            ([EnsureRange(StrToInt(Funcs^.GetParam(Command, X, 'l')), 0,
+            LD_MAXLEVEL)], True);
+    end;
     Inc(X);
   end;
   if CodecAvailable[ZLIB_CODEC] then
@@ -306,6 +337,9 @@ begin
             for I := 11 to 99 do
               if I mod 10 <> 0 then
                 Insert(I, Options, Length(Options));
+          LIBDEFLATE_CODEC:
+            for I := 0 to LD_MAXLEVEL do
+              Insert(I, Options, Length(Options));
         end;
         if SOList[X, Y].Count = 0 then
         begin
@@ -318,6 +352,14 @@ begin
                 SOList[X, Y].Add(58);
                 SOList[X, Y].Add(68);
                 SOList[X, Y].Add(98);
+              end;
+            // the levels most programs use, tried first
+            LIBDEFLATE_CODEC:
+              begin
+                SOList[X, Y].Add(12);
+                SOList[X, Y].Add(9);
+                SOList[X, Y].Add(1);
+                SOList[X, Y].Add(6);
               end;
           end;
         end;
@@ -334,6 +376,11 @@ begin
   for X := Low(SOList) to High(SOList) do
     for Y := Low(SOList[X]) to High(SOList[X]) do
       SOList[X, Y].Free;
+  for X := Low(LDComp) to High(LDComp) do
+    for Y := Low(LDComp[X]) to High(LDComp[X]) do
+      if LDComp[X, Y] <> nil then
+        libdeflate_free_compressor(LDComp[X, Y]);
+  LDComp := nil;
   if CodecAvailable[ZLIB_CODEC] then
   begin
     for W := Low(ZStream1) to High(ZStream1) do
@@ -386,6 +433,15 @@ begin
     begin
       SetBits(Option^, PNG_CODEC, 0, 3);
       Result := True;
+    end
+    else if (CompareText(S, ZlibCodecs[LIBDEFLATE_CODEC]) = 0) and
+      LibDeflateDLL.DLLLoaded then
+    begin
+      SetBits(Option^, LIBDEFLATE_CODEC, 0, 3);
+      if Funcs^.GetParam(Command, I, 'l') <> '' then
+        SetBits(Option^, EnsureRange(StrToInt(Funcs^.GetParam(Command, I, 'l')),
+          0, LD_MAXLEVEL), 3, 7);
+      Result := True;
     end;
     Inc(I);
   end;
@@ -398,7 +454,7 @@ var
   Buffer: PByte;
   Pos: NativeInt;
   Res: Integer;
-  I: Integer;
+  I, J: Integer;
 
   ZStream: z_streamp;
   IsZlib: Boolean;
@@ -540,8 +596,9 @@ begin
           SetBits(SI.Option, WinBits, 10, 3);
           if not((Input + Pos)^ and 7 in [$4, $5]) then
             SetBits(SI.Option, 1, 13, 1);
-          for I := Low(CodecEnabled) to High(CodecEnabled) do
+          for J := Low(CODEC_ORDER) to High(CODEC_ORDER) do
           begin
+            I := CODEC_ORDER[J];
             if (I = ZLIB_CODEC) and (WinBits = 0) then
               SetBits(SI.Option, 1, 10, 3);
             SetBits(SI.Option, I, 0, 3);
@@ -707,12 +764,53 @@ begin
         end;
         if Result = False then
         begin
-          if CodecEnabled[PREFLATE_CODEC] then
+          if CodecEnabled[LIBDEFLATE_CODEC] then
+          begin
+            SetBits(StreamInfo^.Option, LIBDEFLATE_CODEC, 0, 3);
+            Result := ZlibProcess(Instance, Depth, OldInput, NewInput,
+              StreamInfo, Output, Funcs);
+          end
+          else if CodecEnabled[PREFLATE_CODEC] then
           begin
             SetBits(StreamInfo^.Option, PREFLATE_CODEC, 0, 3);
             Result := ZlibProcess(Instance, Depth, OldInput, NewInput,
               StreamInfo, Output, Funcs);
           end;
+        end;
+      end;
+    LIBDEFLATE_CODEC:
+      begin
+        // One call per level over the whole stream (libdeflate has no
+        // streaming API to stop at the first different byte, as zlib's
+        // check does): the level found last is tried first.
+        Res2 := libdeflate_deflate_compress_bound(nil, StreamInfo^.NewSize);
+        Buffer := Funcs^.Allocator(Instance, Res2);
+        SOList[Instance][LIBDEFLATE_CODEC].Index := 0;
+        while SOList[Instance][LIBDEFLATE_CODEC].Get(I) >= 0 do
+        begin
+          if (StreamInfo^.Status = TStreamStatus.Database) and
+            (GetBits(StreamInfo^.Option, 3, 7) <> I) then
+            continue;
+          Res1 := libdeflate_deflate_compress(LDCompressor(Instance, I),
+            NewInput, StreamInfo^.NewSize, Buffer, Res2);
+          Verified := (Res1 = StreamInfo^.OldSize) and
+            CompareMem(OldInput, Buffer, Res1);
+          Params := 'l' + I.ToString;
+          Funcs^.LogProcess(ZlibCodecs[LIBDEFLATE_CODEC], PChar(Params),
+            StreamInfo^.OldSize, StreamInfo^.NewSize, Res1, Verified);
+          if Verified then
+          begin
+            SetBits(StreamInfo^.Option, I, 3, 7);
+            SOList[Instance][LIBDEFLATE_CODEC].Add(I);
+            Result := True;
+            break;
+          end;
+        end;
+        if (Result = False) and CodecEnabled[PREFLATE_CODEC] then
+        begin
+          SetBits(StreamInfo^.Option, PREFLATE_CODEC, 0, 3);
+          Result := ZlibProcess(Instance, Depth, OldInput, NewInput,
+            StreamInfo, Output, Funcs);
         end;
       end;
     PREFLATE_CODEC:
@@ -792,6 +890,22 @@ begin
           PChar(Params), StreamInfo.OldSize, StreamInfo.NewSize,
           ZStream^.total_out, True);
         Result := True;
+      end;
+    LIBDEFLATE_CODEC:
+      begin
+        I := GetBits(StreamInfo.Option, 3, 7);
+        Params := 'l' + I.ToString;
+        Res2 := libdeflate_deflate_compress_bound(nil, StreamInfo.NewSize);
+        Buffer := Funcs^.Allocator(Instance, Res2);
+        Res1 := 0;
+        if InRange(I, 0, LD_MAXLEVEL) then
+          Res1 := libdeflate_deflate_compress(LDCompressor(Instance, I), Input,
+            StreamInfo.NewSize, Buffer, Res2);
+        Result := Res1 > 0;
+        if Result then
+          Output(Instance, Buffer, Res1);
+        Funcs^.LogRestore(ZlibCodecs[LIBDEFLATE_CODEC], PChar(Params),
+          StreamInfo.OldSize, StreamInfo.NewSize, Res1, Result);
       end;
     PREFLATE_CODEC:
       begin

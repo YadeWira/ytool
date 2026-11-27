@@ -204,6 +204,12 @@ else
   echo "   (brunsli: falta cmake o el clone)"
 fi
 
+# libdeflate (-mlibdeflate), pinned in pin-repo.sh
+build_libdeflate "$OUT/libdeflate.so" "$CC" $M -fPIC
+
+# lzlib (-mlzip), pinned in pin-repo.sh
+build_lzlib "$OUT/liblz.so" "$CC" $M -fPIC
+
 # OSREP (-ddo), released binary, next to ytool
 if [ "$ARCH" = x86 ]; then fetch_osrep osrep-linux-x86 "$OUT/osrep"; else fetch_osrep osrep-linux-x86_64 "$OUT/osrep"; fi
 

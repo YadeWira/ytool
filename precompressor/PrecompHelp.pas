@@ -28,7 +28,7 @@ implementation
 
 uses
   SysUtils, Utils, CliUI,
-  ZLibDLL, PreflateDLL, LZ4DLL, LZODLL, ZSTDDLL, OodleDLL, FLACDLL,
+  ZLibDLL, PreflateDLL, LibDeflateDLL, LZlibDLL, LZ4DLL, LZODLL, ZSTDDLL, OodleDLL, FLACDLL,
   WavPackDLL, BrunsliDLL, PJADLL, FLZMA2DLL;
 
 const
@@ -94,8 +94,8 @@ begin
 
   Missing := False;
   HelpSection('Codecs (-m, several joined with +)');
-  CodecRow('deflate', ['zlib', 'preflate', 'png'],
-    [ZLibDLL.DLLLoaded, PreflateDLL.DLLLoaded,
+  CodecRow('deflate', ['zlib', 'libdeflate', 'preflate', 'png'],
+    [ZLibDLL.DLLLoaded, LibDeflateDLL.DLLLoaded, PreflateDLL.DLLLoaded,
     ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded]);
   CodecRow('JPEG', ['pja', 'brunsli'], [PJADLL.DLLLoaded,
     BrunsliDLL.DLLLoaded]);
@@ -104,7 +104,7 @@ begin
   CodecRow('zstd', ['zstd'], [ZSTDDLL.DLLLoaded]);
   CodecRow('lzo', ['lzo1x', 'lzo1c', 'lzo2a'], [LZODLL.DLLLoaded,
     LZODLL.DLLLoaded, LZODLL.DLLLoaded]);
-  CodecRow('lzma', ['lzma'], [True]);
+  CodecRow('lzma', ['lzma', 'lzip'], [True, LZlibDLL.DLLLoaded]);
   CodecRow('audio', ['flac', 'wavpack'], [FLACDLL.DLLLoaded,
     WavPackDLL.DLLLoaded]);
   CodecRow('Oodle', ['kraken', 'mermaid', 'selkie', 'hydra', 'leviathan',
@@ -184,6 +184,7 @@ function CodecTable: TArray<TCodecInfo>;
 begin
   Result := nil;
   Add('zlib', 'deflate', ZLibDLL.DLLLoaded);
+  Add('libdeflate', 'deflate', LibDeflateDLL.DLLLoaded and ZLibDLL.DLLLoaded);
   Add('preflate', 'deflate', PreflateDLL.DLLLoaded);
   Add('png', 'deflate', ZLibDLL.DLLLoaded or PreflateDLL.DLLLoaded);
   Add('pja', 'jpeg', PJADLL.DLLLoaded);
@@ -196,6 +197,7 @@ begin
   Add('lzo1c', 'lzo', LZODLL.DLLLoaded);
   Add('lzo2a', 'lzo', LZODLL.DLLLoaded);
   Add('lzma', 'lzma', True);
+  Add('lzip', 'lzip', LZlibDLL.DLLLoaded);
   Add('flac', 'wav', FLACDLL.DLLLoaded);
   Add('wavpack', 'wav', WavPackDLL.DLLLoaded);
   Add('kraken', 'oodle', OodleDLL.DLLLoaded);

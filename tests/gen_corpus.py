@@ -219,6 +219,80 @@ def _lz4f_compress_with(path, data, level, block_size_id, content_checksum):
     return out.raw[:n]
 
 
+def make_libdeflate(seed):
+    """zlib streams written by libdeflate at levels 1, 6, 9 and 12.
+
+    zlib rebuilds none of them (measured: 0 of 10 on such a file), so they
+    are what -mlibdeflate exists for. They have to come from the libdeflate
+    ytool loads: each version writes other bytes at the same level.
+    LIBDEFLATE_LIB is set by tests/regression.sh when a libdeflate.so sits
+    next to the binary; without one there is no such case."""
+    lib = os.environ.get('LIBDEFLATE_LIB', '')
+    if not (lib and os.path.isfile(lib)):
+        return None
+    import ctypes
+    ld = ctypes.CDLL(lib)
+    ld.libdeflate_alloc_compressor.restype = ctypes.c_void_p
+    ld.libdeflate_alloc_compressor.argtypes = [ctypes.c_int]
+    ld.libdeflate_zlib_compress_bound.restype = ctypes.c_size_t
+    ld.libdeflate_zlib_compress_bound.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    ld.libdeflate_zlib_compress.restype = ctypes.c_size_t
+    ld.libdeflate_zlib_compress.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                            ctypes.c_size_t, ctypes.c_void_p,
+                                            ctypes.c_size_t]
+    ld.libdeflate_free_compressor.argtypes = [ctypes.c_void_p]
+    out = b''
+    for i, lvl in enumerate((1, 6, 9, 12)):
+        data = _discriminating_payload(seed + i)
+        c = ld.libdeflate_alloc_compressor(lvl)
+        cap = ld.libdeflate_zlib_compress_bound(c, len(data))
+        buf = ctypes.create_string_buffer(cap)
+        n = ld.libdeflate_zlib_compress(c, data, len(data), buf, cap)
+        ld.libdeflate_free_compressor(c)
+        out += b'LDF%d' % lvl + buf.raw[:n]
+    return out
+
+
+def make_lzip(seed):
+    """lzip members at levels 0 (lzip's fast encoder), 1, 6 and 9.
+
+    Written with the lzlib ytool loads (LZLIB_LIB, set by tests/regression.sh
+    when liblz.so sits next to the binary), with lzip's own dictionary and
+    match length per level; lzlib 1.16 writes what lzip 1.22-1.26 write."""
+    lib = os.environ.get('LZLIB_LIB', '')
+    if not (lib and os.path.isfile(lib)):
+        return None
+    import ctypes
+    lz = ctypes.CDLL(lib)
+    lz.LZ_compress_open.restype = ctypes.c_void_p
+    lz.LZ_compress_open.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_ulonglong]
+    for f in ('LZ_compress_write', 'LZ_compress_read'):
+        getattr(lz, f).argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+    for f in ('LZ_compress_finish', 'LZ_compress_finished', 'LZ_compress_close'):
+        getattr(lz, f).argtypes = [ctypes.c_void_p]
+    out = b''
+    for i, (dic, mlen) in enumerate(((65535, 16), (1 << 20, 5), (1 << 23, 36),
+                                      (1 << 25, 273))):
+        data = _discriminating_payload(seed + 10 + i)
+        e = lz.LZ_compress_open(dic, mlen, 1 << 51)
+        pos, member, finished = 0, b'', False
+        buf = ctypes.create_string_buffer(65536)
+        while True:
+            if pos < len(data):
+                chunk = data[pos:pos + 65536]
+                pos += lz.LZ_compress_write(e, chunk, len(chunk))
+            if pos >= len(data) and not finished:
+                lz.LZ_compress_finish(e)
+                finished = True
+            n = lz.LZ_compress_read(e, buf, 65536)
+            member += buf.raw[:n]
+            if lz.LZ_compress_finished(e) == 1:
+                break
+        lz.LZ_compress_close(e)
+        out += b'LZM%d' % i + member
+    return out
+
+
 def make_zstd_frames(seed):
     """Zstd frames across several levels, in one file.
 
@@ -506,6 +580,14 @@ def main():
     else:
         print('AVISO: falta el modulo python "zstandard" -- sin cobertura de -mzstd',
               file=sys.stderr)
+
+    ldf = make_libdeflate(SEED)
+    if ldf is not None:
+        write(d, '25_libdeflate.bin', ldf)
+
+    lzp = make_lzip(SEED)
+    if lzp is not None:
+        write(d, '26_lzip.bin', lzp)
 
     zn = make_zstd_nocheck(SEED)
     if zn is not None:

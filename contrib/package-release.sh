@@ -61,10 +61,10 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # Manifiesto explicito. Si un artefacto no esta aca no viaja, y si esta y falta
 # el script aborta -- que es como se detecta una DLL que nadie empaqueto.
-LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so osrep"
+LINUX_FILES="ytool liblz4.so libzstd.so libbrunsli.so libfast-lzma2.so libpja.so libpreflate.so libdeflate.so liblz.so osrep"
 # Programas que viajan junto a ytool.exe en los zips (OSREP para -ddo, MIT)
 WIN_EXES="osrep"
-WIN_DLLS="zlib1 lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 liblz4 libzstd"
+WIN_DLLS="zlib1 lzo2 pja brunsli libFLAC_dynamic wavpackdll preflate_dll fast-lzma2 liblz4 libzstd libdeflate lzlib"
 
 # DLLs del sistema que Windows trae de fabrica. Cualquier otra cosa en la tabla
 # de imports es una dependencia que el usuario no tiene.

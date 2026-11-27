@@ -115,3 +115,41 @@ fetch_osrep() {
     rm -f "$tmp"; echo "   (OSREP: descarga fallida o SHA-256 distinto)"; return 1
   fi
 }
+
+# build_libdeflate <out> <cc> [flags...]: libdeflate (github.com/ebiggers/
+# libdeflate, MIT) as a shared library, for -mlibdeflate. Pinned: its own
+# documentation says each version writes other bytes at the same level, so a
+# .ytp restores only with the version that made it. v1.26 writes the same
+# bytes on x86 and x86-64 (measured, levels 0-12). $CSRC must be set.
+LIBDEFLATE_REF="92e6a0db9fa848d742f9eb286c92afc60f2c3dda"   # v1.26
+build_libdeflate() {
+  local out="$1" cc="$2"; shift 2
+  echo "==> libdeflate ($(basename "$out"))"
+  pin_repo https://github.com/ebiggers/libdeflate "$CSRC/libdeflate" "$LIBDEFLATE_REF" || return 1
+  ( cd "$CSRC/libdeflate" && "$cc" "$@" -shared -O2 -fvisibility=hidden -I. \
+      lib/utils.c lib/deflate_compress.c lib/deflate_decompress.c lib/adler32.c \
+      lib/crc32.c lib/zlib_compress.c lib/zlib_decompress.c lib/gzip_compress.c \
+      lib/gzip_decompress.c lib/x86/cpu_features.c -o "$out" ) \
+    && echo "   OK -> $(basename "$out")" || { echo "   (libdeflate fallo)"; return 1; }
+}
+
+# build_lzlib <out> <cc> [flags...]: lzlib (nongnu.org/lzip/lzlib.html,
+# 2-clause BSD) as a shared library, for -mlzip. A release tarball (lzlib has
+# no public git), checked against its SHA-256. lzlib 1.16 rebuilds byte for
+# byte what lzip 1.22, 1.24 and 1.26 write at every level, on x86 and x86-64
+# (measured). $CSRC must be set.
+LZLIB_VER="1.16"
+LZLIB_SHA256="203228de911780309dad6813e51541d7ea89469784f01cb661edba080ff1b038"
+build_lzlib() {
+  local out="$1" cc="$2"; shift 2
+  local tgz="$CSRC/lzlib-$LZLIB_VER.tar.gz" dir="$CSRC/lzlib-$LZLIB_VER"
+  echo "==> lzlib ($(basename "$out"))"
+  if ! echo "$LZLIB_SHA256  $tgz" | sha256sum -c --status 2>/dev/null; then
+    curl -sL -o "$tgz" "https://download.savannah.gnu.org/releases/lzip/lzlib/lzlib-$LZLIB_VER.tar.gz"
+    echo "$LZLIB_SHA256  $tgz" | sha256sum -c --status \
+      || { rm -f "$tgz"; echo "   (lzlib: descarga fallida o SHA-256 distinto)"; return 1; }
+  fi
+  [ -d "$dir" ] || tar xzf "$tgz" -C "$CSRC" || return 1
+  ( cd "$dir" && "$cc" "$@" -shared -O2 lzlib.c -o "$out" ) \
+    && echo "   OK -> $(basename "$out")" || { echo "   (lzlib fallo)"; return 1; }
+}

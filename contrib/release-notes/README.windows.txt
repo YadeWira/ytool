@@ -12,20 +12,19 @@ lzo2.dll             LZO (-mlzo1x, -mlzo1c, -mlzo2a)
 libFLAC_dynamic.dll  FLAC (-mflac)
 wavpackdll.dll       WavPack (-mwavpack)
 fast-lzma2.dll       compresion final (-l#)
+libdeflate.dll       libdeflate 1.26: deflate que zlib no reproduce (-mlibdeflate)
+lzlib.dll            lzlib 1.16: miembros lzip, .lz (-mlzip)
+osrep.exe            OSREP 0.0.17 (MIT): dedup externa (-ddo)
 zlib1.dll            zlib 1.4, necesaria para arrancar
 
 Sin una DLL, su codec no hace nada: guarda los streams tal cual, sin error.
 Las DLL solo importan DLL del sistema (KERNEL32, msvcrt, y user32/oleaut32 en pja).
 
-x86 (32 bits): un .lz4 en modo rapido con bloques enlazados, escrito por un lz4 de
-64 bits, no se puede reproducir en 32 bits (lz4 usa otro hash segun el tamano de
-palabra). Al comprimir en x86 se guarda tal cual; y un .ytp hecho en 64 bits que
-contiene uno de esos streams no se decodifica en x86: sale con error (exit 1) y no
-escribe nada, nunca datos incorrectos. Para mover archivos entre maquinas, usa x64.
+x86 y x64 escriben los mismos bytes: un .ytp hecho en una se decodifica en la otra.
 
 srep NO viene incluido (SREP 3.93a es "All rights reserved"). -dd1..-dd5 lo usan si
 pones srep.exe junto a ytool.exe (builds: https://github.com/YadeWira/srep-builds);
-sin el, ytool avisa y usa la dedup en memoria (-dd).
+sin el, ytool avisa y usa la dedup en memoria (-dd). -ddo usa OSREP, que viene incluido.
 Oodle tampoco: es propietario; si tienes oo2core/oo2ext, ponla junto a ytool.exe.
 
 Uso (todas las opciones: ytool.exe help precomp):

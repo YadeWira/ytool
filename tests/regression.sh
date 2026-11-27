@@ -57,7 +57,7 @@ trap 'rm -rf "$WORK"' EXIT
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
 METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
   "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
-  "-mpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" "-mlzma")
+  "-mpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" "-mlzma" "-mlibdeflate" "-mlzip")
 
 fail=0; pass=0; err=0; dead=0
 echo "== ytool regression =="
@@ -79,6 +79,8 @@ fi
 # 2) corpus -----------------------------------------------------------------
 # 75_lz4f_fast.bin must come from the lz4 ytool loads (see gen_corpus.py).
 if [ -f "$ROOT/liblz4.so" ]; then export LZ4_LIB="$ROOT/liblz4.so"; else unset LZ4_LIB; fi
+if [ -f "$ROOT/libdeflate.so" ]; then export LIBDEFLATE_LIB="$ROOT/libdeflate.so"; else unset LIBDEFLATE_LIB; fi
+if [ -f "$ROOT/liblz.so" ]; then export LZLIB_LIB="$ROOT/liblz.so"; else unset LZLIB_LIB; fi
 python3 tests/gen_corpus.py "$CORPUS" >/dev/null || { echo "gen_corpus FAILED"; exit 3; }
 # lzo1x: if gcc + liblzo2 are present, compiles the generator and creates a DETECTABLE
 # lzo1x stream (covers the lzo codec, which previously had no test). If missing, it's skipped
@@ -152,6 +154,8 @@ CODEC_EXPECT="
 71_jpeg_min.bin|-mpja|1
 71_jpeg_min.bin|-mbrunsli|1
 64_jpeg2000.bin|-mpja|2
+25_libdeflate.bin|-mlibdeflate|4
+26_lzip.bin|-mlzip|4
 "
 
 # Escape valvula para la UNICA configuracion donde no tener codecs es

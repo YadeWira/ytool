@@ -277,6 +277,12 @@ else
 fi
 
 
+# libdeflate (-mlibdeflate), pinned in pin-repo.sh
+build_libdeflate "$ROOT/libdeflate-x86.dll" "$CC" -msse2 -DLIBDEFLATE_DLL -static-libgcc
+
+# lzlib (-mlzip), pinned in pin-repo.sh
+build_lzlib "$ROOT/lzlib-x86.dll" "$CC" -msse2 -Wl,--export-all-symbols -static-libgcc
+
 # OSREP (-ddo), released binary, next to ytool
 fetch_osrep osrep-windows-x86.exe "$ROOT/osrep-x86.exe"
 
