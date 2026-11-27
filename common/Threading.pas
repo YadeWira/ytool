@@ -107,11 +107,17 @@ begin
   // thread, polls CheckSynchronize(100): nothing wakes it when the thread
   // ends, so every task freed cost a full 100 ms, one after another (0.1 s per
   // -t thread on every run: -t32 took 3.6 s on a 6 KB file). Waiting here for
-  // the thread to finish first makes WaitFor return at once. Only for a thread
-  // that was started: one never started never runs Execute.
-  if FStarted then
-    while not Finished do
-      Sleep(1);
+  // the thread to finish first makes WaitFor return at once. A task never
+  // started (an encode that failed in EncInit, "-mzzz") went the slow way:
+  // 3.3 s on 32 cores. Started now with the status already terminated, its
+  // Execute returns at once and it is waited for the same way.
+  if not FStarted then
+  begin
+    FStarted := True;
+    inherited Start;
+  end;
+  while not Finished do
+    Sleep(1);
   inherited Destroy;
   FLock.Free;
 end;

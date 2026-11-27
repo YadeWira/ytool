@@ -34,9 +34,11 @@ trap 'rm -rf "$WORK"' EXIT
 # "-mzlib -dd1" exercises EXTERNAL dedup (srep64/srep.exe); if the binary isn't present,
 # StoreDD silently falls back to -1 (in-memory dedup) -> still reversible, just with
 # less real coverage until it's generated with contrib/build-plugins-{linux,windows}.sh.
-# "-mzlib -r xor"/"-r aes"/"-r rc4" exercise PrecompCrypto.pas (previously with no test):
+# "-mzlib -rxor"/"-r aes"/"-r rc4" exercise PrecompCrypto.pas (previously with no test):
 # CryptoScan1 is a no-op, they only activate by reassigning streams already detected by another
 # codec (same as "-r zstd" already did) -> real round-trip on 20_zlib_streams.bin.
+# Until 0.9.9e these were written "-r zstd": the value of an option goes attached, so
+# "zstd" was dropped and nothing was reassigned (the crypto codecs were never run).
 # "-mpng" exercises the PNG container (61_png_min.bin, generated in situ, no dependencies).
 # "-mpreflate" exercises PreflateDLL against the same streams from 20_zlib_streams.bin.
 # (-mpackpng, -mpackmp3 and -mreflate were removed in 0.9.9a.)
@@ -55,8 +57,8 @@ trap 'rm -rf "$WORK"' EXIT
 # SDK) on 63_lzma_alone.bin (stdlib 'lzma', always available -- no optional-tool
 # caveat). Covers both header variants: known uncompressed size, and the
 # unknown-size/end-marker form real "xz --format=lzma" output actually uses.
-METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -r zstd" \
-  "-mzlib -r xor" "-mzlib -r aes" "-mzlib -r rc4" "-mlzo1x" "-mwavpack" "-mflac" \
+METHODS=("" "-mzlib" "-mzlib+zstd" "-mzlib -dd" "-mzlib -dd1" "-mzlib -rzstd" \
+  "-mzlib -rxor" "-mzlib -raes" "-mzlib -rrc4" "-mlzo1x" "-mwavpack" "-mflac" \
   "-mpng" "-mpreflate" "-mlz4f" "-mzstd" "-mpja" "-mbrunsli" "-mlzma" "-mlibdeflate" "-mlzip")
 
 fail=0; pass=0; err=0; dead=0
@@ -321,6 +323,32 @@ if [ -x "$XTOOL" ] && [ -f "$CORPUS/11_text_8m.bin" ] && [ -f "$CORPUS/23_dup_st
   ls "$CC"/*.tmp >/dev/null 2>&1 && cok=0
   if [ "$cok" = 1 ]; then echo "-- dos precomp/decode -dd a la vez en una carpeta: ok --"; pass=$((pass+1))
   else echo "-- *** dos precomp/decode -dd a la vez en una carpeta: fallo *** --"; fail=$((fail+1)); fi
+fi
+
+# --- comando mal escrito ----------------------------------------------------
+# Hasta 0.9.9d "ytool analyce f" mostraba el banner y salia 0 sin hacer nada
+# (lo reporto Wira en Windows). Tiene que decir que no existe, sugerir el
+# parecido y salir 1.
+if [ -x "$XTOOL" ]; then
+  uo="$("$XTOOL" analyce "$CORPUS/20_zlib_streams.bin" 2>&1)"; urc=$?
+  if [ "$urc" = 1 ] && echo "$uo" | grep -q "Unknown command" && echo "$uo" | grep -q "did you mean analyze"; then
+    echo "-- comando mal escrito (analyce): avisa y sale 1: ok --"; pass=$((pass+1))
+  else echo "-- *** comando mal escrito (analyce): exit $urc, sin aviso *** --"; fail=$((fail+1)); fi
+  # 0.9.9e: un archivo que no existe se tomaba por opcion (precomp leia stdin,
+  # exit 0); las opciones despues de los archivos se ignoraban; analyze -mzzz
+  # no probaba nada; una opcion desconocida no avisaba.
+  CL="$WORK/cli"; mkdir -p "$CL"; cok=1; why=""
+  "$XTOOL" precomp -mzlib "$CL/no-existe.bin" "$CL/a.ytp" > "$CL/o1" 2>&1; r=$?
+  { [ $r = 1 ] && grep -q "input not found" "$CL/o1"; } || { cok=0; why="$why entrada-inexistente($r)"; }
+  "$XTOOL" precomp "$CORPUS/20_zlib_streams.bin" "$CL/b.ytp" -mzlib > "$CL/o2" 2>&1
+  "$XTOOL" decode "$CL/b.ytp" "$CL/b.out" > /dev/null 2>&1
+  { tr '\r' '\n' < "$CL/o2" | grep -q "Streams: 6 / 6" && cmp -s "$CORPUS/20_zlib_streams.bin" "$CL/b.out"; } || { cok=0; why="$why opcion-al-final"; }
+  "$XTOOL" analyze -mzzz "$CORPUS/20_zlib_streams.bin" > "$CL/o3" 2>&1; r=$?
+  { [ $r = 1 ] && grep -q "unknown codec" "$CL/o3"; } || { cok=0; why="$why analyze-mzzz($r)"; }
+  "$XTOOL" decode -zzz "$CL/b.ytp" "$CL/c.out" > "$CL/o4" 2>&1; r=$?
+  { [ $r = 0 ] && grep -q "not an option of decode" "$CL/o4" && cmp -s "$CORPUS/20_zlib_streams.bin" "$CL/c.out"; } || { cok=0; why="$why opcion-desconocida($r)"; }
+  if [ "$cok" = 1 ]; then echo "-- linea de comandos (entrada inexistente, opciones al final, -mzzz, opcion desconocida): ok --"; pass=$((pass+1))
+  else echo "-- *** linea de comandos:$why *** --"; fail=$((fail+1)); fi
 fi
 
 # --- analyze ----------------------------------------------------------------
@@ -928,6 +956,40 @@ if [ -x "$XTOOL" ] && [ -f "$XDIR/srep64" -o -f "$XDIR/srep" -o -f "$XDIR/srep.e
       echo "-- srep: *** fallo sin el mensaje de srep *** --"; fail=$((fail+1))
     fi
     ls "$FK"/*-dd.tmp >/dev/null 2>&1 && { echo "-- srep: *** quedo un -dd.tmp *** --"; fail=$((fail+1)); }
+  fi
+fi
+
+# --- archivos de referencia de versiones publicadas ---------------------------
+# tests/golden/<version>/*.ytp los hizo el binario PUBLICADO de esa version
+# (tests/golden/make.sh); cada build tiene que seguir decodificandolos byte por
+# byte (docs/ROADMAP-1.0.0.md, punto 4: la 1.0.0 cambia el formato y sigue
+# leyendo los 0.9.9x). Sin osrep al lado se saltan los -ddo; con
+# ALLOW_MISSING_CODECS=1, un codec que falta salta su archivo en vez de fallar.
+if [ -x "$XTOOL" ] && [ -d "$ROOT/tests/golden" ]; then
+  GD="$WORK/golden"; mkdir -p "$GD"; gok=0; gbad=0; gskip=0
+  for man in "$ROOT"/tests/golden/*/MANIFEST; do
+    [ -f "$man" ] || continue
+    gv="$(basename "$(dirname "$man")")"
+    while IFS='|' read -r gname gfile gopts gst; do
+      [ -n "$gname" ] || continue
+      gy="$(dirname "$man")/$gname.ytp"; gi="$ROOT/tests/golden/inputs/$gfile"
+      case " $gopts " in *" -ddo "*)
+        [ -x "$XDIR/osrep" ] || [ -x "$XDIR/osrep.exe" ] || { gskip=$((gskip+1)); continue; } ;;
+      esac
+      rm -f "$GD/o.out"
+      if ( cd "$GD" && "$XABS" decode "$gy" o.out > log 2>&1 ) && cmp -s "$gi" "$GD/o.out"; then
+        gok=$((gok+1))
+      elif [ "$ALLOW_MISSING_CODECS" = "1" ]; then
+        gskip=$((gskip+1))
+      else
+        gbad=$((gbad+1)); echo "-- *** golden $gv/$gname: no decodifica igual ($(tail -1 "$GD/log" | tr -d '\r')) *** --"
+      fi
+    done < "$man"
+  done
+  if [ $gbad = 0 ] && [ $gok -gt 0 ]; then
+    echo "-- archivos de referencia (0.9.9x publicados): $gok decodificados igual, $gskip saltados: ok --"; pass=$((pass+1))
+  else
+    echo "-- *** archivos de referencia: $gok ok, $gbad mal, $gskip saltados *** --"; fail=$((fail+1))
   fi
 fi
 

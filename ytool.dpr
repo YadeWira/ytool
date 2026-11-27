@@ -120,7 +120,83 @@ const
   CommandExecute = 'execute';
   CommandDecode = 'decode';
   CommandAnalyze = 'analyze';
-  YTOOL_VERSION = '0.9.9d';
+  YTOOL_VERSION = '0.9.9e';
+
+// 0.9.9d: a mistyped command ("analyce") printed the banner and exited 0
+// with nothing done. Known commands match by prefix, as before.
+function KnownCommand(const S: String): Boolean;
+begin
+  Result := S.StartsWith(CommandPrecomp, True) or
+    S.StartsWith(CommandGenerate, True) or S.StartsWith(CommandFind, True) or
+    S.StartsWith(CommandErase, True) or S.StartsWith(CommandReplace, True) or
+    S.StartsWith(CommandExtract, True) or S.StartsWith(CommandExecute, True) or
+    S.StartsWith(CommandDecode, True) or S.StartsWith(CommandAnalyze, True);
+end;
+
+function EditDistance(const A, B: String): Integer;
+var
+  D: array of array of Integer;
+  I, J: Integer;
+begin
+  SetLength(D, Length(A) + 1, Length(B) + 1);
+  for I := 0 to Length(A) do
+    D[I, 0] := I;
+  for J := 0 to Length(B) do
+    D[0, J] := J;
+  for I := 1 to Length(A) do
+    for J := 1 to Length(B) do
+      D[I, J] := Min(Min(D[I - 1, J] + 1, D[I, J - 1] + 1),
+        D[I - 1, J - 1] + Ord(LowerCase(A[I]) <> LowerCase(B[J])));
+  Result := D[Length(A), Length(B)];
+end;
+
+// 0.9.9e: options are read by prefix and an unknown one was ignored without a
+// word ("decode -zzz", "analyze -q"). A warning, not an error: by the first
+// letter after the dash, as the parser itself matches them.
+procedure WarnUnknownOptions(const Opts: TArray<String>);
+var
+  Cmd, Known, O: String;
+begin
+  Cmd := ParamStr(1);
+  if Cmd.StartsWith(CommandPrecomp, True) then
+    Known := 'bcdeflmoprstTvxX'
+  else if Cmd.StartsWith(CommandDecode, True) then
+    Known := 'bdemopstTv'
+  else if Cmd.StartsWith(CommandAnalyze, True) then
+    Known := 'flmtv'
+  else if Cmd.StartsWith(CommandGenerate, True) then
+    Known := 'cmt'
+  else if Cmd.StartsWith(CommandExtract, True) then
+    Known := ''
+  else
+    Known := 'ct';
+  for O in Opts do
+    if (Length(O) < 2) or (Pos(O[2], Known) = 0) then
+      WriteLine('warning: ' + O + ' is not an option of ' + LowerCase(Cmd) +
+        ': ignored');
+end;
+
+// the closest command within 2 edits, or ''
+function ClosestCommand(const S: String): String;
+const
+  Names: array [0 .. 8] of String = (CommandPrecomp, CommandDecode,
+    CommandAnalyze, CommandGenerate, CommandFind, CommandErase, CommandReplace,
+    CommandExtract, CommandExecute);
+var
+  I, D, Best: Integer;
+begin
+  Result := '';
+  Best := 3;
+  for I := Low(Names) to High(Names) do
+  begin
+    D := EditDistance(S, Names[I]);
+    if D < Best then
+    begin
+      Best := D;
+      Result := Names[I];
+    end;
+  end;
+end;
 
 procedure ProgramInfo;
 begin
@@ -225,14 +301,23 @@ begin
     Result := TDownloadStream.Create(Input)
   else if FileExists(Input) then
     Result := TFileStream.Create(Input, fmShareDenyNone)
+  else if DirectoryExists(Input) or (Pos('*', Input) > 0) or
+    (Pos('?', Input) > 0) then
+    Result := TDirInputStream.Create(Input)
   else
-    Result := TDirInputStream.Create(Input);
+    // 0.9.9e: a missing file was opened as an empty folder listing
+    raise EFOpenError.CreateFmt('input not found: %s', [Input]);
 end;
 
 function GetOutStream(Output: string): TStream;
 begin
   if (Output = '') then
-    Result := TNullStream.Create
+  begin
+    // 0.9.9e: said nothing; "precomp in" looked like it had written something
+    WriteLine('note: no output file given: the result is discarded (a test ' +
+      'run; "-" writes to stdout)');
+    Result := TNullStream.Create;
+  end
   else if DirectoryExists(Output) then
     Result := TDirOutputStream.Create(Output)
   else if (Output = '-') then
@@ -264,6 +349,7 @@ var
   ParamArg: array [0 .. 1] of TArray<String>;
   StrArray: TArray<String>;
   IsParam: boolean;
+  T: String;
   Input, Output: TStream;
   PrecompEnc: PrecompMain.TEncodeOptions;
   PrecompDec: PrecompMain.TDecodeOptions;
@@ -463,7 +549,8 @@ begin
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   FormatSettings.ThousandSeparator := ',';
-  if (ParamCount = 1) and ((ParamStr(1) = '--version') or (ParamStr(1) = '-version'))
+  if (ParamCount = 1) and MatchStr(ParamStr(1), ['--version', '-version',
+    '-V', '-v', 'version'])
   then
   begin
     // Deliberately System.Output (stdout), not WriteLine (stderr, by design --
@@ -494,10 +581,39 @@ begin
     for I := 2 to ParamCount do
       if IsHelpFlag(ParamStr(I)) and CommandHelp(ParamStr(1)) then
         exit;
+    if not KnownCommand(ParamStr(1)) then
+    begin
+      T := ClosestCommand(ParamStr(1));
+      if T <> '' then
+        T := ' (did you mean ' + T + '?)';
+      WriteLine(UIRed('Unknown command: ') + ParamStr(1) + T + sLineBreak);
+      ListCommands;
+      ExitCode := 1;
+      exit;
+    end;
     IsParam := True;
     for I := 2 to ParamCount do
     begin
-      if (IsParam = True) and (FileExists(ParamStr(I)) = False) and
+      // 0.9.9e: an option starts with '-'. A file name that did not exist
+      // ("nofile.bin") was taken for an option: precomp read stdin and wrote
+      // nothing with exit 0, decode said "Stream read error".
+      // options after the file names were taken for file names and ignored
+      // ("precomp in out -mzlib" found nothing). Anywhere now, except for
+      // decode and execute, whose trailing arguments can be a program's own
+      // command line.
+      // "-r zstd": the value goes attached ("-rzstd"); detached it was
+      // dropped without a word (0.9.9e: say so instead of guessing)
+      if (I > 2) and not ParamStr(I).StartsWith('-') and
+        MatchStr(ParamStr(I - 1), ['-m', '-c', '-t', '-T', '-d', '-l', '-p',
+        '-x', '-X', '-e', '-r']) and (FileExists(ParamStr(I)) = False) and
+        (DirectoryExists(ParamStr(I)) = False) and
+        (Pos('*', ParamStr(I)) = 0) and (Pos('://', ParamStr(I)) = 0) then
+        raise Exception.CreateFmt('%s takes its value attached: %s%s',
+          [ParamStr(I - 1), ParamStr(I - 1), ParamStr(I)]);
+      if ((IsParam = True) or not (ParamStr(1).StartsWith(CommandDecode, True)
+        or ParamStr(1).StartsWith(CommandExecute, True))) and
+        ParamStr(I).StartsWith('-') and
+        (FileExists(ParamStr(I)) = False) and
         (DirectoryExists(ParamStr(I)) = False) and (Pos('://', ParamStr(I)) = 0)
         and (Pos('*', ParamStr(I)) = 0) and (ParamStr(I) <> '-') then
         J := 0
@@ -508,6 +624,7 @@ begin
       end;
       Insert(ParamStr(I), ParamArg[J], Length(ParamArg[J]));
     end;
+    WarnUnknownOptions(ParamArg[0]);
     if ParamStr(1).StartsWith(CommandPrecomp, True) then
       if (Length(ParamArg[0]) = 0) and (Length(ParamArg[1]) = 0) then
         PrecompMain.PrintHelp
@@ -641,6 +758,9 @@ begin
               begin
                 // XTP2 blocks carry a hash of their literal data; XTP1 do not
                 PrecompMain.LITHASH := I = YTOOL_PRECOMP2;
+                for J := 2 to High(ParamArg[1]) do
+                  WriteLine('warning: ' + ParamArg[1, J] + ' ignored: decode' +
+                    ' takes input and output, options go before them');
                 Output := TBufferedStream.Create(GetOutStream(ParamArgSafe(1, 1)
                   ), False, BufferSize);
                 PrecompMain.UIOutputStream := Output;

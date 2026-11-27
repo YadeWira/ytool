@@ -338,6 +338,17 @@ begin
     if S <> '' then
       Only.Text := StringReplace(Copy(S, 3, MaxInt), '+', sLineBreak,
         [rfReplaceAll]);
+    // 0.9.9e: -mzzz tried nothing and still recommended "(no codec)"
+    Codecs := CodecTable;
+    for I := 0 to Only.Count - 1 do
+    begin
+      J := High(Codecs);
+      while (J >= 0) and not SameText(Codecs[J].Name, Only[I]) do
+        Dec(J);
+      if J < 0 then
+        raise Exception.CreateFmt('analyze: unknown codec ''%s'' (ytool help ' +
+          'precomp lists them)', [Only[I]]);
+    end;
 
     Sampled := (RealSize > SampleLimit) and not HasFlag(Flags, '-full');
     if Sampled then

@@ -4391,6 +4391,9 @@ begin
   ConTask.Perform(EncodeStats);
   if (VERBOSE = False) and (IsLibrary = False) then
     ConTask.Start;
+  // an error in EncInit reached the finally with LOutput unset, and
+  // flushed and freed whatever it pointed to
+  LOutput := nil;
   try
     EncInit(LInput, Output, @Options);
     Compressed := COMPRESS;
@@ -4424,7 +4427,7 @@ begin
       LOutput := Output;
     EncData(LInput, LOutput, 0, 0);
   finally
-    if COMPRESS > 0 then
+    if (COMPRESS > 0) and Assigned(LOutput) then
     begin
       case COMPRESS of
         1:

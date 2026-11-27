@@ -1,0 +1,20 @@
+brunsli_l3|71_jpeg_min.bin|-mbrunsli -l3|Streams: 1 / 1
+dedup_l3|23_dup_streams.bin|-mzlib -dd -l3|Streams: 90 / 90
+dedup_osrep_l3|23_dup_streams.bin|-mzlib -ddo -l3|Streams: 90 / 90
+empty|01_empty.bin|-mzlib|Streams: 0 / 0
+flac_l3|60_wav_pcm.bin|-mflac -l3|Streams: 1 / 1
+lz4f_64k_l3|74_lz4f_64k.bin|-mlz4f -l3|Streams: 1 / 1
+lz4f_l3|70_lz4f.bin|-mlz4f -l3|Streams: 1 / 1
+lzma_l3|63_lzma_alone.bin|-mlzma -l3|Streams: 1 / 1
+mixed_l3|24_zlib_mixed.bin|-mzlib -l3|Streams: 5 / 8
+pja_j2k_l3|64_jpeg2000.bin|-mpja -l3|Streams: 2 / 2
+pja_jpeg_l3|71_jpeg_min.bin|-mpja -l3|Streams: 1 / 1
+png_l3|61_png_min.bin|-mpng -l3|Streams: 1 / 1
+preflate_l3|20_zlib_streams.bin|-mpreflate -l3|Streams: 6 / 6
+raw_deflate_l3|22_raw_deflate.bin|-mzlib -l3|Streams: 1 / 1
+tiny_literal|03_tiny_text.bin||Streams: 0 / 0
+wavpack_l3|60_wav_pcm.bin|-mwavpack -l3|Streams: 1 / 1
+zlib_l3|20_zlib_streams.bin|-mzlib -l3|Streams: 6 / 6
+zlib_many_t4_l3|21_zlib_many.bin|-mzlib -t4 -l3|Streams: 200 / 200
+zlib_nol|22_raw_deflate.bin|-mzlib|Streams: 1 / 1
+zstd_l3|77_zstd_nocheck.bin|-mzstd -l3|Streams: 1 / 1

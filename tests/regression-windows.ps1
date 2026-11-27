@@ -82,8 +82,8 @@ try {
   # comments for what each one exercises and why some degrade gracefully to
   # "0 streams, trivially reversible" when an optional file/tool is missing.
   $Methods = @(
-    "", "-mzlib", "-mzlib+zstd", "-mzlib -dd", "-mzlib -dd1", "-mzlib -r zstd",
-    "-mzlib -r xor", "-mzlib -r aes", "-mzlib -r rc4", "-mlzo1x", "-mwavpack",
+    "", "-mzlib", "-mzlib+zstd", "-mzlib -dd", "-mzlib -dd1", "-mzlib -rzstd",
+    "-mzlib -rxor", "-mzlib -raes", "-mzlib -rrc4", "-mlzo1x", "-mwavpack",
     "-mflac", "-mpng", "-mpreflate", "-mlz4f", "-mzstd", "-mpja", "-mbrunsli",
     "-mlzma"
   )
